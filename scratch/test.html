@@ -1,0 +1,2355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard — Althesa</title>
+    <link rel="stylesheet" href="http://localhost:8000/css/app.css">
+    <link rel="stylesheet" href="http://localhost:8000/css/admin.css">
+</head>
+<body class="admin-body">
+
+<div class="admin-layout">
+    <!-- Sidebar Overlay for Mobile -->
+    <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="mainSidebar">
+        <div class="sidebar-logo">
+            <div class="logo-icon">
+                <img src="http://localhost:8000/images/logo.png" alt="Althesa Icon" style="width: 24px; height: 24px; object-fit: contain;">
+            </div>
+            <h2>Althesa</h2>
+            <p>Admin Portal</p>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <div class="nav-section-label">Main</div>
+            <a href="/admin/dashboard" class="nav-item ">
+                <span class="nav-icon">??</span>
+                <span>Dashboard Overview</span>
+            </a>
+            <a href="/admin/residents" class="nav-item ">
+                <span class="nav-icon">??</span>
+                <span>Residents</span>
+            </a>
+            
+            <div class="nav-section-label">Finance & Utilities</div>
+            <a href="/admin/billing" class="nav-item active">
+                <span class="nav-icon">?</span>
+                <span>Billing with Electricity</span>
+            </a>
+            <a href="/admin/monthly-dues" class="nav-item ">
+                <span class="nav-icon">??</span>
+                <span>Monthly Dues</span>
+            </a>
+            <a href="/admin/water" class="nav-item ">
+                <span class="nav-icon">??</span>
+                <span>Water</span>
+            </a>
+            <a href="/admin/meter-reading" class="nav-item ">
+                <span class="nav-icon">??</span>
+                <span>Meter Reading Entry</span>
+            </a>
+            <div class="nav-section-label">Property Management</div>
+            <a href="/admin/gis" class="nav-item ">
+                <span class="nav-icon">???</span>
+                <span>Property GIS Monitoring</span>
+            </a>
+
+            <div class="nav-section-label">Community</div>
+            <a href="/admin/incidents" class="nav-item ">
+                <span class="nav-icon">??</span>
+                <span>Incident Reporting</span>
+            </a>
+            <a href="/admin/announcements" class="nav-item ">
+                <span class="nav-icon">??</span>
+                <span>Announcements</span>
+            </a>
+            <a href="/admin/appointments" class="nav-item ">
+                <span class="nav-icon">???</span>
+                <span>Lot Inquiry Visits</span>
+            </a>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <a href="/login" class="nav-item" onclick="return confirm('Are you sure you want to log out?')">
+                <span class="nav-icon">??</span>
+                <span>Logout</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="admin-main">
+        <!-- Topbar -->
+        <header class="topbar">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle Navigation">
+                    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                </button>
+                <div class="topbar-title">Electricity Billing</div>
+            </div>
+            <div class="topbar-actions">
+                <!-- Functional Notification Dropdown -->
+                <div class="notification-container" id="notifContainer" onclick="toggleNotifications(event)">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+                    <span class="notif-dot" id="globalNotifDot" style="display: none;"></span>
+
+                    <div class="notification-dropdown" id="notifDropdown">
+                        <div class="notification-header">
+                            <span>System Notifications</span>
+                            <span id="unreadCount" style="color: var(--accent);">0 New</span>
+                        </div>
+                        <div class="notification-list" id="notifList">
+                            <!-- Injected dynamically by module JS -->
+                            <div class="notification-empty">No new notifications</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="font-size:13px; color:var(--text-mid); font-weight: 500;">Admin User</div>
+                <div class="topbar-avatar">AU</div>
+            </div>
+        </header>
+
+        <!-- Page Content -->
+        <main class="page-content">
+            <link rel="stylesheet" href="http://localhost:8000/css/admin-finance.css">
+
+<div class="bill-container fade-in">
+    <div class="bill-header">
+        <div class="bill-title">
+            <h1>Electricity Management & Analytics</h1>
+            <p>12-month consumption analysis, payment channel management, and predictive delinquency tracking.</p>
+        </div>
+        <div class="bill-actions">
+            <!-- New: Billing Settings Button -->
+            <button class="btn btn-outline" style="border-color: var(--bill-primary); color: var(--bill-primary);" onclick="openSettingsModal()">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                Billing Settings
+            </button>
+            <button class="btn btn-outline" style="border-color: var(--bill-danger); color: var(--bill-danger);" onclick="resetBillingCycle()">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                Reset Billing Cycle
+            </button>
+        </div>
+    </div>
+
+    <!-- Collection Summary Dashboard -->
+    <div style="background: #fff; border: 1px solid var(--bill-border); border-radius: 20px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+            <h2 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 0;">Ledger Performance Summary</h2>
+            <select id="summaryMonth" class="filter-select" style="font-weight: 600; color: var(--bill-primary); border-color: #cbd5e1;" onchange="updateSummaryDashboard()">
+                <option value="May 2026" selected>Current Month (May 2026)</option>
+                <option value="Apr 2026">April 2026</option>
+                <option value="Mar 2026">March 2026</option>
+                <option value="Feb 2026">February 2026</option>
+            </select>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid var(--bill-primary);">
+                <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Collection</div>
+                <div id="sumCollection" style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">?0.00</div>
+            </div>
+            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid #10b981;">
+                <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Residents Paid</div>
+                <div id="sumPaid" style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">0</div>
+            </div>
+            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid #f59e0b;">
+                <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Unpaid / Pending</div>
+                <div id="sumUnpaid" style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">0</div>
+            </div>
+            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid #ef4444;">
+                <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Past Due (At Risk)</div>
+                <div id="sumPastDue" style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">0</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analytics Dashboard -->
+    <div class="analytics-grid">
+        <!-- Reliable Consumption Trends -->
+        <div class="analytic-card">
+            <div class="card-title">
+                <span>Billing Trends (Usage in ?)</span>
+                <div class="mini-filters">
+                    <button id="paidTodayBtn" class="paid-today-btn" onclick="togglePaidToday()">Paid Today</button>
+                    <select id="graphYear" class="mini-filter" onchange="updateGraph()">
+                        <option value="2026">2026</option>
+                        <option value="2025">2025</option>
+                    </select>
+                    <select id="graphMonth" class="mini-filter" onchange="updateGraph()">
+                        <option value="all">All Months</option>
+                        <option value="Jan">Jan</option><option value="Feb">Feb</option><option value="Mar">Mar</option>
+                        <option value="Apr">Apr</option><option value="May">May</option><option value="Jun">Jun</option>
+                        <option value="Jul">Jul</option><option value="Aug">Aug</option><option value="Sep">Sep</option>
+                        <option value="Oct">Oct</option><option value="Nov">Nov</option><option value="Dec">Dec</option>
+                    </select>
+                </div>
+            </div>
+            <div class="chart-container">
+                <div class="y-axis">
+                    <span>?20k</span>
+                    <span>?15k</span>
+                    <span>?10k</span>
+                    <span>?5k</span>
+                    <span>0</span>
+                </div>
+                <div class="usage-trend" id="billingGraph">
+                    <!-- Graph bars rendered via JS -->
+                </div>
+            </div>
+            <div style="margin-top: 20px; display: flex; gap: 20px; font-size: 11px; font-weight: 600; color: #94a3b8;">
+                <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; background: #e0e7ff; border-radius: 2px;"></span> Historical Data</div>
+                <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; background: var(--bill-primary); border-radius: 2px;"></span> Current Month / Estimate</div>
+            </div>
+        </div>
+
+        <!-- Payment Speed Donut -->
+        <div class="analytic-card">
+            <div class="card-title">
+                <span>Predictive Reliability</span>
+            </div>
+            <div class="donut-chart-container">
+                <svg width="120" height="120" viewBox="0 0 42 42" class="donut-svg">
+                    <circle class="donut-segment segment-late" cx="21" cy="21" r="15.915" stroke-dasharray="20 80"></circle>
+                    <circle class="donut-segment segment-ontime" cx="21" cy="21" r="15.915" stroke-dasharray="30 70" stroke-dashoffset="-20"></circle>
+                    <circle class="donut-segment segment-early" cx="21" cy="21" r="15.915" stroke-dasharray="50 50" stroke-dashoffset="-50"></circle>
+                </svg>
+                <div class="donut-legend">
+                    <div class="legend-item">
+                        <span class="legend-label"><span class="dot" style="background: var(--bill-success);"></span> Early Payers</span>
+                        <strong>50%</strong>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-label"><span class="dot" style="background: var(--bill-primary);"></span> On-Time</span>
+                        <strong>30%</strong>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-label"><span class="dot" style="background: var(--bill-warning);"></span> Late (At Risk)</span>
+                        <strong>20%</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+        <div class="filter-group">
+            <span class="filter-label">Search</span>
+            <input type="text" id="billingSearch" class="filter-select" placeholder="Resident or Lot..." style="min-width: 200px;">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Payment Status</span>
+            <select id="statusFilter" class="filter-select">
+                <option value="all">All Statuses</option>
+                <option value="paid">Paid</option>
+                <option value="unpaid">Unpaid</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Block</span>
+            <select id="blockFilter" class="filter-select">
+                <option value="all">All Blocks</option>
+                <option value="1">Block 1</option>
+                <option value="2">Block 2</option>
+                <option value="3">Block 3</option>
+                <option value="4">Block 4</option>
+                <option value="5">Block 5</option>
+                <option value="6">Block 6</option>
+                <option value="7">Block 7</option>
+                <option value="8">Block 8</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Reliability Trend</span>
+            <select id="trendFilter" class="filter-select">
+                <option value="all">All Trends</option>
+                <option value="reliable">?? Reliable</option>
+                <option value="at-risk">?? At Risk</option>
+            </select>
+        </div>
+        <div style="margin-left: auto;">
+            <button class="btn btn-primary" onclick="applyFilters()">Apply Filters</button>
+        </div>
+    </div>
+
+    <!-- Predictive Billing Ledger -->
+    <div class="analytic-card">
+        <div class="card-title">
+            <span>Electricity Billing Ledger</span>
+        </div>
+        <div class="bill-table-container">
+            <table class="bill-table" id="billingTable">
+                <thead>
+                    <tr>
+                        <th>Resident / Lot</th>
+                        <th>Amount</th>
+                        <th>Predictive Trend</th>
+                        <th>Method</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                                        <tr class="bill-row" data-resident="juan dela cruz" data-status="paid" data-trend="reliable" data-block="1">
+                        <td>
+                            <div style="font-weight: 700;">Juan Dela Cruz</div>
+                            <div style="font-size: 12px; color: #64748b;">B1 L5</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="150" 
+                            data-at-risk="false" 
+                            data-status="paid"
+                            style="font-weight: 700;">
+                            ?1,500.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span class="method-badge method-office">
+                                     ??                                     Office
+                                </span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-success">Paid</span>
+                                <div style="font-size: 10px; color: #10b981; margin-top: 4px;">2026-04-01</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-001')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="melchora aquino" data-status="paid" data-trend="reliable" data-block="1">
+                        <td>
+                            <div style="font-weight: 700;">Melchora Aquino</div>
+                            <div style="font-size: 12px; color: #64748b;">B1 L8</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="115" 
+                            data-at-risk="false" 
+                            data-status="paid"
+                            style="font-weight: 700;">
+                            ?1,150.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span class="method-badge method-office">
+                                     ??                                     Office
+                                </span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-success">Paid</span>
+                                <div style="font-size: 10px; color: #10b981; margin-top: 4px;">2026-03-30</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-011')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="leon ma. guerrero" data-status="paid" data-trend="reliable" data-block="1">
+                        <td>
+                            <div style="font-weight: 700;">Leon Ma. Guerrero</div>
+                            <div style="font-size: 12px; color: #64748b;">B1 L12</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="200" 
+                            data-at-risk="false" 
+                            data-status="paid"
+                            style="font-weight: 700;">
+                            ?2,000.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span class="method-badge method-gcash">
+                                     ??                                     GCash
+                                </span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-success">Paid</span>
+                                <div style="font-size: 10px; color: #10b981; margin-top: 4px;">2026-04-03</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-021')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="andres bonifacio" data-status="unpaid" data-trend="reliable" data-block="1">
+                        <td>
+                            <div style="font-weight: 700;">Andres Bonifacio</div>
+                            <div style="font-size: 12px; color: #64748b;">B1 L15</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="130" 
+                            data-at-risk="false" 
+                            data-status="unpaid"
+                            style="font-weight: 700;">
+                            ?1,300.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-danger">Unpaid</span>
+                                <div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: 2026-04-10</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-006')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="diego silang" data-status="unpaid" data-trend="at-risk" data-block="1">
+                        <td>
+                            <div style="font-weight: 700;">Diego Silang</div>
+                            <div style="font-size: 12px; color: #64748b;">B1 L22</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="470" 
+                            data-at-risk="true" 
+                            data-status="unpaid"
+                            style="font-weight: 700;">
+                            ?4,700.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-late">?? At Risk</span>
+                                                    </td>
+                        <td>
+                                                            <span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-danger">Unpaid</span>
+                                <div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: 2026-04-10</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-016')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="jose rizal" data-status="paid" data-trend="reliable" data-block="2">
+                        <td>
+                            <div style="font-weight: 700;">Jose Rizal</div>
+                            <div style="font-size: 12px; color: #64748b;">B2 L5</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="310" 
+                            data-at-risk="false" 
+                            data-status="paid"
+                            style="font-weight: 700;">
+                            ?3,100.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span class="method-badge method-office">
+                                     ??                                     Office
+                                </span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-success">Paid</span>
+                                <div style="font-size: 10px; color: #10b981; margin-top: 4px;">2026-04-02</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-007')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="teresa magbanua" data-status="paid" data-trend="reliable" data-block="2">
+                        <td>
+                            <div style="font-weight: 700;">Teresa Magbanua</div>
+                            <div style="font-size: 12px; color: #64748b;">B2 L8</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="155" 
+                            data-at-risk="false" 
+                            data-status="paid"
+                            style="font-weight: 700;">
+                            ?1,550.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span class="method-badge method-office">
+                                     ??                                     Office
+                                </span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-success">Paid</span>
+                                <div style="font-size: 10px; color: #10b981; margin-top: 4px;">2026-03-29</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-017')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="maria santos" data-status="unpaid" data-trend="at-risk" data-block="2">
+                        <td>
+                            <div style="font-weight: 700;">Maria Santos</div>
+                            <div style="font-size: 12px; color: #64748b;">B2 L12</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="245" 
+                            data-at-risk="true" 
+                            data-status="unpaid"
+                            style="font-weight: 700;">
+                            ?2,450.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-late">?? At Risk</span>
+                                                    </td>
+                        <td>
+                                                            <span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-danger">Unpaid</span>
+                                <div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: 2026-04-10</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-002')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="gabriela silang" data-status="unpaid" data-trend="at-risk" data-block="2">
+                        <td>
+                            <div style="font-weight: 700;">Gabriela Silang</div>
+                            <div style="font-size: 12px; color: #64748b;">B2 L22</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="380" 
+                            data-at-risk="true" 
+                            data-status="unpaid"
+                            style="font-weight: 700;">
+                            ?3,800.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-late">?? At Risk</span>
+                                                    </td>
+                        <td>
+                                                            <span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-danger">Unpaid</span>
+                                <div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: 2026-04-10</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-012')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="gregorio del pilar" data-status="paid" data-trend="reliable" data-block="3">
+                        <td>
+                            <div style="font-weight: 700;">Gregorio Del Pilar</div>
+                            <div style="font-size: 12px; color: #64748b;">B3 L5</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="175" 
+                            data-at-risk="false" 
+                            data-status="paid"
+                            style="font-weight: 700;">
+                            ?1,750.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span class="method-badge method-office">
+                                     ??                                     Office
+                                </span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-success">Paid</span>
+                                <div style="font-size: 10px; color: #10b981; margin-top: 4px;">2026-04-01</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-013')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="ricardo reyes" data-status="paid" data-trend="reliable" data-block="3">
+                        <td>
+                            <div style="font-weight: 700;">Ricardo Reyes</div>
+                            <div style="font-size: 12px; color: #64748b;">B3 L8</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="110" 
+                            data-at-risk="false" 
+                            data-status="paid"
+                            style="font-weight: 700;">
+                            ?1,100.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span class="method-badge method-gcash">
+                                     ??                                     GCash
+                                </span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-success">Paid</span>
+                                <div style="font-size: 10px; color: #10b981; margin-top: 4px;">2026-04-05</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-003')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="francisco balagtas" data-status="unpaid" data-trend="at-risk" data-block="3">
+                        <td>
+                            <div style="font-weight: 700;">Francisco Balagtas</div>
+                            <div style="font-size: 12px; color: #64748b;">B3 L12</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="295" 
+                            data-at-risk="true" 
+                            data-status="unpaid"
+                            style="font-weight: 700;">
+                            ?2,950.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-late">?? At Risk</span>
+                                                    </td>
+                        <td>
+                                                            <span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-danger">Unpaid</span>
+                                <div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: 2026-04-10</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-018')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="apolinario mabini" data-status="unpaid" data-trend="at-risk" data-block="3">
+                        <td>
+                            <div style="font-weight: 700;">Apolinario Mabini</div>
+                            <div style="font-size: 12px; color: #64748b;">B3 L22</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="210" 
+                            data-at-risk="true" 
+                            data-status="unpaid"
+                            style="font-weight: 700;">
+                            ?2,100.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-late">?? At Risk</span>
+                                                    </td>
+                        <td>
+                                                            <span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-danger">Unpaid</span>
+                                <div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: 2026-04-10</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-008')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="julian felipe" data-status="paid" data-trend="reliable" data-block="4">
+                        <td>
+                            <div style="font-weight: 700;">Julian Felipe</div>
+                            <div style="font-size: 12px; color: #64748b;">B4 L5</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="190" 
+                            data-at-risk="false" 
+                            data-status="paid"
+                            style="font-weight: 700;">
+                            ?1,900.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span class="method-badge method-office">
+                                     ??                                     Office
+                                </span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-success">Paid</span>
+                                <div style="font-size: 10px; color: #10b981; margin-top: 4px;">2026-04-02</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-019')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="emilio aguinaldo" data-status="paid" data-trend="reliable" data-block="4">
+                        <td>
+                            <div style="font-weight: 700;">Emilio Aguinaldo</div>
+                            <div style="font-size: 12px; color: #64748b;">B4 L8</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="165" 
+                            data-at-risk="false" 
+                            data-status="paid"
+                            style="font-weight: 700;">
+                            ?1,650.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span class="method-badge method-gcash">
+                                     ??                                     GCash
+                                </span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-success">Paid</span>
+                                <div style="font-size: 10px; color: #10b981; margin-top: 4px;">2026-04-04</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-009')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="juan luna" data-status="unpaid" data-trend="at-risk" data-block="4">
+                        <td>
+                            <div style="font-weight: 700;">Juan Luna</div>
+                            <div style="font-size: 12px; color: #64748b;">B4 L12</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="260" 
+                            data-at-risk="true" 
+                            data-status="unpaid"
+                            style="font-weight: 700;">
+                            ?2,600.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-late">?? At Risk</span>
+                                                    </td>
+                        <td>
+                                                            <span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-danger">Unpaid</span>
+                                <div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: 2026-04-10</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-014')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="elena gomez" data-status="unpaid" data-trend="at-risk" data-block="4">
+                        <td>
+                            <div style="font-weight: 700;">Elena Gomez</div>
+                            <div style="font-size: 12px; color: #64748b;">B4 L22</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="420" 
+                            data-at-risk="true" 
+                            data-status="unpaid"
+                            style="font-weight: 700;">
+                            ?4,200.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-late">?? At Risk</span>
+                                                    </td>
+                        <td>
+                                                            <span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-danger">Unpaid</span>
+                                <div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: 2026-04-10</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-004')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="antonio luna" data-status="paid" data-trend="reliable" data-block="5">
+                        <td>
+                            <div style="font-weight: 700;">Antonio Luna</div>
+                            <div style="font-size: 12px; color: #64748b;">B5 L4</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="180" 
+                            data-at-risk="false" 
+                            data-status="paid"
+                            style="font-weight: 700;">
+                            ?1,800.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span class="method-badge method-gcash">
+                                     ??                                     GCash
+                                </span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-success">Paid</span>
+                                <div style="font-size: 10px; color: #10b981; margin-top: 4px;">2026-03-28</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-005')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="mariano ponce" data-status="paid" data-trend="reliable" data-block="5">
+                        <td>
+                            <div style="font-weight: 700;">Mariano Ponce</div>
+                            <div style="font-size: 12px; color: #64748b;">B5 L8</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="145" 
+                            data-at-risk="false" 
+                            data-status="paid"
+                            style="font-weight: 700;">
+                            ?1,450.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span class="method-badge method-gcash">
+                                     ??                                     GCash
+                                </span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-success">Paid</span>
+                                <div style="font-size: 10px; color: #10b981; margin-top: 4px;">2026-04-05</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-015')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="marcelo del pilar" data-status="unpaid" data-trend="at-risk" data-block="5">
+                        <td>
+                            <div style="font-weight: 700;">Marcelo Del Pilar</div>
+                            <div style="font-size: 12px; color: #64748b;">B5 L12</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="350" 
+                            data-at-risk="true" 
+                            data-status="unpaid"
+                            style="font-weight: 700;">
+                            ?3,500.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-late">?? At Risk</span>
+                                                    </td>
+                        <td>
+                                                            <span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-danger">Unpaid</span>
+                                <div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: 2026-04-10</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-010')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="felipe agoncillo" data-status="unpaid" data-trend="at-risk" data-block="5">
+                        <td>
+                            <div style="font-weight: 700;">Felipe Agoncillo</div>
+                            <div style="font-size: 12px; color: #64748b;">B5 L22</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="510" 
+                            data-at-risk="true" 
+                            data-status="unpaid"
+                            style="font-weight: 700;">
+                            ?5,100.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-late">?? At Risk</span>
+                                                    </td>
+                        <td>
+                                                            <span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-danger">Unpaid</span>
+                                <div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: 2026-04-10</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-020')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="emilio jacinto" data-status="paid" data-trend="reliable" data-block="6">
+                        <td>
+                            <div style="font-weight: 700;">Emilio Jacinto</div>
+                            <div style="font-size: 12px; color: #64748b;">B6 L3</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="220" 
+                            data-at-risk="false" 
+                            data-status="paid"
+                            style="font-weight: 700;">
+                            ?2,200.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span class="method-badge method-gcash">
+                                     ??                                     GCash
+                                </span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-success">Paid</span>
+                                <div style="font-size: 10px; color: #10b981; margin-top: 4px;">2026-04-02</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-022')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="gomburza family" data-status="unpaid" data-trend="at-risk" data-block="6">
+                        <td>
+                            <div style="font-weight: 700;">Gomburza Family</div>
+                            <div style="font-size: 12px; color: #64748b;">B6 L10</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="320" 
+                            data-at-risk="true" 
+                            data-status="unpaid"
+                            style="font-weight: 700;">
+                            ?3,200.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-late">?? At Risk</span>
+                                                    </td>
+                        <td>
+                                                            <span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-danger">Unpaid</span>
+                                <div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: 2026-04-10</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-023')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="macario sakay" data-status="paid" data-trend="reliable" data-block="7">
+                        <td>
+                            <div style="font-weight: 700;">Macario Sakay</div>
+                            <div style="font-size: 12px; color: #64748b;">B7 L4</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="150" 
+                            data-at-risk="false" 
+                            data-status="paid"
+                            style="font-weight: 700;">
+                            ?1,500.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span class="method-badge method-office">
+                                     ??                                     Office
+                                </span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-success">Paid</span>
+                                <div style="font-size: 10px; color: #10b981; margin-top: 4px;">2026-03-30</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-024')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="miguel malvar" data-status="unpaid" data-trend="reliable" data-block="7">
+                        <td>
+                            <div style="font-weight: 700;">Miguel Malvar</div>
+                            <div style="font-size: 12px; color: #64748b;">B7 L11</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="280" 
+                            data-at-risk="false" 
+                            data-status="unpaid"
+                            style="font-weight: 700;">
+                            ?2,800.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-danger">Unpaid</span>
+                                <div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: 2026-04-10</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-025')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="marcelo agoncillo" data-status="paid" data-trend="reliable" data-block="8">
+                        <td>
+                            <div style="font-weight: 700;">Marcelo Agoncillo</div>
+                            <div style="font-size: 12px; color: #64748b;">B8 L2</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="190" 
+                            data-at-risk="false" 
+                            data-status="paid"
+                            style="font-weight: 700;">
+                            ?1,900.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-early">?? Reliable</span>
+                                                    </td>
+                        <td>
+                                                            <span class="method-badge method-gcash">
+                                     ??                                     GCash
+                                </span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-success">Paid</span>
+                                <div style="font-size: 10px; color: #10b981; margin-top: 4px;">2026-04-01</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-026')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                        <tr class="bill-row" data-resident="gregoria de jesus" data-status="unpaid" data-trend="at-risk" data-block="8">
+                        <td>
+                            <div style="font-weight: 700;">Gregoria de Jesus</div>
+                            <div style="font-size: 12px; color: #64748b;">B8 L9</div>
+                        </td>
+                        <!-- Dynamic Amounts for JS recalculation -->
+                        <td class="dynamic-amount-cell" 
+                            data-usage-kwh="360" 
+                            data-at-risk="true" 
+                            data-status="unpaid"
+                            style="font-weight: 700;">
+                            ?3,600.00
+                        </td>
+                        <td>
+                                                            <span class="trend-chip trend-late">?? At Risk</span>
+                                                    </td>
+                        <td>
+                                                            <span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>
+                                                    </td>
+                        <td>
+                                                            <span class="badge badge-danger">Unpaid</span>
+                                <div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: 2026-04-10</div>
+                                                    </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('EB-027')">View</button>
+                            </div>
+                        </td>
+                    </tr>
+                                    </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Full Screen Immersive Modal -->
+<div id="billModal" class="bill-modal">
+    <div class="bill-modal-content">
+        <div class="modal-header">
+            <div>
+                <span id="modalLot" style="font-size: 12px; font-weight: 700; color: var(--bill-primary); text-transform: uppercase; letter-spacing: 0.1em;">BLOCK 1 LOT 5</span>
+                <h2 id="modalResident" style="font-size: 32px; font-weight: 800; color: #0f172a; margin-top: 8px;">Juan Dela Cruz</h2>
+                <div style="margin-top: 12px; display: flex; gap: 12px; align-items: center;">
+                    <span id="modalTrend" class="trend-chip trend-early">?? Reliable Payer</span>
+                    <span id="modalPaymentBadge" class="badge">Paid</span>
+                </div>
+            </div>
+            <button class="ann-btn-icon" onclick="closeModal()" style="padding: 12px; background: #f1f5f9;">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="modalMainContent">
+                <h3 style="font-size: 14px; font-weight: 700; text-transform: uppercase; margin-bottom: 20px; color: #64748b;">Current Statement Details</h3>
+                <div class="modal-summary-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;">
+                    <div style="background: var(--bill-bg-soft); padding: 20px; border-radius: 16px;">
+                        <span style="font-size: 12px; color: #64748b;">Current Usage</span>
+                        <div id="modalUsage" style="font-size: 24px; font-weight: 700; color: #0f172a; margin-top: 4px;">150 kWh</div>
+                    </div>
+                    <div style="background: var(--bill-bg-soft); padding: 20px; border-radius: 16px;">
+                        <span style="font-size: 12px; color: #64748b;">Total Amount Due</span>
+                        <div id="modalAmount" style="font-size: 24px; font-weight: 700; color: var(--bill-primary); margin-top: 4px;">?1,250.50</div>
+                    </div>
+                </div>
+
+                <div style="padding: 24px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 20px;">
+                    <h4 style="font-size: 12px; font-weight: 700; color: #92400e; margin-bottom: 8px;">Predictive Analysis</h4>
+                    <p id="modalPredictiveText" style="font-size: 13px; color: #b45309; line-height: 1.5;">This resident is generally reliable but has shown a slight increase in usage this month ( +12% vs. Avg).</p>
+                </div>
+            </div>
+
+            <div id="modalHistoryContent" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="font-size: 14px; font-weight: 700; text-transform: uppercase; color: #64748b;">Payment History & TRN Record</h3>
+                    <button class="btn btn-outline" style="padding: 4px 12px; font-size: 11px;" onclick="toggleModalView('main')">Back to Summary</button>
+                </div>
+                <div class="bill-table-container" style="max-height: 300px; overflow-y: auto;">
+                    <table class="bill-table">
+                        <thead style="position: sticky; top: 0; z-index: 10;">
+                            <tr>
+                                <th>Transaction (TRN)</th>
+                                <th>Month</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modalHistoryTableBody">
+                            <!-- History rows injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div style="border-left: 1px solid var(--bill-border); padding-left: 40px;">
+                <h3 style="font-size: 14px; font-weight: 700; text-transform: uppercase; margin-bottom: 24px; color: #64748b;">Quick Actions</h3>
+                <div class="modal-actions-list">
+                    <div id="modalPaymentAction" style="margin-bottom: 8px;">
+                        <!-- Payment button injected here if unpaid -->
+                    </div>
+                    <button class="btn btn-primary" onclick="toggleModalView('history')">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        View Payment History
+                    </button>
+                    <button class="btn btn-outline" onclick="window.print()">Print Statement</button>
+                    <button class="btn btn-outline" id="disconnectBtn" style="color: var(--bill-danger); border-color: #fee2e2;" onclick="issueDisconnectWarning()">Disconnect Warning</button>
+                </div>
+                
+                <div style="margin-top: 40px; padding: 20px; border: 1px solid var(--bill-border); border-radius: 20px;">
+                    <h4 style="font-size: 12px; font-weight: 700; margin-bottom: 12px;">System Audit & Comm Trail</h4>
+                    <div id="modalAuditLog" style="display:flex; flex-direction: column; gap: 12px;">
+                        <!-- Audit Log Injected via JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dynamic Billing Settings Modal -->
+<div id="settingsModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2000;">
+    <div class="bill-modal-content" style="max-width: 400px; padding: 24px;">
+        <div class="modal-header" style="margin-bottom: 24px; display: flex; justify-content: space-between;">
+            <h2 style="font-size: 20px; font-weight: 800;">Billing Rates Configuration</h2>
+            <button class="ann-btn-icon" onclick="closeSettingsModal()" style="padding: 8px;">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Base Rate per kWh (?)</label>
+            <input type="number" id="inputKwhRate" class="filter-select" style="width: 100%; font-size: 16px; padding: 12px;" value="10">
+        </div>
+
+        <div style="margin-bottom: 30px;">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Late Payment Penalty (%)</label>
+            <input type="number" id="inputPenaltyRate" class="filter-select" style="width: 100%; font-size: 16px; padding: 12px;" value="5">
+            <p style="font-size: 11px; color: #94a3b8; margin-top: 8px;">Penalty is automatically applied to accounts marked as ?? At Risk and Unpaid.</p>
+        </div>
+
+        <button class="btn btn-primary" style="width: 100%; justify-content: center;" onclick="applySettings()">Update & Recalculate Ledger</button>
+    </div>
+</div>
+
+<script>
+    const statsData = {"2025":{"May":10200,"Jun":11500,"Jul":12800,"Aug":14000,"Sep":13500,"Oct":12000,"Nov":11000,"Dec":15500,"Jan":16500,"Feb":14000,"Mar":13200,"Apr":15000},"2026":{"May":11000,"Jun":12500,"Jul":13500,"Aug":14500,"Sep":14000,"Oct":13000,"Nov":12500,"Dec":16000,"Jan":17000,"Feb":15500,"Mar":14200,"Apr":16500},"today_paid":4550};
+    let isPaidTodayFilter = false;
+
+    function renderGraph(year, month = 'all') {
+        const graph = document.getElementById('billingGraph');
+        graph.innerHTML = '';
+        
+        let dataCY = {};
+        let dataLY = {};
+        
+        if (isPaidTodayFilter) {
+            dataCY = {'Today': statsData.today_paid};
+        } else {
+            const ly = (parseInt(year) - 1).toString();
+            dataCY = statsData[year] || {};
+            dataLY = statsData[ly] || {};
+        }
+
+        // Dynamically calculate graph height
+        let maxFound = 0;
+        for(let v of Object.values(dataCY)) { if(v > maxFound) maxFound = v; }
+        for(let v of Object.values(dataLY)) { if(v > maxFound) maxFound = v; }
+        const maxVal = maxFound === 0 ? 1000 : maxFound * 1.2;
+        
+        for (const [m, valCY] of Object.entries(dataCY)) {
+            if (month !== 'all' && m !== month && !isPaidTodayFilter) continue;
+
+            const valLY = dataLY[m] || 0;
+            const hCY = (valCY / maxVal) * 100;
+            const hLY = (valLY / maxVal) * 100;
+
+            const barItem = document.createElement('div');
+            barItem.className = 'usage-bar-item';
+            
+            const barsContainer = document.createElement('div');
+            barsContainer.style.display = 'flex';
+            barsContainer.style.alignItems = 'flex-end';
+            barsContainer.style.justifyContent = 'center';
+            barsContainer.style.gap = '4px';
+            barsContainer.style.height = '100%';
+            barsContainer.style.width = '100%';
+            barsContainer.style.position = 'relative';
+
+            // Last Year Bar
+            if (!isPaidTodayFilter && valLY > 0) {
+                const barLy = document.createElement('div');
+                barLy.className = 'usage-bar';
+                barLy.style.height = Math.max(hLY, 5) + '%';
+                barLy.style.width = '14px';
+                barLy.style.background = '#e2e8f0'; 
+                
+                const badgeLy = document.createElement('div');
+                badgeLy.className = 'graph-value-badge';
+                badgeLy.innerHTML = `2025<br>?${(valLY/1000).toFixed(1)}k`;
+                barLy.appendChild(badgeLy);
+                barsContainer.appendChild(barLy);
+            }
+
+            // Current Year Bar
+            const barCy = document.createElement('div');
+            barCy.className = 'usage-bar';
+            barCy.style.height = Math.max(hCY, 5) + '%';
+            barCy.style.width = '14px';
+            if (month !== 'all' || isPaidTodayFilter) {
+                barCy.style.background = 'var(--bill-primary)';
+            } else {
+                barCy.style.background = '#94a3b8';
+            }
+            barCy.title = `Current: ?${valCY.toLocaleString()}`;
+            
+            const badgeCy = document.createElement('div');
+            badgeCy.className = 'graph-value-badge';
+            let pctChangeHtml = '';
+            if (valLY > 0 && !isPaidTodayFilter) {
+                const diff = ((valCY - valLY) / valLY) * 100;
+                const sign = diff >= 0 ? '+' : '';
+                const color = diff >= 0 ? '#10b981' : '#ef4444';
+                pctChangeHtml = `<div style="color: ${color}; font-size: 9px; margin-top: 2px;">${sign}${diff.toFixed(1)}% vs LY</div>`;
+            }
+            badgeCy.innerHTML = `<div style="font-size: 11px;">?${(valCY/1000).toFixed(1)}k</div>${pctChangeHtml}`;
+            barCy.appendChild(badgeCy);
+
+            barsContainer.appendChild(barCy);
+            
+            const label = document.createElement('span');
+            label.className = 'usage-label';
+            label.textContent = m;
+
+            barItem.appendChild(barsContainer);
+            barItem.appendChild(label);
+            graph.appendChild(barItem);
+        }
+    }
+
+    function updateGraph() {
+        const year = document.getElementById('graphYear').value;
+        const month = document.getElementById('graphMonth').value;
+        isPaidTodayFilter = false;
+        document.getElementById('paidTodayBtn').classList.remove('active');
+        renderGraph(year, month);
+    }
+
+    function togglePaidToday() {
+        isPaidTodayFilter = !isPaidTodayFilter;
+        const btn = document.getElementById('paidTodayBtn');
+        if (isPaidTodayFilter) {
+            btn.classList.add('active');
+            renderGraph('2026', 'all');
+        } else {
+            btn.classList.remove('active');
+            updateGraph();
+        }
+    }
+
+    // Global Billing Settings
+    let currentKwhRate = 10;
+    let currentPenaltyRate = 5;
+
+    // Load Data safely
+    const allBillsRaw = [{"id":"EB-001","lot":"B1 L5","block":"1","resident":"Juan Dela Cruz","amount":1250.5,"usage":"150 kWh","status":"paid","due":"2026-04-05","paid_date":"2026-04-01","method":"Office","usage_history":[140,155,160,145,130,150,155,165,170,160,150,155],"at_risk":false,"payment_history":[{"month":"March 2026","amount":1200,"status":"Paid","date":"26-03-02","trn":"TRN-51215C54"},{"month":"Feb 2026","amount":1150,"status":"Paid","date":"26-02-05","trn":"TRN-6ECEC898"}],"usage_kwh":150,"base_amount":1500,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-011","lot":"B1 L8","block":"1","resident":"Melchora Aquino","amount":950,"usage":"115 kWh","status":"paid","due":"2026-04-05","paid_date":"2026-03-30","method":"Office","usage_history":[100,115,125,110,95,115,120,130,135,125,115,120],"at_risk":false,"payment_history":[{"month":"March 2026","amount":900,"status":"Paid","date":"26-03-05","trn":"TRN-818CBCC7"}],"usage_kwh":115,"base_amount":1150,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-021","lot":"B1 L12","block":"1","resident":"Leon Ma. Guerrero","amount":1650.75,"usage":"200 kWh","status":"paid","due":"2026-04-05","paid_date":"2026-04-03","method":"GCash","usage_history":[185,200,210,195,180,200,205,215,220,210,200,205],"at_risk":false,"payment_history":[{"month":"March 2026","amount":1600,"status":"Paid","date":"26-03-05","trn":"TRN-B87E8071"}],"usage_kwh":200,"base_amount":2000,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-006","lot":"B1 L15","block":"1","resident":"Andres Bonifacio","amount":1100,"usage":"130 kWh","status":"unpaid","due":"2026-04-10","paid_date":null,"method":null,"usage_history":[120,130,140,125,110,130,135,145,150,140,130,135],"at_risk":false,"payment_history":[{"month":"March 2026","amount":1050,"status":"Paid","date":"26-03-10","trn":"TRN-503AAEC2"}],"usage_kwh":130,"base_amount":1300,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-016","lot":"B1 L22","block":"1","resident":"Diego Silang","amount":3800.2,"usage":"470 kWh","status":"unpaid","due":"2026-04-10","paid_date":null,"method":null,"usage_history":[450,470,480,465,440,470,475,485,490,480,470,475],"at_risk":true,"payment_history":[{"month":"March 2026","amount":3600,"status":"Paid","date":"26-03-20","trn":"TRN-14FD7708"}],"usage_kwh":470,"base_amount":4700,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"},{"action":"Automated Warning Sent - Email","date":"2026-05-03 02:05 AM","user":"System"}]},{"id":"EB-007","lot":"B2 L5","block":"2","resident":"Jose Rizal","amount":2500,"usage":"310 kWh","status":"paid","due":"2026-04-05","paid_date":"2026-04-02","method":"Office","usage_history":[290,310,320,305,280,310,315,325,330,320,310,315],"at_risk":false,"payment_history":[{"month":"March 2026","amount":2400,"status":"Paid","date":"26-03-30","trn":"TRN-FC8600DF"}],"usage_kwh":310,"base_amount":3100,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-017","lot":"B2 L8","block":"2","resident":"Teresa Magbanua","amount":1250,"usage":"155 kWh","status":"paid","due":"2026-04-05","paid_date":"2026-03-29","method":"Office","usage_history":[140,155,165,150,135,155,160,170,175,165,155,160],"at_risk":false,"payment_history":[{"month":"March 2026","amount":1200,"status":"Paid","date":"26-03-25","trn":"TRN-E435195D"}],"usage_kwh":155,"base_amount":1550,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-002","lot":"B2 L12","block":"2","resident":"Maria Santos","amount":2100,"usage":"245 kWh","status":"unpaid","due":"2026-04-10","paid_date":null,"method":null,"usage_history":[230,240,255,260,245,235,240,250,260,255,245,250],"at_risk":true,"payment_history":[{"month":"March 2026","amount":2000,"status":"Paid","date":"26-03-12","trn":"TRN-DEA67429"},{"month":"Feb 2026","amount":2100,"status":"Late","date":"26-02-20","trn":"TRN-A7BD411F"}],"usage_kwh":245,"base_amount":2450,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"},{"action":"Automated Warning Sent - Email","date":"2026-05-03 02:05 AM","user":"System"}]},{"id":"EB-012","lot":"B2 L22","block":"2","resident":"Gabriela Silang","amount":3100.5,"usage":"380 kWh","status":"unpaid","due":"2026-04-10","paid_date":null,"method":null,"usage_history":[360,380,390,375,350,380,385,395,400,390,380,385],"at_risk":true,"payment_history":[{"month":"March 2026","amount":3000,"status":"Paid","date":"26-03-18","trn":"TRN-DD39BD80"}],"usage_kwh":380,"base_amount":3800,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"},{"action":"Automated Warning Sent - Email","date":"2026-05-03 02:05 AM","user":"System"}]},{"id":"EB-013","lot":"B3 L5","block":"3","resident":"Gregorio Del Pilar","amount":1420,"usage":"175 kWh","status":"paid","due":"2026-04-05","paid_date":"2026-04-01","method":"Office","usage_history":[160,175,185,170,155,175,180,190,195,185,175,180],"at_risk":false,"payment_history":[{"month":"March 2026","amount":1400,"status":"Paid","date":"26-03-30","trn":"TRN-3A5E1CD5"}],"usage_kwh":175,"base_amount":1750,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-003","lot":"B3 L8","block":"3","resident":"Ricardo Reyes","amount":890.75,"usage":"110 kWh","status":"paid","due":"2026-04-05","paid_date":"2026-04-05","method":"GCash","usage_history":[100,115,120,110,105,110,115,120,110,105,110,115],"at_risk":false,"payment_history":[{"month":"March 2026","amount":850,"status":"Paid","date":"26-03-05","trn":"TRN-64732A14"}],"usage_kwh":110,"base_amount":1100,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-018","lot":"B3 L12","block":"3","resident":"Francisco Balagtas","amount":2400.5,"usage":"295 kWh","status":"unpaid","due":"2026-04-10","paid_date":null,"method":null,"usage_history":[280,295,305,290,265,295,300,310,315,305,295,300],"at_risk":true,"payment_history":[{"month":"March 2026","amount":2300,"status":"Paid","date":"26-03-12","trn":"TRN-B55C347D"}],"usage_kwh":295,"base_amount":2950,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"},{"action":"Automated Warning Sent - Email","date":"2026-05-03 02:05 AM","user":"System"}]},{"id":"EB-008","lot":"B3 L22","block":"3","resident":"Apolinario Mabini","amount":1780.4,"usage":"210 kWh","status":"unpaid","due":"2026-04-10","paid_date":null,"method":null,"usage_history":[190,210,220,205,180,210,215,225,230,220,210,215],"at_risk":true,"payment_history":[{"month":"March 2026","amount":1700,"status":"Paid","date":"26-03-12","trn":"TRN-F4036833"}],"usage_kwh":210,"base_amount":2100,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"},{"action":"Automated Warning Sent - Email","date":"2026-05-03 02:05 AM","user":"System"}]},{"id":"EB-019","lot":"B4 L5","block":"4","resident":"Julian Felipe","amount":1560,"usage":"190 kWh","status":"paid","due":"2026-04-05","paid_date":"2026-04-02","method":"Office","usage_history":[175,190,200,185,170,190,195,205,210,200,190,195],"at_risk":false,"payment_history":[{"month":"March 2026","amount":1500,"status":"Paid","date":"26-03-30","trn":"TRN-ACC7A169"}],"usage_kwh":190,"base_amount":1900,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-009","lot":"B4 L8","block":"4","resident":"Emilio Aguinaldo","amount":1350.75,"usage":"165 kWh","status":"paid","due":"2026-04-05","paid_date":"2026-04-04","method":"GCash","usage_history":[150,165,175,160,145,165,170,180,185,175,165,170],"at_risk":false,"payment_history":[{"month":"March 2026","amount":1300,"status":"Paid","date":"26-03-05","trn":"TRN-65DC7600"}],"usage_kwh":165,"base_amount":1650,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-014","lot":"B4 L12","block":"4","resident":"Juan Luna","amount":2150,"usage":"260 kWh","status":"unpaid","due":"2026-04-10","paid_date":null,"method":null,"usage_history":[240,260,270,255,230,260,265,275,280,270,260,265],"at_risk":true,"payment_history":[{"month":"March 2026","amount":2000,"status":"Paid","date":"26-03-12","trn":"TRN-D77AFE36"}],"usage_kwh":260,"base_amount":2600,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"},{"action":"Automated Warning Sent - Email","date":"2026-05-03 02:05 AM","user":"System"}]},{"id":"EB-004","lot":"B4 L22","block":"4","resident":"Elena Gomez","amount":3400.2,"usage":"420 kWh","status":"unpaid","due":"2026-04-10","paid_date":null,"method":null,"usage_history":[400,410,430,440,420,410,420,430,440,430,420,425],"at_risk":true,"payment_history":[{"month":"March 2026","amount":3200,"status":"Paid","date":"26-03-15","trn":"TRN-320D006C"}],"usage_kwh":420,"base_amount":4200,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"},{"action":"Automated Warning Sent - Email","date":"2026-05-03 02:05 AM","user":"System"}]},{"id":"EB-005","lot":"B5 L4","block":"5","resident":"Antonio Luna","amount":1560,"usage":"180 kWh","status":"paid","due":"2026-04-05","paid_date":"2026-03-28","method":"GCash","usage_history":[170,185,190,180,175,180,185,190,180,175,180,185],"at_risk":false,"payment_history":[{"month":"March 2026","amount":1500,"status":"Paid","date":"26-03-28","trn":"TRN-DF6DEA90"}],"usage_kwh":180,"base_amount":1800,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-015","lot":"B5 L8","block":"5","resident":"Mariano Ponce","amount":1180.75,"usage":"145 kWh","status":"paid","due":"2026-04-05","paid_date":"2026-04-05","method":"GCash","usage_history":[130,145,155,140,125,145,150,160,165,155,145,150],"at_risk":false,"payment_history":[{"month":"March 2026","amount":1100,"status":"Paid","date":"26-03-05","trn":"TRN-156BDFD9"}],"usage_kwh":145,"base_amount":1450,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-010","lot":"B5 L12","block":"5","resident":"Marcelo Del Pilar","amount":2900.2,"usage":"350 kWh","status":"unpaid","due":"2026-04-10","paid_date":null,"method":null,"usage_history":[330,350,360,345,320,350,355,365,370,360,350,355],"at_risk":true,"payment_history":[{"month":"March 2026","amount":2800,"status":"Paid","date":"26-03-15","trn":"TRN-13F815F6"}],"usage_kwh":350,"base_amount":3500,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"},{"action":"Automated Warning Sent - Email","date":"2026-05-03 02:05 AM","user":"System"}]},{"id":"EB-020","lot":"B5 L22","block":"5","resident":"Felipe Agoncillo","amount":4100,"usage":"510 kWh","status":"unpaid","due":"2026-04-10","paid_date":null,"method":null,"usage_history":[490,510,520,505,480,510,515,525,530,520,510,515],"at_risk":true,"payment_history":[{"month":"March 2026","amount":3900,"status":"Paid","date":"26-03-15","trn":"TRN-67DB3E90"}],"usage_kwh":510,"base_amount":5100,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"},{"action":"Automated Warning Sent - Email","date":"2026-05-03 02:05 AM","user":"System"}]},{"id":"EB-022","lot":"B6 L3","block":"6","resident":"Emilio Jacinto","amount":1950,"usage":"220 kWh","status":"paid","due":"2026-04-05","paid_date":"2026-04-02","method":"GCash","usage_history":[200,215,225,210,195,215,220,230,235,225,215,220],"at_risk":false,"payment_history":[{"month":"March 2026","amount":1900,"status":"Paid","date":"26-03-05","trn":"TRN-A7A44649"}],"usage_kwh":220,"base_amount":2200,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-023","lot":"B6 L10","block":"6","resident":"Gomburza Family","amount":2800,"usage":"320 kWh","status":"unpaid","due":"2026-04-10","paid_date":null,"method":null,"usage_history":[300,315,325,310,295,315,320,330,335,325,315,320],"at_risk":true,"payment_history":[{"month":"March 2026","amount":2700,"status":"Paid","date":"26-03-12","trn":"TRN-5344DB4B"}],"usage_kwh":320,"base_amount":3200,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"},{"action":"Automated Warning Sent - Email","date":"2026-05-03 02:05 AM","user":"System"}]},{"id":"EB-024","lot":"B7 L4","block":"7","resident":"Macario Sakay","amount":1350,"usage":"150 kWh","status":"paid","due":"2026-04-05","paid_date":"2026-03-30","method":"Office","usage_history":[130,145,155,140,125,145,150,160,165,155,145,150],"at_risk":false,"payment_history":[{"month":"March 2026","amount":1300,"status":"Paid","date":"26-03-02","trn":"TRN-D3BB86DB"}],"usage_kwh":150,"base_amount":1500,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-025","lot":"B7 L11","block":"7","resident":"Miguel Malvar","amount":2450,"usage":"280 kWh","status":"unpaid","due":"2026-04-10","paid_date":null,"method":null,"usage_history":[260,275,285,270,255,275,280,290,295,285,275,280],"at_risk":false,"payment_history":[{"month":"March 2026","amount":2400,"status":"Paid","date":"26-03-10","trn":"TRN-8B6827FF"}],"usage_kwh":280,"base_amount":2800,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-026","lot":"B8 L2","block":"8","resident":"Marcelo Agoncillo","amount":1700,"usage":"190 kWh","status":"paid","due":"2026-04-05","paid_date":"2026-04-01","method":"GCash","usage_history":[170,185,195,180,165,185,190,200,205,195,185,190],"at_risk":false,"payment_history":[{"month":"March 2026","amount":1650,"status":"Paid","date":"26-03-05","trn":"TRN-62D896F6"}],"usage_kwh":190,"base_amount":1900,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"}]},{"id":"EB-027","lot":"B8 L9","block":"8","resident":"Gregoria de Jesus","amount":3100,"usage":"360 kWh","status":"unpaid","due":"2026-04-10","paid_date":null,"method":null,"usage_history":[340,355,365,350,335,355,360,370,375,365,355,360],"at_risk":true,"payment_history":[{"month":"March 2026","amount":3000,"status":"Paid","date":"26-03-15","trn":"TRN-93534B30"}],"usage_kwh":360,"base_amount":3600,"audit_log":[{"action":"Statement Generated","date":"2026-03-25 08:00 AM","user":"System"},{"action":"Automated Warning Sent - Email","date":"2026-05-03 02:05 AM","user":"System"}]}];
+
+    function openSettingsModal() {
+        document.getElementById('inputKwhRate').value = currentKwhRate;
+        document.getElementById('inputPenaltyRate').value = currentPenaltyRate;
+        document.getElementById('settingsModal').style.display = 'flex';
+    }
+
+    function closeSettingsModal() {
+        document.getElementById('settingsModal').style.display = 'none';
+    }
+
+    function applySettings() {
+        currentKwhRate = parseFloat(document.getElementById('inputKwhRate').value);
+        currentPenaltyRate = parseFloat(document.getElementById('inputPenaltyRate').value);
+        recalculateLedger();
+        closeSettingsModal();
+        
+        // Notify
+        if (window.pushSystemNotification) {
+            window.pushSystemNotification("Global Settings Updated", `New Base Rate: ?${currentKwhRate}/kWh. Penalty: ${currentPenaltyRate}%`, new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), false);
+            alert(`Rates updated to ?${currentKwhRate}/kWh with a ${currentPenaltyRate}% late penalty.`);
+        }
+    }
+
+    function recalculateLedger() {
+        const amountCells = document.querySelectorAll('.dynamic-amount-cell');
+        amountCells.forEach(cell => {
+            const usage = parseInt(cell.dataset.usageKwh);
+            const isAtRisk = cell.dataset.atRisk === 'true';
+            const status = cell.dataset.status;
+
+            let base = usage * currentKwhRate;
+            let total = base;
+
+            if (status === 'unpaid' && isAtRisk) {
+                const penalty = base * (currentPenaltyRate / 100);
+                total += penalty;
+            }
+
+            // Save the raw active total back into the cell dataset for the summary dashboard to read
+            cell.dataset.rawTotal = total;
+            cell.innerHTML = `?${total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        });
+        
+        updateSummaryDashboard();
+    }
+
+    function updateSummaryDashboard() {
+        const monthSel = document.getElementById('summaryMonth').value;
+        const sumColEl = document.getElementById('sumCollection');
+        const sumPaidEl = document.getElementById('sumPaid');
+        const sumUnpaidEl = document.getElementById('sumUnpaid');
+        const sumPastDueEl = document.getElementById('sumPastDue');
+        const rows = document.querySelectorAll('.bill-row');
+
+        if (monthSel !== 'May 2026') {
+            // Historic State View: Modify the table actively
+            const mFactor = monthSel === 'Apr 2026' ? 0.9 : 0.85;
+            let totalHistoric = 0;
+            let countHistoric = 0;
+
+            rows.forEach(row => {
+                const cell = row.querySelector('.dynamic-amount-cell') || row.cells[1];
+                let amt = parseFloat(cell.dataset.rawTotal || cell.textContent.replace(/[^\d.-]/g, '')) || 0;
+                
+                // Simulate slightly different past amounts
+                amt = amt * mFactor;
+                totalHistoric += amt;
+                countHistoric++;
+
+                if (!row.dataset.originalStatus) {
+                    row.dataset.originalStatus = row.dataset.status;
+                    row.dataset.originalStatusHtml = row.cells[4].innerHTML;
+                    row.dataset.originalActionHtml = row.cells[5].innerHTML;
+                }
+
+                // Lock table to 'paid' historic view
+                cell.innerHTML = `?${amt.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                row.dataset.status = 'paid';
+                row.cells[4].innerHTML = `<span class="badge badge-success">Paid</span><div style="font-size: 10px; color: #10b981; margin-top: 4px;">Historic Record</div>`;
+                row.cells[5].innerHTML = `<div style="display: flex; gap: 8px;"><button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;">Receipt</button></div>`;
+            });
+
+            sumColEl.textContent = `?${totalHistoric.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            sumPaidEl.textContent = countHistoric;
+            sumUnpaidEl.textContent = '0'; 
+            sumPastDueEl.textContent = '0';
+        } else {
+            // Return to live current state
+            let totalCollected = 0;
+            let countPaid = 0;
+            let countUnpaid = 0;
+            let countPastDue = 0;
+
+            rows.forEach(row => {
+                if (row.dataset.originalStatus) {
+                    row.dataset.status = row.dataset.originalStatus;
+                    row.cells[4].innerHTML = row.dataset.originalStatusHtml;
+                    row.cells[5].innerHTML = row.dataset.originalActionHtml;
+                    delete row.dataset.originalStatus;
+                }
+
+                const status = row.dataset.status;
+                const isAtRisk = row.dataset.trend === 'at-risk';
+                const cell = row.querySelector('.dynamic-amount-cell') || row.cells[1];
+                const amt = parseFloat(cell.dataset.rawTotal || cell.textContent.replace(/[^\d.-]/g, '')) || 0;
+
+                if (status === 'paid') {
+                    countPaid++;
+                    totalCollected += amt;
+                } else {
+                    countUnpaid++;
+                    if (isAtRisk) countPastDue++;
+                }
+            });
+
+            // Initial load mock collected check
+            if (countPaid > 0 && totalCollected < 5000) totalCollected = 4550; // Mock base
+
+            sumColEl.textContent = `?${totalCollected.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            sumPaidEl.textContent = countPaid;
+            sumUnpaidEl.textContent = countUnpaid;
+            sumPastDueEl.textContent = countPastDue;
+        }
+
+        updatePredictiveDonut();
+    }
+
+    function updatePredictiveDonut() {
+        const rows = document.querySelectorAll('.bill-row');
+        let early = 0, ontime = 0, late = 0;
+        let total = rows.length;
+
+        rows.forEach(row => {
+            const status = row.dataset.status;
+            const trend = row.dataset.trend;
+            
+            if (trend === 'at-risk') {
+                late++;
+            } else if (status === 'paid') {
+                early++;
+            } else {
+                ontime++;
+            }
+        });
+
+        const pEarly = total > 0 ? Math.round((early / total) * 100) : 0;
+        const pOntime = total > 0 ? Math.round((ontime / total) * 100) : 0;
+        const pLate = total > 0 ? Math.round((late / total) * 100) : 0;
+
+        const donutSvg = document.querySelector('.donut-svg');
+        if (donutSvg) {
+            donutSvg.innerHTML = `
+                <circle class="donut-segment segment-late" cx="21" cy="21" r="15.915" stroke-dasharray="${pLate} ${100-pLate}"></circle>
+                <circle class="donut-segment segment-ontime" cx="21" cy="21" r="15.915" stroke-dasharray="${pOntime} ${100-pOntime}" stroke-dashoffset="-${pLate}"></circle>
+                <circle class="donut-segment segment-early" cx="21" cy="21" r="15.915" stroke-dasharray="${pEarly} ${100-pEarly}" stroke-dashoffset="-${pLate + pOntime}"></circle>
+            `;
+            
+            const legend = document.querySelector('.donut-legend');
+            legend.innerHTML = `
+                <div class="legend-item"><span class="legend-label"><span class="dot" style="background: var(--bill-success);"></span> Early Payers</span><strong>${pEarly}%</strong></div>
+                <div class="legend-item"><span class="legend-label"><span class="dot" style="background: var(--bill-primary);"></span> On-Time</span><strong>${pOntime}%</strong></div>
+                <div class="legend-item" style="color: var(--bill-primary); font-size: 11px; padding-left: 16px; margin-top: -8px;">?? Trend: ${ontime} residents consistently pay on-time</div>
+                <div class="legend-item"><span class="legend-label"><span class="dot" style="background: var(--bill-warning);"></span> Late (At Risk)</span><strong>${pLate}%</strong></div>
+            `;
+        }
+    }
+
+    function resetBillingCycle() {
+        if (confirm("WARNING: Are you sure you want to reset the billing cycle?\nThis will clear all current readings and shift all residents to 'Unpaid' for the new month.")) {
+            const rows = document.querySelectorAll('.bill-row');
+            rows.forEach(row => {
+                row.dataset.status = 'unpaid';
+                const statusCell = row.cells[4];
+                const methodCell = row.cells[3];
+                
+                statusCell.innerHTML = `<span class="badge badge-danger">Unpaid</span><div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: Next Month</div>`;
+                methodCell.innerHTML = `<span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>`;
+            });
+            
+            // Re-render dashboard
+            updateSummaryDashboard();
+
+            if (window.pushSystemNotification) {
+                window.pushSystemNotification("Cycle Reset", "A new monthly billing cycle has been initiated.", "System");
+            }
+            alert("The billing cycle has been successfully reset for the new month.");
+        }
+    }
+
+    function systemNotificationScan() {
+        if (!window.pushSystemNotification) return;
+        
+        let warningsSent = 0;
+        allBillsRaw.forEach(bill => {
+            if (bill.status === 'unpaid' && bill.at_risk) {
+                // Throttle notifications so it doesn't spam too much initially, just take first 3
+                if (warningsSent < 3) {
+                    window.pushSystemNotification("?? Action Required", `Resident ${bill.resident} is past due and at risk of disconnection.`, "System Alert");
+                    warningsSent++;
+                }
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        renderGraph('2026');
+        recalculateLedger();
+        setTimeout(systemNotificationScan, 1000); // Wait 1 sec before populating notifications
+    });
+
+    function viewDetail(id) {
+        const bill = allBillsRaw.find(b => b.id === id);
+        if (!bill) return;
+
+        const resident = bill.resident;
+        const lot = bill.lot;
+        const usageKwh = bill.usage_kwh;
+        const isAtRisk = bill.at_risk;
+        const status = bill.status;
+        const history = bill.payment_history || [];
+        const auditLog = bill.audit_log || [];
+
+        const atRiskBool = isAtRisk;
+
+        // Calculate custom amounts dynamically based on settings
+        const baseAmount = usageKwh * currentKwhRate;
+        let totalAmount = baseAmount;
+        let penaltyAmount = 0;
+
+        if (status === 'unpaid' && atRiskBool) {
+            penaltyAmount = baseAmount * (currentPenaltyRate / 100);
+            totalAmount += penaltyAmount;
+        }
+
+        document.getElementById('modalResident').textContent = resident;
+        document.getElementById('modalLot').textContent = lot;
+        document.getElementById('modalUsage').textContent = `${usageKwh} kWh (?${currentKwhRate}/kWh)`;
+        
+        let amountHtml = `?${totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        if (penaltyAmount > 0) {
+            amountHtml += `<div style="font-size: 11px; color: var(--bill-danger); font-weight: normal; margin-top: 4px;">Includes ?${penaltyAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} late fee (${currentPenaltyRate}%)</div>`;
+        }
+
+        document.getElementById('modalAmount').innerHTML = amountHtml;
+        
+        const trendEl = document.getElementById('modalTrend');
+        trendEl.textContent = !atRiskBool ? '?? Reliable Payer' : '?? At Risk';
+        trendEl.className = 'trend-chip ' + (!atRiskBool ? 'trend-early' : 'trend-late');
+
+        // Payment Action Button
+        const actionContainer = document.getElementById('modalPaymentAction');
+        if (status === 'unpaid') {
+            actionContainer.innerHTML = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <button class="btn btn-success" style="justify-content: center; padding: 14px; font-weight: 700;" onclick="recordOfficePaymentFromModal('${id}', '${resident}', ${totalAmount})">?? Office Payment</button>
+                    <button class="btn btn-primary" style="justify-content: center; padding: 14px; font-weight: 700; background: #0070E0;" onclick="openGcashModal('${id}', '${resident}', ${totalAmount})">?? GCash Pay</button>
+                </div>`;
+        } else {
+            actionContainer.innerHTML = '';
+        }
+
+        // Populate Audit Log
+        const auditContainer = document.getElementById('modalAuditLog');
+        auditContainer.innerHTML = '';
+        auditLog.forEach(log => {
+            const isWarning = log.action.includes('Warning');
+            auditContainer.innerHTML += `
+                <div style="font-size: 12px;">
+                    <div style="font-weight: 600; color: ${isWarning ? 'var(--bill-danger)' : 'var(--text-dark)'}">${log.action}</div>
+                    <div style="color: #64748b; font-size: 11px;">${log.user} • ${log.date}</div>
+                </div>
+            `;
+        });
+
+        // Populate History Table
+        const historyBody = document.getElementById('modalHistoryTableBody');
+        historyBody.innerHTML = '';
+        history.forEach(item => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td data-label="TRN">
+                    <span style="font-family: monospace; background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 11px;">
+                        ${item.trn}
+                    </span>
+                </td>
+                <td data-label="Month">${item.month}</td>
+                <td data-label="Amount" style="font-weight: 700;">?${item.amount.toLocaleString()}</td>
+                <td data-label="Status"><span class="badge ${item.status === 'Paid' ? 'badge-success' : 'badge-danger'}">${item.status}</span></td>
+                <td data-label="Date" style="font-size: 11px; color: #64748b;">${item.date}</td>
+            `;
+            historyBody.appendChild(row);
+        });
+
+        toggleModalView('main');
+        document.getElementById('billModal').style.display = 'flex';
+    }
+
+    function toggleModalView(view) {
+        const main = document.getElementById('modalMainContent');
+        const history = document.getElementById('modalHistoryContent');
+        if (view === 'history') {
+            main.style.display = 'none';
+            history.style.display = 'block';
+        } else {
+            main.style.display = 'block';
+            history.style.display = 'none';
+        }
+    }
+
+    function closeModal() {
+        document.getElementById('billModal').style.display = 'none';
+    }
+
+    function recordOfficePaymentFromModal(id, resident, totalAmount) {
+        const now = new Date();
+        const dateStr = now.toLocaleDateString();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+        
+        const customDate = prompt(`Mark ${resident} as PAID in the office. Enter Payment Date/Time:`, `${dateStr} ${timeStr}`);
+        
+        if (customDate !== null) {
+            const trnGenerated = 'TRN-' + Math.random().toString(36).substring(2,10).toUpperCase();
+
+            // Find the row in the table to update it
+            const rows = document.querySelectorAll('.bill-row');
+            rows.forEach(row => {
+                if (row.cells[0].textContent.includes(resident)) {
+                    // Force the cell to be static now that it's paid, so recalculation skips penalties
+                    row.cells[1].innerHTML = `?${totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    row.cells[1].classList.remove('dynamic-amount-cell');
+                    row.cells[1].dataset.status = 'paid';
+
+                    const statusCell = row.cells[4];
+                    const methodCell = row.cells[3];
+                    
+                    statusCell.innerHTML = `<span class="badge badge-success">Paid</span>
+                        <div style="font-size: 10px; color: #10b981; margin-top: 4px;">${customDate} (Office)</div>`;
+                    
+                    methodCell.innerHTML = `<span class="method-badge method-office">?? Office</span>`;
+                    row.dataset.status = 'paid';
+                }
+            });
+
+            // Update Modal UI Instantly
+            document.getElementById('modalPaymentBadge').className = 'badge badge-success';
+            document.getElementById('modalPaymentBadge').textContent = 'Paid';
+            document.getElementById('modalPaymentAction').innerHTML = '';
+            
+            // Add a simulated entry to the Audit Log UI
+            const auditContainer = document.getElementById('modalAuditLog');
+            auditContainer.innerHTML = `
+                <div style="font-size: 12px; background: #f0fdf4; padding: 8px; border-radius: 6px;">
+                    <div style="font-weight: 600; color: #15803d;">Manual Ledger Entry: Payment Recorded (${trnGenerated})</div>
+                    <div style="color: #166534; font-size: 11px;">Admin User • Just Now</div>
+                </div>
+            ` + auditContainer.innerHTML;
+
+            if (window.pushSystemNotification) {
+                window.pushSystemNotification("Payment Processed", `Received ?${totalAmount.toLocaleString()} from ${resident} in Office.`, timeStr, true);
+            }
+            
+            alert(`Payment recorded for ${resident} in our office database.\nReference Number: ${trnGenerated}`);
+        }
+    }
+
+    function issueDisconnectWarning() {
+        const btn = document.getElementById('disconnectBtn');
+        if (confirm("Issue a formal 48-hour disconnection warning for this resident?")) {
+            btn.textContent = '?? WARNING ISSUED';
+            btn.style.background = '#fee2e2';
+            btn.style.color = '#991b1b';
+            alert("Disconnection warning has been logged and the resident notified.");
+        }
+    }
+
+    function applyFilters() {
+        const search = document.getElementById('billingSearch').value.toLowerCase();
+        const status = document.getElementById('statusFilter').value;
+        const trend = document.getElementById('trendFilter').value;
+        const block = document.getElementById('blockFilter').value;
+        const rows = document.querySelectorAll('.bill-row');
+
+        rows.forEach(row => {
+            const res = row.dataset.resident;
+            const s = row.dataset.status;
+            const t = row.dataset.trend;
+            const b = row.dataset.block;
+
+            const matchesSearch = res.includes(search);
+            const matchesStatus = status === 'all' || s === status;
+            const matchesTrend = trend === 'all' || t === trend;
+            const matchesBlock = block === 'all' || b === block;
+
+            row.style.display = (matchesSearch && matchesStatus && matchesTrend && matchesBlock) ? '' : 'none';
+        });
+    }
+
+    // Close modal on outside click
+    window.onclick = function(event) {
+        const modal = document.getElementById('billModal');
+        const gcashModal = document.getElementById('gcashPayModal');
+        if (event.target == modal) closeModal();
+        if (event.target == gcashModal) gcashModal.style.display = 'none';
+    }
+
+
+<div id="gcashOverlay" class="gcash-overlay" onclick="if(event.target===this) closeGcash()">
+    <div class="gcash-phone">
+        <!-- Phone Status Bar -->
+        <div class="gcash-statusbar">
+            <span>2:05 AM</span>
+            <div style="display: flex; gap: 4px; align-items: center;">
+                <svg width="14" height="14" fill="#fff" viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a8.955 8.955 0 0112 0l2-2C15.93 7.93 10.07 7.93 5 13z"/></svg>
+                <svg width="14" height="14" fill="#fff" viewBox="0 0 24 24"><path d="M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z"/></svg>
+            </div>
+        </div>
+
+        <!-- Step 1: GCash Login -->
+        <div id="gcashLogin" class="gcash-step">
+            <div class="gcash-header-bar">
+                <button onclick="closeGcash()" class="gcash-back-btn">
+                    <svg width="20" height="20" fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <span>Login to GCash</span>
+                <div style="width: 20px;"></div>
+            </div>
+            <div class="gcash-body">
+                <div class="gcash-logo-area">
+                    <div class="gcash-logo-circle">
+                        <span style="font-size: 28px; font-weight: 900; color: #0057B8;">G</span>
+                    </div>
+                    <div style="font-size: 20px; font-weight: 800; color: #0057B8; margin-top: 12px;">GCash</div>
+                    <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Secure Payment Gateway</div>
+                </div>
+
+                <div class="gcash-input-group">
+                    <label>Mobile Number</label>
+                    <div class="gcash-phone-input">
+                        <span class="gcash-country-code">+63</span>
+                        <input type="tel" id="gcashPhone" maxlength="10" placeholder="9XX XXX XXXX" value="9171234567" class="gcash-input">
+                    </div>
+                </div>
+
+                <div class="gcash-input-group">
+                    <label>MPIN</label>
+                    <div class="gcash-mpin-row">
+                        <input type="password" class="gcash-mpin-dot" maxlength="1" value="•" data-mpin="0">
+                        <input type="password" class="gcash-mpin-dot" maxlength="1" value="•" data-mpin="1">
+                        <input type="password" class="gcash-mpin-dot" maxlength="1" value="•" data-mpin="2">
+                        <input type="password" class="gcash-mpin-dot" maxlength="1" value="•" data-mpin="3">
+                    </div>
+                </div>
+
+                <button class="gcash-btn-blue" onclick="gcashAuthenticate()">Login</button>
+                <div style="text-align: center; margin-top: 16px;">
+                    <a href="#" style="font-size: 12px; color: #0057B8; text-decoration: none; font-weight: 600;" onclick="event.preventDefault()">Forgot MPIN?</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Authenticating Spinner -->
+        <div id="gcashAuthLoading" class="gcash-step" style="display:none;">
+            <div class="gcash-header-bar">
+                <div style="width: 20px;"></div>
+                <span>Authenticating</span>
+                <div style="width: 20px;"></div>
+            </div>
+            <div class="gcash-body" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 350px;">
+                <div class="gcash-spinner"></div>
+                <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 24px;">Verifying your identity...</div>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 8px;">Please wait a moment</div>
+            </div>
+        </div>
+
+        <!-- Step 3: Payment Confirmation -->
+        <div id="gcashConfirm" class="gcash-step" style="display:none;">
+            <div class="gcash-header-bar">
+                <button onclick="gcashGoBack('gcashLogin')" class="gcash-back-btn">
+                    <svg width="20" height="20" fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <span>Confirm Payment</span>
+                <div style="width: 20px;"></div>
+            </div>
+            <div class="gcash-body">
+                <!-- Merchant Card -->
+                <div class="gcash-merchant-card">
+                    <div class="gcash-merchant-avatar">
+                        <span style="font-size: 20px;">???</span>
+                    </div>
+                    <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 12px;">Althesa Property Management</div>
+                    <div id="gcashPayBillType" style="font-size: 12px; color: #64748b; margin-top: 2px;">Utility Bill</div>
+                </div>
+
+                <!-- Amount Display -->
+                <div class="gcash-amount-box">
+                    <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Amount to Pay</div>
+                    <div id="gcashPayAmount" style="font-size: 36px; font-weight: 800; color: #0057B8; margin-top: 8px;">?0.00</div>
+                </div>
+
+                <!-- Details -->
+                <div class="gcash-detail-rows">
+                    <div class="gcash-detail-row">
+                        <span>Bill Reference</span>
+                        <span id="gcashPayBillId" style="font-weight: 700; font-family: monospace;">-</span>
+                    </div>
+                    <div class="gcash-detail-row">
+                        <span>Account Name</span>
+                        <span id="gcashPayResident" style="font-weight: 700;">-</span>
+                    </div>
+                    <div class="gcash-detail-row">
+                        <span>Service Fee</span>
+                        <span style="font-weight: 700; color: #10b981;">FREE</span>
+                    </div>
+                    <div class="gcash-detail-row" style="border-top: 2px solid #e2e8f0; padding-top: 12px; margin-top: 4px;">
+                        <span style="font-weight: 700;">Total</span>
+                        <span id="gcashPayTotal" style="font-weight: 800; color: #0057B8; font-size: 16px;">?0.00</span>
+                    </div>
+                </div>
+
+                <!-- Balance -->
+                <div class="gcash-balance-row">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <div style="width: 8px; height: 8px; background: #10b981; border-radius: 50%;"></div>
+                        <span style="font-size: 12px; color: #64748b;">Available GCash Balance</span>
+                    </div>
+                    <span style="font-size: 14px; font-weight: 800; color: #0f172a;">?12,450.00</span>
+                </div>
+
+                <button class="gcash-btn-blue" onclick="gcashProcessPayment()">Pay Now</button>
+            </div>
+        </div>
+
+        <!-- Step 4: Processing -->
+        <div id="gcashProcessing" class="gcash-step" style="display:none;">
+            <div class="gcash-header-bar">
+                <div style="width: 20px;"></div>
+                <span>Processing</span>
+                <div style="width: 20px;"></div>
+            </div>
+            <div class="gcash-body" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 350px;">
+                <div class="gcash-spinner"></div>
+                <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 24px;">Processing your payment...</div>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 8px;">Do not close this window</div>
+            </div>
+        </div>
+
+        <!-- Step 5: Success Receipt -->
+        <div id="gcashReceipt" class="gcash-step" style="display:none;">
+            <div class="gcash-header-bar" style="background: #10b981;">
+                <div style="width: 20px;"></div>
+                <span>Payment Successful</span>
+                <div style="width: 20px;"></div>
+            </div>
+            <div class="gcash-body" style="text-align: center;">
+                <div class="gcash-success-check">
+                    <svg width="40" height="40" fill="none" stroke="#fff" stroke-width="3" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+                </div>
+                <div style="font-size: 14px; font-weight: 700; color: #10b981; margin-top: 16px;">PAYMENT SUCCESSFUL</div>
+                <div id="gcashReceiptAmount" style="font-size: 32px; font-weight: 800; color: #0f172a; margin-top: 8px;">?0.00</div>
+
+                <div class="gcash-receipt-card">
+                    <div class="gcash-receipt-row">
+                        <span>Recipient</span>
+                        <span>Althesa Property Mgmt.</span>
+                    </div>
+                    <div class="gcash-receipt-row">
+                        <span>Bill Type</span>
+                        <span id="gcashReceiptType">-</span>
+                    </div>
+                    <div class="gcash-receipt-row">
+                        <span>Reference No.</span>
+                        <span id="gcashReceiptRef" style="font-family: monospace; font-weight: 700;">-</span>
+                    </div>
+                    <div class="gcash-receipt-row">
+                        <span>Date & Time</span>
+                        <span id="gcashReceiptDate">-</span>
+                    </div>
+                </div>
+
+                <button class="gcash-btn-blue" style="background: #10b981; margin-top: 20px;" onclick="gcashComplete()">Done</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.gcash-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(8px);
+    align-items: center;
+    justify-content: center;
+}
+.gcash-phone {
+    width: 375px;
+    max-height: 90vh;
+    background: #f1f5f9;
+    border-radius: 36px;
+    overflow: hidden;
+    box-shadow: 0 0 0 8px #1e293b, 0 25px 60px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+.gcash-statusbar {
+    background: #0057B8;
+    padding: 10px 24px 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+}
+.gcash-header-bar {
+    background: linear-gradient(135deg, #0057B8 0%, #003d82 100%);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+}
+.gcash-back-btn {
+    background: none;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+.gcash-back-btn:hover { background: rgba(255,255,255,0.15); }
+.gcash-body {
+    padding: 24px 20px;
+    overflow-y: auto;
+    max-height: 520px;
+}
+.gcash-logo-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 28px;
+}
+.gcash-logo-circle {
+    width: 64px;
+    height: 64px;
+    background: #fff;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,87,184,0.15);
+}
+.gcash-input-group {
+    margin-bottom: 18px;
+}
+.gcash-input-group label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+    display: block;
+    margin-bottom: 6px;
+}
+.gcash-phone-input {
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+}
+.gcash-phone-input:focus-within { border-color: #0057B8; box-shadow: 0 0 0 3px rgba(0,87,184,0.1); }
+.gcash-country-code {
+    padding: 14px 12px 14px 16px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+    background: #f8fafc;
+    border-right: 1px solid #e2e8f0;
+}
+.gcash-input {
+    flex: 1;
+    padding: 14px 16px;
+    font-size: 15px;
+    font-weight: 600;
+    border: none;
+    outline: none;
+    color: #0f172a;
+    background: transparent;
+}
+.gcash-mpin-row {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+.gcash-mpin-dot {
+    width: 56px;
+    height: 56px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 14px;
+    font-size: 24px;
+    text-align: center;
+    font-weight: 800;
+    color: #0f172a;
+    background: #fff;
+    outline: none;
+    transition: all 0.2s;
+}
+.gcash-mpin-dot:focus { border-color: #0057B8; box-shadow: 0 0 0 3px rgba(0,87,184,0.1); }
+.gcash-btn-blue {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, #0070E0 0%, #0057B8 100%);
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 8px;
+    box-shadow: 0 4px 12px rgba(0,87,184,0.25);
+}
+.gcash-btn-blue:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,87,184,0.35); }
+.gcash-btn-blue:active { transform: translateY(0); }
+.gcash-spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid #e2e8f0;
+    border-top-color: #0057B8;
+    border-radius: 50%;
+    animation: gcashSpin 0.8s linear infinite;
+}
+@keyframes gcashSpin { to { transform: rotate(360deg); } }
+.gcash-merchant-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 16px;
+}
+.gcash-merchant-avatar {
+    width: 52px;
+    height: 52px;
+    background: linear-gradient(135deg, #dbeafe, #eff6ff);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.gcash-amount-box {
+    text-align: center;
+    padding: 20px;
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 16px;
+}
+.gcash-detail-rows {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+.gcash-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    font-size: 13px;
+    color: #64748b;
+}
+.gcash-balance-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+}
+.gcash-success-check {
+    width: 72px;
+    height: 72px;
+    background: #10b981;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    box-shadow: 0 4px 16px rgba(16,185,129,0.3);
+}
+.gcash-receipt-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    padding: 16px;
+    margin-top: 20px;
+    text-align: left;
+}
+.gcash-receipt-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 12px;
+    color: #64748b;
+    border-bottom: 1px solid #f1f5f9;
+}
+.gcash-receipt-row:last-child { border-bottom: none; }
+.gcash-receipt-row span:last-child { font-weight: 600; color: #0f172a; }
+.gcash-step { display: flex; flex-direction: column; }
+
+@media (max-width: 420px) {
+    .gcash-phone { width: 100%; max-width: 100%; border-radius: 0; max-height: 100vh; }
+    .gcash-overlay { padding: 0; }
+}
+</style>
+
+<script>
+    // GCash Payment Engine
+    let _gcashCtx = {};
+
+    function openGcashPayment(billId, residentName, amount, billType) {
+        _gcashCtx = { billId, residentName, amount, billType };
+        // Reset all steps
+        document.querySelectorAll('.gcash-step').forEach(s => s.style.display = 'none');
+        document.getElementById('gcashLogin').style.display = 'flex';
+        document.getElementById('gcashOverlay').style.display = 'flex';
+    }
+
+    function closeGcash() {
+        document.getElementById('gcashOverlay').style.display = 'none';
+    }
+
+    function gcashGoBack(stepId) {
+        document.querySelectorAll('.gcash-step').forEach(s => s.style.display = 'none');
+        document.getElementById(stepId).style.display = 'flex';
+    }
+
+    function gcashAuthenticate() {
+        const phone = document.getElementById('gcashPhone').value;
+        if (phone.length < 10) { alert('Please enter a valid mobile number.'); return; }
+
+        document.querySelectorAll('.gcash-step').forEach(s => s.style.display = 'none');
+        document.getElementById('gcashAuthLoading').style.display = 'flex';
+
+        setTimeout(() => {
+            // Populate confirmation screen
+            const { billId, residentName, amount, billType } = _gcashCtx;
+            document.getElementById('gcashPayBillId').textContent = billId;
+            document.getElementById('gcashPayResident').textContent = residentName;
+            document.getElementById('gcashPayAmount').textContent = '?' + amount.toLocaleString(undefined, {minimumFractionDigits:2});
+            document.getElementById('gcashPayTotal').textContent = '?' + amount.toLocaleString(undefined, {minimumFractionDigits:2});
+            document.getElementById('gcashPayBillType').textContent = billType;
+
+            document.querySelectorAll('.gcash-step').forEach(s => s.style.display = 'none');
+            document.getElementById('gcashConfirm').style.display = 'flex';
+        }, 1800);
+    }
+
+    function gcashProcessPayment() {
+        document.querySelectorAll('.gcash-step').forEach(s => s.style.display = 'none');
+        document.getElementById('gcashProcessing').style.display = 'flex';
+
+        setTimeout(() => {
+            const { amount, billType } = _gcashCtx;
+            const refNo = Math.floor(1000000000 + Math.random() * 9000000000).toString();
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('en-PH', { year:'numeric', month:'short', day:'numeric' }) + ' ' + now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+
+            document.getElementById('gcashReceiptAmount').textContent = '?' + amount.toLocaleString(undefined, {minimumFractionDigits:2});
+            document.getElementById('gcashReceiptType').textContent = billType;
+            document.getElementById('gcashReceiptRef').textContent = refNo;
+            document.getElementById('gcashReceiptDate').textContent = dateStr;
+
+            // Store ref for external callback
+            _gcashCtx.refNo = refNo;
+            _gcashCtx.dateStr = dateStr;
+
+            document.querySelectorAll('.gcash-step').forEach(s => s.style.display = 'none');
+            document.getElementById('gcashReceipt').style.display = 'flex';
+        }, 2500);
+    }
+
+    function gcashComplete() {
+        closeGcash();
+        // Fire callback for the parent view to update the DOM
+        if (typeof onGcashPaymentComplete === 'function') {
+            onGcashPaymentComplete(_gcashCtx);
+        }
+    }
+</script>
+
+<script>
+    function openGcashModal(id, resident, amount) {
+        openGcashPayment(id, resident, amount, 'Electricity Utility Bill');
+    }
+
+    function onGcashPaymentComplete(ctx) {
+        const { billId: id, residentName: resident, amount, refNo: ref, dateStr } = ctx;
+        
+        // Update table row
+        const rows = document.querySelectorAll('.bill-row');
+        rows.forEach(row => {
+            if (row.cells[0].textContent.includes(resident)) {
+                row.cells[1].innerHTML = `?${amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                row.cells[1].classList.remove('dynamic-amount-cell');
+                row.cells[1].dataset.status = 'paid';
+                row.cells[4].innerHTML = `<span class="badge badge-success">Paid</span><div style="font-size: 10px; color: #10b981; margin-top: 4px;">${dateStr} (GCash)</div>`;
+                row.cells[3].innerHTML = `<span class="method-badge method-gcash">?? GCash</span>`;
+                row.dataset.status = 'paid';
+            }
+        });
+
+        // Update modal
+        const badge = document.getElementById('modalPaymentBadge');
+        if (badge) {
+            badge.className = 'badge badge-success';
+            badge.textContent = 'Paid';
+        }
+        
+        const action = document.getElementById('modalPaymentAction');
+        if (action) action.innerHTML = '';
+
+        const auditContainer = document.getElementById('modalAuditLog');
+        if (auditContainer) {
+            auditContainer.innerHTML = `
+                <div style="font-size: 12px; background: #eff6ff; padding: 8px; border-radius: 6px;">
+                    <div style="font-weight: 600; color: #1e40af;">GCash Payment Verified (Ref: ${ref})</div>
+                    <div style="color: #3b82f6; font-size: 11px;">System • Just Now</div>
+                </div>
+            ` + auditContainer.innerHTML;
+        }
+
+        if (window.pushSystemNotification) {
+            window.pushSystemNotification("GCash Payment", `?${amount.toLocaleString()} received from ${resident} via GCash.`, dateStr, true);
+        }
+    }
+</script>
+
+        </main>
+    </div>
+</div>
+
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.getElementById('mainSidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('show');
+        }
+
+        // Global Notification Logic
+        function toggleNotifications(event) {
+            const dropdown = document.getElementById('notifDropdown');
+            dropdown.classList.toggle('active');
+            event.stopPropagation();
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(event) {
+            const container = document.getElementById('notifContainer');
+            const dropdown = document.getElementById('notifDropdown');
+            if (container && !container.contains(event.target)) {
+                dropdown.classList.remove('active');
+            }
+        });
+
+        // Window exposed function to allow specific modules (like Billing) to push notifications
+        window.pushSystemNotification = function(title, message, time, isUnread = true) {
+            const list = document.getElementById('notifList');
+            const dot = document.getElementById('globalNotifDot');
+            const count = document.getElementById('unreadCount');
+            
+            // Remove empty state if present
+            const emptyState = list.querySelector('.notification-empty');
+            if (emptyState) emptyState.remove();
+
+            // Create item
+            const item = document.createElement('div');
+            item.className = `notification-item ${isUnread ? 'unread' : ''}`;
+            item.innerHTML = `
+                <div class="notification-title">${title}</div>
+                <div>${message}</div>
+                <div class="notification-time">${time}</div>
+            `;
+            
+            // Prepend
+            list.insertBefore(item, list.firstChild);
+
+            if (isUnread) {
+                dot.style.display = 'block';
+                let current = parseInt(count.innerText) || 0;
+                count.innerText = (current + 1) + ' New';
+            }
+        };
+    </script>
+    </body>
+</html>
+

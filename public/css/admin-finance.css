@@ -1,0 +1,690 @@
+/* =============================================
+   ELECTRICITY BILLING — ANALYTICS & PREDICTIVE
+   ============================================= */
+
+:root {
+    --bill-primary: #4f46e5;
+    --bill-success: #10b981;
+    --bill-warning: #f59e0b;
+    --bill-danger: #ef4444;
+    --bill-early: #ecfdf5;
+    --bill-early-text: #059669;
+    --bill-late: #fff7ed;
+    --bill-late-text: #d97706;
+    --bill-bg-soft: #f8fafc;
+    --bill-border: #e2e8f0;
+}
+
+/* ---- Layout ---- */
+.bill-container {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.bill-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.bill-title h1 {
+    font-size: 26px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.bill-title p {
+    color: #64748b;
+    font-size: 14px;
+    margin-top: 4px;
+}
+
+/* ---- Analytics Section ---- */
+.analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+}
+
+@media (max-width: 1200px) {
+    .analytics-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .analytics-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* CER Gauge */
+.cer-gauge-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+.cer-gauge-ring {
+    position: relative;
+    width: 200px;
+    height: 200px;
+}
+.cer-gauge-ring svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+.cer-gauge-ring .gauge-bg { fill: none; stroke: #e2e8f0; stroke-width: 10; }
+.cer-gauge-ring .gauge-fill { fill: none; stroke: var(--bill-primary); stroke-width: 10; stroke-linecap: round; transition: stroke-dasharray 1s ease; }
+.cer-gauge-label {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 32px; font-weight: 800; color: #0f172a;
+    text-align: center; line-height: 1.1;
+}
+.cer-gauge-label span { display: block; font-size: 14px; font-weight: 600; color: #94a3b8; text-transform: uppercase; }
+.cer-meta { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.cer-meta-row { display: flex; justify-content: space-between; font-size: 12px; color: #475569; }
+.cer-meta-row strong { font-weight: 700; color: #0f172a; }
+.cer-trend { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 6px 10px; border-radius: 8px; }
+.cer-trend.up { background: #ecfdf5; color: #059669; }
+.cer-trend.down { background: #fff7ed; color: #d97706; }
+
+/* Payment Method Split Bar */
+.method-split-bar {
+    width: 100%; height: 10px;
+    border-radius: 6px; overflow: hidden;
+    display: flex; gap: 2px;
+    margin: 8px 0;
+}
+.method-split-bar .seg { height: 100%; border-radius: 6px; transition: width 0.6s ease; }
+.method-gcash-seg { background: #3b82f6; }
+.method-office-seg { background: #f59e0b; }
+
+/* System Loss Bar */
+.sys-loss-bar {
+    width: 100%; height: 18px;
+    border-radius: 8px; overflow: hidden;
+    background: #e2e8f0;
+    position: relative; margin: 12px 0;
+}
+.sys-loss-fill { height: 100%; background: linear-gradient(90deg, #4f46e5, #7c3aed); border-radius: 8px; transition: width 0.8s ease; }
+.sys-loss-numbers { display: flex; justify-content: space-between; font-size: 12px; color: #64748b; font-weight: 600; }
+
+.analytic-card {
+    background: #fff;
+    border: 1px solid var(--bill-border);
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+    min-width: 0;
+    overflow: hidden;
+}
+
+.card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.mini-filters {
+    display: flex;
+    gap: 8px;
+}
+
+.mini-filter {
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid var(--bill-border);
+    border-radius: 6px;
+    background: #fff;
+    color: #475569;
+    outline: none;
+    cursor: pointer;
+}
+
+.mini-filter:hover { border-color: var(--bill-primary); }
+
+.paid-today-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid var(--bill-border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.paid-today-btn.active {
+    background: var(--bill-success);
+    color: #fff;
+    border-color: var(--bill-success);
+}
+
+/* Usage Trend Chart with Axes */
+.chart-container {
+    padding-left: 40px;
+    position: relative;
+}
+
+.y-axis {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 150px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #94a3b8;
+    padding-right: 8px;
+    border-right: 1px solid var(--bill-border);
+    text-align: right;
+}
+
+.usage-trend {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    height: 150px;
+}
+
+.usage-bar-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.usage-bar {
+    width: 100%;
+    background: #e0e7ff;
+    border-radius: 6px 6px 0 0;
+    transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    cursor: pointer;
+    position: relative;
+    min-height: 2px;
+}
+
+.usage-bar:hover {
+    background: var(--bill-primary);
+    transform: scaleX(1.05);
+}
+
+.usage-bar::after {
+    content: attr(data-val);
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--bill-primary);
+    background: #fff;
+    padding: 2px 8px;
+    border-radius: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    border: 1px solid var(--bill-border);
+}
+
+.usage-bar:hover::after { 
+    opacity: 1; 
+    top: -35px;
+}
+
+.usage-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+}
+
+/* Payment Speed Donut (Visual Simulation) */
+.donut-chart-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.donut-svg {
+    transform: rotate(-90deg);
+}
+
+.donut-segment {
+    fill: none;
+    stroke-width: 12;
+    transition: stroke-dasharray 0.6s ease;
+}
+
+.segment-early { stroke: var(--bill-success); }
+.segment-ontime { stroke: var(--bill-primary); }
+.segment-late { stroke: var(--bill-warning); }
+
+.donut-legend {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.legend-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #475569;
+}
+
+.legend-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* ---- Predictive Chips ---- */
+.trend-chip {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.trend-early { background: var(--bill-early); color: var(--bill-early-text); }
+.trend-late { background: var(--bill-late); color: var(--bill-late-text); }
+
+/* ---- Filter Bar ---- */
+.filter-bar {
+    display: flex;
+    flex-wrap: wrap; /* Enable wrapping for mobile */
+    gap: 16px;
+    margin-bottom: 24px;
+    background: #fff;
+    padding: 16px;
+    border-radius: 16px;
+    border: 1px solid var(--bill-border);
+    align-items: flex-end;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1; /* Allow filters to grow and fill space */
+    min-width: 150px; /* Prevent being too small */
+}
+
+.filter-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #94a3b8;
+}
+
+.filter-select {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--bill-border);
+    font-size: 13px;
+    background: #fff;
+    outline: none;
+    width: 100%;
+    transition: border-color 0.2s;
+}
+
+.filter-select:focus {
+    border-color: var(--bill-primary);
+}
+
+/* ---- Full Screen Detail Modal ---- */
+.bill-modal {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(8px);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    padding: 24px;
+}
+
+.bill-modal-content {
+    background: #fff;
+    width: 100%;
+    max-width: 1100px;
+    max-height: 90vh;
+    border-radius: 32px;
+    box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: modalFadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalFadeUp {
+    from { opacity: 0; transform: translateY(40px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.modal-header {
+    padding: 40px;
+    border-bottom: 1px solid var(--bill-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.modal-body {
+    padding: 40px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: 1fr 320px; /* Fixed sidebar width */
+    gap: 40px;
+}
+
+/* Modal Internal Actions */
+.modal-actions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    margin-top: 16px;
+}
+
+.modal-actions-list .btn {
+    width: 100%;
+    justify-content: center;
+    padding: 14px;
+    margin: 0 !important; /* Force remove any inherited margins */
+}
+
+/* Payment Methods */
+.method-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.method-gcash { background: #eff6ff; color: #3b82f6; }
+.method-office { background: #fff7ed; color: #ea580c; }
+
+.btn-success {
+    background: var(--bill-success);
+    color: #fff;
+}
+
+.btn-success:hover {
+    background: #059669;
+}
+
+/* ---- Lot Management Table ---- */
+.bill-table-container {
+    background: #fff;
+    border: 1px solid var(--bill-border);
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.bill-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.bill-table th {
+    text-align: left;
+    padding: 16px 24px;
+    background: var(--bill-bg-soft);
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--bill-border);
+}
+
+.bill-table td {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--bill-border);
+    font-size: 14px;
+    color: #334155;
+    vertical-align: middle;
+}
+
+.bill-table tr:hover td {
+    background: #fbfcfe;
+}
+
+/* Manage Lot Toggles */
+.toggle-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.switch-inner {
+    width: 36px;
+    height: 20px;
+    background: #cbd5e1;
+    border-radius: 20px;
+    position: relative;
+    transition: background 0.3s;
+}
+
+.switch-inner::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 16px; height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.3s;
+}
+
+input:checked + .switch-inner {
+    background: var(--bill-success);
+}
+
+input:checked + .switch-inner::after {
+    transform: translateX(16px);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .analytics-grid { grid-template-columns: 1fr; }
+    .modal-body { 
+        grid-template-columns: 1fr; 
+        padding: 20px !important; /* Reduce padding for more horizontal space */
+        gap: 24px;
+    }
+    .modal-body > div:last-child { border-left: none !important; padding-left: 0 !important; border-top: 1px solid var(--bill-border); padding-top: 32px; }
+}
+
+@media (max-width: 768px) {
+    .bill-header { flex-direction: column; align-items: stretch; gap: 16px; }
+    .usage-trend { height: 120px; }
+    .usage-label { transform: rotate(-45deg); margin-top: 10px; }
+    
+    /* Force table to scroll horizontally in container */
+    .bill-table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .bill-table {
+        min-width: 800px; /* Ensure columns don't crush */
+    }
+    
+    .filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .filter-group {
+        width: 100%;
+    }
+
+    /* Force Scrollable Analytics */
+    .chart-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 12px;
+    }
+
+    .usage-trend {
+        min-width: 600px; /* Ensure 12 months are readable */
+        height: 200px;
+    }
+}
+
+@media (max-width: 480px) {
+    /* 0. Fix Wiggle on Summary View */
+    .bill-modal-content {
+        padding: 16px;
+        width: 100%;
+        max-width: 100vw;
+        overflow-x: hidden;
+    }
+
+    #modalResident {
+        font-size: 24px !important;
+        line-height: 1.2;
+        word-wrap: break-word;
+    }
+
+    .modal-summary-grid {
+        grid-template-columns: 1fr !important;
+        gap: 16px !important;
+    }
+
+    #modalMainContent > div[style*="background: #fffbeb"] {
+        padding: 16px !important;
+        width: 100% !important;
+        box-sizing: border-box;
+    }
+
+    /* 1. Kill the horizontal scrollbar by unsetting the minimum width */
+    .bill-modal .bill-table {
+        min-width: auto !important;
+        width: 100% !important;
+    }
+
+    /* 2. Force the card layout transformation */
+    #modalHistoryContent table,
+    #modalHistoryTableBody,
+    #modalHistoryTableBody tr {
+        display: block !important;
+    }
+
+    #modalHistoryTableBody tr {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+        border: 1px solid #e2e8f0;
+    }
+
+    #modalHistoryTableBody td {
+        display: flex !important;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid #f1f5f9;
+        text-align: right;
+    }
+
+    #modalHistoryTableBody td:last-child {
+        border-bottom: none;
+    }
+
+    #modalHistoryTableBody td::before {
+        content: attr(data-label);
+        font-weight: 700;
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #94a3b8;
+        text-align: left;
+    }
+
+    #modalHistoryContent thead {
+        display: none;
+    }
+
+    /* 3. Force full width for sidebar actions and allow text wrapping */
+    .modal-actions-list .btn {
+        width: 100% !important;
+        display: flex !important;
+        justify-content: center !important;
+        padding: 16px !important;
+        font-size: 13px !important;
+        white-space: normal !important;
+        height: auto !important;
+        min-height: 48px;
+        text-align: center;
+    }
+}
+
+/* Dual-Bar Graph Styles */
+.usage-bar {
+    position: relative;
+    border-radius: 4px 4px 0 0;
+    transition: all 0.3s ease;
+}
+
+.graph-value-badge {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e293b;
+    color: #fff;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, bottom 0.2s;
+    margin-bottom: 4px;
+    z-index: 10;
+    text-align: center;
+}
+
+.graph-value-badge::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -3px;
+    border-width: 3px;
+    border-style: solid;
+    border-color: #1e293b transparent transparent transparent;
+}
+
+.usage-bar-item:hover .graph-value-badge {
+    opacity: 1;
+    bottom: calc(100% + 4px);
+}
