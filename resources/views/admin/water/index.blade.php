@@ -82,7 +82,7 @@
         // Simulated water master meter: ~6% more than billed (water loss)
         $billedUsageCbm  = collect($bills)->sum('usage_cbm');
         $masterUsageCbm  = $billedUsageCbm * 1.06;
-        $systemLossPct   = round((($masterUsageCbm - $billedUsageCbm) / $masterUsageCbm) * 100, 1);
+        $systemLossPct   = $masterUsageCbm > 0 ? round((($masterUsageCbm - $billedUsageCbm) / $masterUsageCbm) * 100, 1) : 0;
         $billedFillPct   = 100 - $systemLossPct;
     @endphp
     <div class="analytics-grid">
@@ -177,14 +177,12 @@
             <span class="filter-label">Block</span>
             <select id="blockFilter" class="filter-select">
                 <option value="all">All Blocks</option>
-                <option value="1">Block 1</option>
-                <option value="2">Block 2</option>
-                <option value="3">Block 3</option>
-                <option value="4">Block 4</option>
-                <option value="5">Block 5</option>
-                <option value="6">Block 6</option>
-                <option value="7">Block 7</option>
-                <option value="8">Block 8</option>
+                @php
+                    $uniqueBlocks = collect($bills)->pluck('block')->filter(function($b) { return $b !== 'N/A'; })->unique()->sort();
+                @endphp
+                @foreach($uniqueBlocks as $b)
+                    <option value="{{ $b }}">Block {{ $b }}</option>
+                @endforeach
             </select>
         </div>
         <div class="filter-group">
@@ -378,7 +376,7 @@
         <h3 style="font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 12px;">Reset Billing Cycle?</h3>
         <p style="font-size: 14px; color: #64748b; margin-bottom: 24px; line-height: 1.6;">This will clear all current readings and shift all residents to <strong>Unpaid</strong> for the new month. This action cannot be undone.</p>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-            <button class="btn btn-outline" style="justify-content: center; padding: 12px;" onclick="document.getElementById('resetCycleModal').style.display='none'">Cancel</button>
+            <button class="btn btn-outline" style="justify-content: center; padding: 12px;" onclick="closeResetCycleModal()">Cancel</button>
             <button class="btn" style="justify-content: center; padding: 12px; background: #ef4444; color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer;" onclick="executeResetCycle()">Yes, Reset</button>
         </div>
     </div>
@@ -388,30 +386,44 @@
     const statsData = @json($stats);
 
     // Global Billing Settings
-    let currentRate = 15;
+    let currentRate = {{ \App\Models\Setting::where('key', 'water_rate')->value('value') ?? 15 }};
 
     // Load Data safely
     const allBillsRaw = @json($bills);
 
     function openSettingsModal() {
+        if (new URLSearchParams(window.location.search).get('action') !== 'settings') {
+            window.history.pushState(null, '', '?action=settings');
+        }
         document.getElementById('inputRate').value = currentRate;
         document.getElementById('settingsModal').style.display = 'flex';
     }
 
     function closeSettingsModal() {
+        window.history.replaceState(null, '', window.location.pathname);
         document.getElementById('settingsModal').style.display = 'none';
     }
 
     function applySettings() {
         currentRate = parseFloat(document.getElementById('inputRate').value);
-        recalculateLedger();
-        closeSettingsModal();
         
-        // Notify
-        if (window.pushSystemNotification) {
-            window.pushSystemNotification("Global Settings Updated", `New Base Rate: ₱${currentRate}/m³.`, new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), false);
-            alert(`Rates updated to ₱${currentRate}/m³.`);
-        }
+        fetch('/api/settings', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({ water_rate: currentRate })
+        }).then(() => {
+            recalculateLedger();
+            closeSettingsModal();
+            
+            // Notify
+            if (window.pushSystemNotification) {
+                window.pushSystemNotification("Global Settings Updated", `New Base Rate: ₱${currentRate}/m³.`, new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), false);
+                alert(`Rates updated to ₱${currentRate}/m³.`);
+            }
+        });
     }
 
     function recalculateLedger() {
@@ -549,26 +561,38 @@
     }
 
     function resetBillingCycle() {
+        if (new URLSearchParams(window.location.search).get('action') !== 'reset') {
+            window.history.pushState(null, '', '?action=reset');
+        }
         document.getElementById('resetCycleModal').style.display = 'flex';
     }
 
-    function executeResetCycle() {
+    function closeResetCycleModal() {
+        window.history.replaceState(null, '', window.location.pathname);
         document.getElementById('resetCycleModal').style.display = 'none';
-        const rows = document.querySelectorAll('.bill-row');
-        rows.forEach(row => {
-            row.dataset.status = 'unpaid';
-            const statusCell = row.cells[4];
-            const methodCell = row.cells[3];
-            
-            statusCell.innerHTML = `<span class="badge badge-danger">Unpaid</span><div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: Next Month</div>`;
-            methodCell.innerHTML = `<span style="font-style: italic; color: #94a3b8; font-size: 12px;">Waiting...</span>`;
-        });
-        
-        // Re-render dashboard
-        updateSummaryDashboard();
+    }
 
-        if (window.pushSystemNotification) {
-            window.pushSystemNotification("Cycle Reset", "A new monthly billing cycle has been initiated.", "System");
+    async function executeResetCycle() {
+        closeResetCycleModal();
+        try {
+            const res = await fetch('/admin/api/billing/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ type: 'water', rate: currentRate })
+            });
+            const data = await res.json();
+            if(data.success) {
+                if (window.pushSystemNotification) {
+                    window.pushSystemNotification("Cycle Reset", "A new monthly billing cycle has been initiated.", "System");
+                }
+                setTimeout(() => window.location.reload(), 1000);
+            }
+        } catch(e) {
+            console.error(e);
+            alert('Failed to reset billing cycle.');
         }
     }
 
@@ -682,55 +706,40 @@
         document.getElementById('billModal').style.display = 'none';
     }
 
-    function recordOfficePaymentFromModal(id, resident, totalAmount) {
-        const now = new Date();
-        const dateStr = now.toLocaleDateString();
-        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-        
-        const customDate = prompt(`Mark ${resident} as PAID in the office. Enter Payment Date/Time:`, `${dateStr} ${timeStr}`);
-        
-        if (customDate !== null) {
-            const trnGenerated = 'TRN-' + Math.random().toString(36).substring(2,10).toUpperCase();
-
-            // Find the row in the table to update it
-            const rows = document.querySelectorAll('.bill-row');
-            rows.forEach(row => {
-                if (row.cells[0].textContent.includes(resident)) {
-                    // Force the cell to be static now that it's paid, so recalculation skips penalties
-                    row.cells[1].innerHTML = `₱${totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-                    row.cells[1].classList.remove('dynamic-amount-cell');
-                    row.cells[1].dataset.status = 'paid';
-
-                    const statusCell = row.cells[4];
-                    const methodCell = row.cells[3];
-                    
-                    statusCell.innerHTML = `<span class="badge badge-success">Paid</span>
-                        <div style="font-size: 10px; color: #10b981; margin-top: 4px;">${customDate} (Office)</div>`;
-                    
-                    methodCell.innerHTML = `<span class="method-badge method-office">🏢 Office</span>`;
-                    row.dataset.status = 'paid';
-                }
+    async function recordOfficePaymentFromModal(id, resident, totalAmount) {
+        try {
+            const res = await fetch('/admin/api/billing/pay', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ id: id, amount: totalAmount })
             });
-
-            // Update Modal UI Instantly
-            document.getElementById('modalPaymentBadge').className = 'badge badge-success';
-            document.getElementById('modalPaymentBadge').textContent = 'Paid';
-            document.getElementById('modalPaymentAction').innerHTML = '';
-            
-            // Add a simulated entry to the Audit Log UI
-            const auditContainer = document.getElementById('modalAuditLog');
-            auditContainer.innerHTML = `
-                <div style="font-size: 12px; background: #f0fdf4; padding: 8px; border-radius: 6px;">
-                    <div style="font-weight: 600; color: #15803d;">Manual Ledger Entry: Payment Recorded (${trnGenerated})</div>
-                    <div style="color: #166534; font-size: 11px;">Admin User • Just Now</div>
-                </div>
-            ` + auditContainer.innerHTML;
-
-            if (window.pushSystemNotification) {
-                window.pushSystemNotification("Payment Processed", `Received ₱${totalAmount.toLocaleString()} from ${resident} in Office.`, timeStr, true);
+            const data = await res.json();
+            if(data.success) {
+                // Update Modal UI Instantly
+                document.getElementById('modalPaymentBadge').className = 'badge badge-success';
+                document.getElementById('modalPaymentBadge').textContent = 'Paid';
+                document.getElementById('modalPaymentAction').innerHTML = '';
+                
+                // Add a simulated entry to the Audit Log UI
+                const auditContainer = document.getElementById('modalAuditLog');
+                auditContainer.innerHTML = `
+                    <div style="font-size: 12px; background: #f0fdf4; padding: 8px; border-radius: 6px;">
+                        <span style="font-weight: 700; color: #16a34a;">Office Payment</span> 
+                        <span style="color: #64748b; margin-left: 8px;">Just now &bull; Admin</span>
+                    </div>
+                ` + auditContainer.innerHTML;
+                
+                alert(`Payment of ₱${totalAmount.toLocaleString()} recorded for ${resident}.`);
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                alert('Payment recording failed.');
             }
-            
-            alert(`Payment recorded for ${resident} in our office database.\nReference Number: ${trnGenerated}`);
+        } catch(e) {
+            console.error(e);
+            alert('Failed to record payment.');
         }
     }
 
@@ -819,8 +828,14 @@
             });
         }
     });
+    window.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('action') === 'settings') {
+            openSettingsModal();
+        } else if (params.get('action') === 'reset') {
+            resetBillingCycle();
+        }
+    });
+
 </script>
-
-
 @endsection
-

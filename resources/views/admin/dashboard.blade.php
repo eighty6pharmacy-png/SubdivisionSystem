@@ -32,11 +32,11 @@
             </div>
         </div>
         <div class="stat-card red">
-            <div class="stat-value">5</div>
+            <div class="stat-value">{{ $openIncidentsCount ?? 0 }}</div>
             <div class="stat-label">Open Incidents</div>
             <div class="stat-change down">
                 <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
-                3 need urgent action
+                Needs your attention
             </div>
         </div>
     </div>

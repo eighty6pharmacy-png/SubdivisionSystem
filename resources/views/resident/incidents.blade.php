@@ -196,12 +196,25 @@
 </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    // Inject DB data
+    const dbIncidents = @json($incidents);
+    // Map DB fields to what JS expects
+    const mappedIncidents = dbIncidents.map(inc => ({
+        id: inc.id.toString(),
+        sub: inc.subject,
+        type: inc.type,
+        date: inc.created_at,
+        desc: inc.description,
+        status: inc.status.toLowerCase(),
+        photos: inc.image_url ? [inc.image_url] : []
+    }));
+
+    document.addEventListener('DOMContentLoaded', () => {
         renderResidentIncidents();
     });
 
     function renderResidentIncidents() {
-        const incidents = SubdivisionStore.getIncidents();
+        const incidents = mappedIncidents;
         const container = document.getElementById('residentIncidentList');
         if (!container) return;
 
@@ -227,9 +240,9 @@
                     <h3>${inc.sub}</h3>
                     <p>${inc.desc}</p>
                     <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px; font-size: 12px; color: #94a3b8; font-weight: 600;">
-                        <span>Ref: ${inc.id}</span>
+                        <span>Ref: ${inc.id.substring(0, 8)}</span>
                         <span>•</span>
-                        <span>Just Now</span>
+                        <span>${inc.date ? new Date(inc.date).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'}) : 'Just Now'}</span>
                     </div>
                 </div>
                 <div class="incident-status">
@@ -242,6 +255,9 @@
     }
 
     function openReportModal() {
+        if (new URLSearchParams(window.location.search).get('action') !== 'report') {
+            window.history.pushState(null, '', '?action=report');
+        }
         document.getElementById('reportModal').style.display = 'flex';
         document.getElementById('formStep1').style.display = 'block';
         document.getElementById('formSuccess').style.display = 'none';
@@ -258,6 +274,7 @@
     }
 
     function closeReportModal() {
+        window.history.replaceState(null, '', window.location.pathname);
         document.getElementById('reportModal').style.display = 'none';
     }
 
@@ -290,7 +307,10 @@
         }
     }
 
-    function submitReport() {
+    let isSubmittingReport = false;
+    async function submitReport() {
+        if (isSubmittingReport) return;
+        
         const subject = document.getElementById('reportSubject').value.trim();
         const type = document.getElementById('reportType').value;
         const desc = document.getElementById('reportDesc').value.trim();
@@ -299,30 +319,61 @@
         if (!subject) { alert('Please enter a subject.'); return; }
         if (!desc) { alert('Please enter a description.'); return; }
 
-        const newId = 'INC-' + Math.floor(1000 + Math.random() * 9000);
+        isSubmittingReport = true;
+        const submitBtn = document.querySelector('#formStep1 .btn-primary');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
+            submitBtn.style.opacity = '0.7';
+        }
 
-        SubdivisionStore.addIncident({
-            id: newId,
-            sub: subject,
-            type: type,
-            res: 'Block B, Lot 12',
-            desc: desc,
-            contact: '',
-            status: 'pending',
-            photos: uploadedPhotosBase64,
-            date: new Date().toLocaleString()
-        });
+        try {
+            const response = await fetch('/resident/incidents', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({
+                    subject: subject,
+                    type: type,
+                    description: desc,
+                    photos: uploadedPhotosBase64
+                })
+            });
 
-        renderResidentIncidents();
-
-        document.getElementById('formStep1').style.display = 'none';
-        document.getElementById('formSuccess').style.display = 'block';
-        document.getElementById('modalFooter').innerHTML = '<button class="btn btn-primary" onclick="closeReportModal()" style="background: var(--res-primary); border-color: var(--res-primary); width: 100%; justify-content: center;">Done</button>';
+            const result = await response.json();
+            if (result.success) {
+                document.getElementById('formStep1').style.display = 'none';
+                document.getElementById('formSuccess').style.display = 'block';
+                document.getElementById('modalFooter').innerHTML = '<button class="btn btn-primary" onclick="window.location.reload()" style="background: var(--res-primary); border-color: var(--res-primary); width: 100%; justify-content: center;">Done</button>';
+            } else {
+                alert('Failed to submit report.');
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit Report';
+                    submitBtn.style.opacity = '1';
+                }
+                isSubmittingReport = false;
+            }
+        } catch (error) {
+            console.error(error);
+            alert('An error occurred.');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Report';
+                submitBtn.style.opacity = '1';
+            }
+            isSubmittingReport = false;
+        }
     }
 
     function openDetailsModal(id) {
-        const incidents = SubdivisionStore.getIncidents();
-        const inc = incidents.find(i => i.id === id);
+        if (new URLSearchParams(window.location.search).get('incident') !== id.toString()) {
+            window.history.pushState(null, '', '?incident=' + id);
+        }
+        const incidents = mappedIncidents;
+        const inc = incidents.find(i => i.id === id.toString());
         if (!inc) return;
 
         document.getElementById('detId').textContent = inc.id;
@@ -353,6 +404,7 @@
     }
 
     function closeDetailsModal() {
+        window.history.replaceState(null, '', window.location.pathname);
         document.getElementById('detailsModal').style.display = 'none';
     }
 
@@ -364,5 +416,16 @@
     function closeFullscreenImage() {
         document.getElementById('fullscreenImageViewer').style.display = 'none';
     }
+    window.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('action') === 'report') {
+            openReportModal();
+        } else if (params.get('incident')) {
+            // Give mappedIncidents a moment to be available
+            setTimeout(() => {
+                openDetailsModal(params.get('incident'));
+            }, 100);
+        }
+    });
 </script>
 @endsection

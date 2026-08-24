@@ -91,119 +91,129 @@
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const blackouts = JSON.parse(localStorage.getItem('unavailableDates') || '[]');
+        fetch('/api/appointments/availability')
+            .then(res => res.json())
+            .then(data => {
+                const blackouts = data.unavailable_dates || [];
+                const takenTimeslots = data.taken_timeslots || [];
 
-        flatpickr("#date", {
-            minDate: "today",
-            disableMobile: true,
-            onDayCreate: function(dObj, dStr, fp, dayElem) {
-                const dateRaw = fp.formatDate(dayElem.dateObj, "Y-m-d");
-                const formattedDate = dayElem.dateObj.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
+                flatpickr("#date", {
+                    minDate: "today",
+                    disableMobile: true,
+                    onDayCreate: function(dObj, dStr, fp, dayElem) {
+                        const dateRaw = fp.formatDate(dayElem.dateObj, "Y-m-d");
+                        const formattedDate = dayElem.dateObj.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
 
-                if(blackouts.includes(dateRaw) || blackouts.includes(formattedDate)) {
-                    dayElem.style.backgroundColor = '#fee2e2';
-                    dayElem.style.color = '#b91c1c';
-                    dayElem.style.fontWeight = 'bold';
-                    dayElem.title = 'Office Unavailable';
+                        if(blackouts.includes(dateRaw) || blackouts.includes(formattedDate)) {
+                            dayElem.style.backgroundColor = '#fee2e2';
+                            dayElem.style.color = '#b91c1c';
+                            dayElem.style.fontWeight = 'bold';
+                            dayElem.title = 'Office Unavailable';
+                        }
+                    },
+                    onChange: function(selectedDates, dateStr, instance) {
+                        if (selectedDates.length === 0) {
+                            resetTimeDropdown();
+                            return;
+                        }
+                        const formattedDate = selectedDates[0].toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
+                        const dateRaw = instance.formatDate(selectedDates[0], "Y-m-d");
+                        
+                        if (blackouts.includes(dateRaw) || blackouts.includes(formattedDate)) {
+                            alert("This date is unavailable. Please select another date.");
+                            instance.clear();
+                            resetTimeDropdown();
+                        } else {
+                            populateTimeDropdown(dateRaw, formattedDate);
+                        }
+                    }
+                });
+
+                const timeSelect = document.getElementById('time');
+                const availableHours = [
+                    "09:00 AM", "10:00 AM", "11:00 AM", "01:00 PM", 
+                    "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM"
+                ];
+
+                function resetTimeDropdown() {
+                    timeSelect.innerHTML = '<option value="">Select Date First</option>';
+                    timeSelect.disabled = true;
                 }
-            },
-            onChange: function(selectedDates, dateStr, instance) {
-                if (selectedDates.length === 0) {
-                    resetTimeDropdown();
-                    return;
+
+                function populateTimeDropdown(dateRaw, formattedDate) {
+                    timeSelect.innerHTML = '<option value="">Select a time...</option>';
+                    timeSelect.disabled = false;
+
+                    availableHours.forEach(hour => {
+                        const isTaken = takenTimeslots.some(apt => 
+                            (apt.date.split('T')[0] === dateRaw) && 
+                            apt.time === hour
+                        );
+
+                        const option = document.createElement('option');
+                        option.value = hour;
+                        if (isTaken) {
+                            option.textContent = `${hour} (Taken)`;
+                            option.disabled = true;
+                            option.style.color = '#dc2626';
+                            option.style.backgroundColor = '#fef2f2';
+                        } else {
+                            option.textContent = hour;
+                        }
+                        timeSelect.appendChild(option);
+                    });
                 }
-                const formattedDate = selectedDates[0].toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
                 
-                if (blackouts.includes(dateStr) || blackouts.includes(formattedDate)) {
-                    alert("This date is unavailable. Please select another date.");
-                    instance.clear();
-                    resetTimeDropdown();
-                } else {
-                    populateTimeDropdown(dateStr, formattedDate);
-                }
-            }
-        });
+                document.getElementById('appointmentForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    const fullName = document.getElementById('fullName').value;
+                    const email = document.getElementById('email').value;
+                    const contact = document.getElementById('contact').value;
+                    const inquiryType = document.getElementById('inquiryType').value;
+                    const selectedDate = document.getElementById('date').value;
+                    const selectedTime = document.getElementById('time').value;
 
-        const timeSelect = document.getElementById('time');
-        const availableHours = [
-            "09:00 AM", "10:00 AM", "11:00 AM", "01:00 PM", 
-            "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM"
-        ];
+                    // Save to PostgreSQL backend
+                    fetch('/api/appointments', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify({
+                            client_name: fullName,
+                            contact_number: contact,
+                            email: email,
+                            date: selectedDate,
+                            time: selectedTime,
+                            type: inquiryType,
+                            notes: ''
+                        })
+                    }).then(() => {
+                        // Send notification email
+                        fetch('/api/send-appointment-email', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: JSON.stringify({
+                                email: email,
+                                name: fullName,
+                                date: selectedDate,
+                                time: selectedTime,
+                                type: inquiryType,
+                                notes: ''
+                            })
+                        }).catch(err => console.error("Email dispatch error:", err));
 
-        function resetTimeDropdown() {
-            timeSelect.innerHTML = '<option value="">Select Date First</option>';
-            timeSelect.disabled = true;
-        }
-
-        function populateTimeDropdown(dateRaw, formattedDate) {
-            timeSelect.innerHTML = '<option value="">Select a time...</option>';
-            timeSelect.disabled = false;
-
-            availableHours.forEach(hour => {
-                const isTaken = SubdivisionStore.getAppointments().some(apt => 
-                    (apt.date === dateRaw || apt.date === formattedDate) && 
-                    apt.time === hour && 
-                    apt.status !== 'Cancelled'
-                );
-
-                const option = document.createElement('option');
-                option.value = hour;
-                if (isTaken) {
-                    option.textContent = `${hour} (Taken)`;
-                    option.disabled = true;
-                    option.style.color = '#dc2626';
-                    option.style.backgroundColor = '#fef2f2';
-                } else {
-                    option.textContent = hour;
-                }
-                timeSelect.appendChild(option);
-            });
-        }
-
-        document.getElementById('appointmentForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const fullName = document.getElementById('fullName').value;
-            const email = document.getElementById('email').value;
-            const contact = document.getElementById('contact').value;
-            const inquiryType = document.getElementById('inquiryType').value;
-            const selectedDate = document.getElementById('date').value;
-            const selectedTime = document.getElementById('time').value;
-
-            const newId = 'APT-' + Math.floor(1000 + Math.random() * 9000);
-
-            SubdivisionStore.addAppointment({
-                id: newId,
-                client: fullName,
-                email: email,
-                contact: contact,
-                date: selectedDate,
-                time: selectedTime,
-                status: 'Pending',
-                type: inquiryType,
-                notes: '',
-                report: ''
-            });
-
-            fetch('/api/send-appointment-email', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                },
-                body: JSON.stringify({
-                    email: email,
-                    name: fullName,
-                    date: selectedDate,
-                    time: selectedTime,
-                    type: inquiryType,
-                    notes: ''
-                })
-            }).catch(err => console.error("Email dispatch error:", err));
-
-            document.getElementById('appointmentForm').style.display = 'none';
-            document.getElementById('appointmentSuccess').style.display = 'block';
-        });
+                        document.getElementById('appointmentForm').style.display = 'none';
+                        document.getElementById('appointmentSuccess').style.display = 'block';
+                    }).catch(err => console.error("Database save error:", err));
+                });
+            })
+            .catch(err => console.error('Failed to load availability', err));
     });
 </script>
 @endsection

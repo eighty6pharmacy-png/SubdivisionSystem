@@ -194,7 +194,7 @@
     <div class="bill-modal-content" style="max-width: 550px; padding: 32px; border-radius: 24px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
             <h3 style="font-size: 20px; font-weight: 800; color: #0f172a;">DP Calculator & Contract Setup</h3>
-            <button onclick="document.getElementById('newContractModal').style.display='none'" style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+            <button onclick="closeContractModal()" style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
         </div>
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
@@ -205,11 +205,11 @@
             <div style="display: flex; gap: 8px;">
                 <div style="flex:1;">
                     <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Blk</label>
-                    <input type="number" id="calcBlk" class="filter-select" style="width: 100%; padding: 12px;" value="1">
+                    <select id="calcBlk" class="filter-select" style="width: 100%; padding: 12px;"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option></select>
                 </div>
                 <div style="flex:1;">
                     <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Lot</label>
-                    <input type="number" id="calcLot" class="filter-select" style="width: 100%; padding: 12px;" value="1">
+                    <select id="calcLot" class="filter-select" style="width: 100%; padding: 12px;"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option></select>
                 </div>
             </div>
         </div>
@@ -251,9 +251,27 @@
     let currentModalId = null;
 
     function openContractModal() {
+        if (new URLSearchParams(window.location.search).get('action') !== 'add') {
+            window.history.pushState(null, '', '?action=add');
+        }
         document.getElementById('newContractModal').style.display = 'flex';
+        document.body.style.overflow = 'hidden';
         calculateAmortization();
     }
+
+    function closeContractModal() {
+        window.history.replaceState(null, '', window.location.pathname);
+        document.getElementById('newContractModal').style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+    function closeModal() {
+        window.history.replaceState(null, '', window.location.pathname);
+        document.getElementById('billModal').style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+
     
     function submitPayment() {
         if(!currentModalId) return;
@@ -358,7 +376,14 @@
     inpPercent.addEventListener('input', calculateAmortization);
     inpMonths.addEventListener('input', calculateAmortization);
 
-    function submitContract() {
+    async function submitContract() {
+        const btn = document.querySelector('#newContractModal .btn-primary');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+            btn.style.opacity = '0.7';
+        }
+
         const name = document.getElementById('calcName').value || 'New Buyer';
         const blk = document.getElementById('calcBlk').value;
         const lot = document.getElementById('calcLot').value;
@@ -371,53 +396,41 @@
 
         const nextDate = new Date();
         nextDate.setMonth(nextDate.getMonth() + 1);
-        const dateStr = nextDate.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
-        const newId = 'DP-' + Math.floor(Math.random() * 9000 + 1000);
 
-        const newBill = {
-            id: newId, buyer: name, block: blk, lot: lot, 
-            total_dp: dpAmount, paid_amount: 0, 
-            monthly_amortization: amortization, months_paid: 0, total_months: months,
-            status: 'Good Standing', next_due: nextDate.toISOString()
-        };
-        allBillsRaw.push(newBill);
+        try {
+            const res = await fetch('/admin/downpayment-fee', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({
+                    name: name,
+                    block: blk,
+                    lot: lot,
+                    dpAmount: dpAmount,
+                    nextDate: nextDate.toISOString()
+                })
+            });
 
-        // Inject row
-        const tbody = document.getElementById('dpTableBody');
-        const tr = document.createElement('tr');
-        tr.className = 'bill-row fade-in';
-        tr.id = 'row-' + newId;
-        tr.innerHTML = `
-            <td>
-                <div style="font-weight: 700;">${name}</div>
-                <div style="font-size: 12px; color: #64748b;">Block ${blk} Lot ${lot}</div>
-            </td>
-            <td style="min-width: 200px;" id="progress-cell-${newId}">
-                <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; font-weight: 700; color: #64748b;">
-                    <span class="paid-label">₱0 Paid</span>
-                    <span>₱${dpAmount.toLocaleString()} Total</span>
-                </div>
-                <div style="width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
-                    <div class="progress-fill" style="height: 100%; width: 0%; background: var(--bill-primary); transition: width 0.5s ease;"></div>
-                </div>
-                <div class="months-label" style="font-size: 10px; color: #94a3b8; margin-top: 4px; text-align: right;">0 of ${months} mos</div>
-            </td>
-            <td>
-                <div style="font-weight: 700;">₱${amortization.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
-            </td>
-            <td><div style="font-size: 13px;">${dateStr}</div></td>
-            <td id="status-cell-${newId}"><span class="badge badge-success">Good Standing</span></td>
-            <td>
-                <div style="display: flex; gap: 8px;">
-                    <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('${newId}')">Manage</button>
-                </div>
-            </td>
-        `;
-        tbody.insertBefore(tr, tbody.firstChild);
-
-        document.getElementById('newContractModal').style.display = 'none';
-        if (window.pushSystemNotification) {
-            window.pushSystemNotification("Contract Initialized", `DP Contract created for ${name}.`, "System");
+            if (res.ok) {
+                window.location.reload();
+            } else {
+                alert('Failed to save contract to database');
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Save & Initialize Contract';
+                    btn.style.opacity = '1';
+                }
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Error connecting to server');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Save & Initialize Contract';
+                btn.style.opacity = '1';
+            }
         }
     }
 
@@ -472,6 +485,11 @@
                     }
                 }
             });
+        }
+    });
+    window.addEventListener('DOMContentLoaded', () => {
+        if (new URLSearchParams(window.location.search).get('action') === 'add') {
+            openContractModal();
         }
     });
 </script>

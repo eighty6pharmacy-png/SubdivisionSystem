@@ -58,16 +58,47 @@
             const list = this.getAppointments();
             list.unshift(apt);
             setItem(KEYS.APPOINTMENTS, list);
+            
+            // Sync to PostgreSQL backend asynchronously
+            fetch('/api/appointments', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify({
+                    client_name: apt.client,
+                    contact_number: apt.contact,
+                    date: apt.date,
+                    time: apt.time,
+                    type: apt.type,
+                    notes: apt.notes
+                })
+            }).catch(e => console.error("Database sync error:", e));
+
             return apt;
         },
         updateAppointmentStatus: function(id, status, extraProps = {}) {
             const list = this.getAppointments();
             const index = list.findIndex(a => a.id === id);
+            let updatedReport = '';
             if (index !== -1) {
                 list[index].status = status;
                 Object.assign(list[index], extraProps);
+                updatedReport = list[index].report || '';
                 setItem(KEYS.APPOINTMENTS, list);
             }
+
+            // Sync to PostgreSQL backend asynchronously
+            fetch(`/api/appointments/${id}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify({ status: status, report: updatedReport })
+            }).catch(e => console.error("Database sync error:", e));
+
             return list;
         },
 
@@ -79,6 +110,20 @@
             const list = this.getIncidents();
             list.unshift(inc);
             setItem(KEYS.INCIDENTS, list);
+            
+            fetch('/incidents', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify({
+                    subject: inc.sub,
+                    type: inc.type,
+                    description: inc.desc
+                })
+            }).catch(e => console.error("Database sync error:", e));
+
             return inc;
         },
         updateIncidentStatus: function(id, status) {
@@ -88,6 +133,16 @@
                 list[index].status = status;
                 setItem(KEYS.INCIDENTS, list);
             }
+
+            fetch(`/incidents/${id}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify({ status: status })
+            }).catch(e => console.error("Database sync error:", e));
+
             return list;
         },
 
@@ -99,16 +154,51 @@
             const list = this.getVisitors();
             list.unshift(vis);
             setItem(KEYS.VISITORS, list);
+
+            fetch('/api/visitors', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify({
+                    visitor_name: vis.visitor,
+                    purpose: vis.purpose,
+                    type: vis.type || 'Pre-registered',
+                    validity: vis.validity,
+                    status: vis.status,
+                    arrival_time: vis.arrival_time,
+                    plate_number: vis.plate_number,
+                    pin: vis.pin
+                })
+            }).catch(e => console.error("Database sync error:", e));
+
             return vis;
         },
         updateVisitorStatus: function(id, status, pin = null) {
             const list = this.getVisitors();
             const index = list.findIndex(v => v.id === id);
+            let updatedArrival = null;
+            
             if (index !== -1) {
                 list[index].status = status;
+                if (status === 'Entered' && !list[index].arrival_time) {
+                    list[index].arrival_time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                }
+                updatedArrival = list[index].arrival_time;
                 if (pin) list[index].pin = pin;
                 setItem(KEYS.VISITORS, list);
             }
+
+            fetch(`/api/visitors/${id}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify({ status: status, arrival_time: updatedArrival })
+            }).catch(e => console.error("Database sync error:", e));
+
             return list;
         }
     };

@@ -48,7 +48,7 @@
                 </div>
             </div>
             <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid #94a3b8;">
-                <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Converted to DP</div>
+                <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Paid</div>
                 <div style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">
                     {{ collect($bills)->where('status', 'Converted')->count() }}
                 </div>
@@ -112,7 +112,7 @@
                             @if($bill['status'] == 'Reserved')
                                 <span class="badge badge-warning" style="background: #fef3c7; color: #d97706;">Active Hold</span>
                             @elseif($bill['status'] == 'Converted')
-                                <span class="badge badge-success">Converted to DP</span>
+                                <span class="badge badge-success">Paid</span>
                             @else
                                 <span class="badge badge-danger">Cancelled</span>
                             @endif
@@ -177,8 +177,8 @@
 <div id="newReservationModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 3000;">
     <div class="bill-modal-content" style="max-width: 500px; padding: 32px; border-radius: 24px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-            <h3 style="font-size: 20px; font-weight: 800; color: #0f172a;">Record New Reservation</h3>
-            <button onclick="document.getElementById('newReservationModal').style.display='none'" style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+            <h2 style="font-size: 24px; font-weight: 800; color: #0f172a;">Manual Reservation Logging</h2>
+            <button onclick="closeReservationModal()" style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
         </div>
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
@@ -194,11 +194,11 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
             <div>
                 <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Block</label>
-                <select id="resBlock" class="filter-select" style="width: 100%; padding: 12px;"><option value="1">Block 1</option><option value="2">Block 2</option><option value="3">Block 3</option><option value="4">Block 4</option><option value="5">Block 5</option><option value="6">Block 6</option><option value="7">Block 7</option><option value="8">Block 8</option></select>
+                <select id="resBlock" class="filter-select" style="width: 100%; padding: 12px;"><option value="1">Block 1</option><option value="2">Block 2</option><option value="3">Block 3</option><option value="4">Block 4</option><option value="5">Block 5</option><option value="6">Block 6</option><option value="7">Block 7</option><option value="8">Block 8</option><option value="9">Block 9</option><option value="10">Block 10</option><option value="11">Block 11</option><option value="12">Block 12</option><option value="13">Block 13</option><option value="14">Block 14</option><option value="15">Block 15</option><option value="16">Block 16</option></select>
             </div>
             <div>
                 <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Lot</label>
-                <select id="resLot" class="filter-select" style="width: 100%; padding: 12px;"><option value="1">Lot 1</option><option value="2">Lot 2</option><option value="3">Lot 3</option></select>
+                <select id="resLot" class="filter-select" style="width: 100%; padding: 12px;"><option value="1">Lot 1</option><option value="2">Lot 2</option><option value="3">Lot 3</option><option value="4">Lot 4</option><option value="5">Lot 5</option><option value="6">Lot 6</option><option value="7">Lot 7</option><option value="8">Lot 8</option><option value="9">Lot 9</option><option value="10">Lot 10</option><option value="11">Lot 11</option><option value="12">Lot 12</option><option value="13">Lot 13</option><option value="14">Lot 14</option><option value="15">Lot 15</option></select>
             </div>
         </div>
         <div style="margin-bottom: 24px;">
@@ -216,52 +216,72 @@
     let currentModalId = null;
 
     function openReservationModal() {
+        if (new URLSearchParams(window.location.search).get('action') !== 'add') {
+            window.history.pushState(null, '', '?action=add');
+        }
         document.getElementById('newReservationModal').style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeReservationModal() {
+        window.history.replaceState(null, '', window.location.pathname);
+        document.getElementById('newReservationModal').style.display = 'none';
+        document.body.style.overflow = 'auto';
     }
     
-    function submitReservation() {
+    function closeModal() {
+        document.getElementById('billModal').style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+    async function submitReservation() {
+        const btn = document.querySelector('#newReservationModal .btn-primary');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+            btn.style.opacity = '0.7';
+        }
+
         const name = document.getElementById('resName').value || 'New Buyer';
         const contact = document.getElementById('resContact').value || 'N/A';
         const block = document.getElementById('resBlock').value;
         const lot = document.getElementById('resLot').value;
         const amount = parseFloat(document.getElementById('resAmount').value) || 20000;
-        const date = new Date().toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
-        const newId = 'RESV-' + Math.floor(Math.random() * 9000 + 1000);
 
-        allBillsRaw.push({
-            id: newId, buyer: name, contact: contact, block: block, lot: lot, amount: amount, date: new Date().toISOString(), status: 'Reserved', notes: 'Manually logged.'
-        });
+        try {
+            const res = await fetch('/admin/reservation-fee', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({
+                    name: name,
+                    contact: contact,
+                    block: block,
+                    lot: lot,
+                    amount: amount
+                })
+            });
 
-        const tbody = document.getElementById('reservationTableBody');
-        const tr = document.createElement('tr');
-        tr.className = 'bill-row fade-in';
-        tr.id = 'row-' + newId;
-        tr.innerHTML = `
-            <td>
-                <div style="font-weight: 700;">${name}</div>
-                <div style="font-size: 11px; color: #64748b;">ID: ${newId}</div>
-            </td>
-            <td>
-                <div style="font-weight: 600; color: var(--bill-primary);">Block ${block}</div>
-                <div style="font-size: 12px; color: #64748b;">Lot ${lot}</div>
-            </td>
-            <td><div style="font-size: 13px;">${contact}</div></td>
-            <td><div style="font-weight: 700;">₱${amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div></td>
-            <td><div style="font-size: 13px;">${date}</div></td>
-            <td class="status-cell">
-                <span class="badge badge-warning" style="background: #fef3c7; color: #d97706;">Active Hold</span>
-            </td>
-            <td class="action-cell">
-                <div style="display: flex; gap: 8px;">
-                    <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('${newId}')">Details</button>
-                </div>
-            </td>
-        `;
-        tbody.insertBefore(tr, tbody.firstChild);
-
-        document.getElementById('newReservationModal').style.display = 'none';
-        if (window.pushSystemNotification) {
-            window.pushSystemNotification("Reservation Recorded", "A new lot reservation has been added to the pipeline.", "System");
+            if (res.ok) {
+                window.location.reload();
+            } else {
+                alert('Failed to save reservation to database');
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Save Reservation Record';
+                    btn.style.opacity = '1';
+                }
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Error connecting to server');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Save Reservation Record';
+                btn.style.opacity = '1';
+            }
         }
     }
 
@@ -297,9 +317,9 @@
         const bill = allBillsRaw.find(b => b.id === currentModalId);
         if(bill) bill.status = 'Converted';
         
-        updateRowStatus(currentModalId, '<span class="badge badge-success">Converted to DP</span>');
+        updateRowStatus(currentModalId, '<span class="badge badge-success">Paid</span>');
         closeModal();
-        if (window.pushSystemNotification) pushSystemNotification("Converted", "Reservation successfully converted to Downpayment.", "System");
+        if (window.pushSystemNotification) pushSystemNotification("Paid", "Reservation successfully marked as Paid.", "System");
     }
 
     function cancelReservation() {
@@ -373,5 +393,11 @@
             });
         }
     });
+    window.addEventListener('DOMContentLoaded', () => {
+        if (new URLSearchParams(window.location.search).get('action') === 'add') {
+            openReservationModal();
+        }
+    });
+
 </script>
 @endsection

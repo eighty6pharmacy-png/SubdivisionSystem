@@ -34,6 +34,25 @@
     </div>
 
 
+    <!-- Consumption Chart -->
+    <div class="analytic-card" style="padding: 24px; margin-bottom: 24px; border-radius: 24px; border: 1px solid var(--bill-border); background: #ffffff;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+            <div>
+                <h3 style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">⚡ Electricity Consumption Trend</h3>
+                <p style="font-size: 13px; color: #64748b;">Track your monthly usage in kWh.</p>
+            </div>
+            <select id="elecTimeRange" onchange="updateElecChartRange(this.value)" style="padding: 6px 12px; font-size: 12px; border-radius: 12px; border: 1px solid #cbd5e1; background: #fff; color: #475569; font-weight: 600; cursor: pointer;">
+                <option value="6">Last 6 Months</option>
+                <option value="12">Last 12 Months</option>
+            </select>
+        </div>
+        <div style="background: #f8fafc; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0;">
+            <div style="position: relative; height: 250px; width: 100%;">
+                <canvas id="elecChart"></canvas>
+            </div>
+        </div>
+    </div>
+
     <!-- Payment History -->
     <div class="analytic-card" style="padding: 0; overflow: hidden;">
         <div style="padding: 20px 24px; border-bottom: 1px solid var(--bill-border);">
@@ -70,6 +89,85 @@
     function onGcashPaymentComplete(ctx) {
         location.reload();
     }
+
+    let elecChart = null;
+    let currentElecRange = 6;
+    
+    @php
+        $months = [];
+        for ($i = 11; $i >= 0; $i--) {
+            $months[] = date('M Y', strtotime("-$i months"));
+        }
+    @endphp
+    
+    const fullMonthLabels = {!! json_encode($months) !!};
+    const fullElecHistory = {!! json_encode($elecBill['usage_history']) !!};
+
+    function updateElecChartRange(monthsCount) {
+        currentElecRange = parseInt(monthsCount);
+        renderElecChart();
+    }
+
+    function renderElecChart() {
+        const slicedLabels = fullMonthLabels.slice(-currentElecRange);
+        const slicedData = fullElecHistory.slice(-currentElecRange);
+        
+        const ctx = document.getElementById('elecChart').getContext('2d');
+        
+        if (elecChart) elecChart.destroy();
+        
+        elecChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: slicedLabels,
+                datasets: [{
+                    label: 'Electricity Consumption',
+                    data: slicedData,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#ffffff',
+                    pointBorderColor: '#10b981',
+                    pointBorderWidth: 3,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) { return context.parsed.y + ' kWh'; }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        grid: { color: '#e2e8f0', drawBorder: false },
+                        ticks: {
+                            callback: function(value) { return value + ' kWh'; },
+                            color: '#64748b', font: { size: 11 }
+                        }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#64748b', font: { size: 11 } }
+                    }
+                },
+                interaction: { intersect: false, mode: 'index' }
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        renderElecChart();
+    });
 </script>
 
 @endsection

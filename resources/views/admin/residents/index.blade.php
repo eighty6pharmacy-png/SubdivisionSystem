@@ -165,10 +165,14 @@
 
 <script>
     function openAddResModal() {
+        if (new URLSearchParams(window.location.search).get('action') !== 'add') {
+            window.history.pushState(null, '', '?action=add');
+        }
         document.getElementById('addResModal').style.display = 'flex';
     }
 
     function closeAddResModal() {
+        window.history.replaceState(null, '', window.location.pathname);
         document.getElementById('addResModal').style.display = 'none';
         document.getElementById('addResForm').reset();
     }
@@ -280,6 +284,11 @@
     window.onclick = function(event) {
         if (event.target == document.getElementById('addResModal')) closeAddResModal();
     }
+    window.addEventListener('DOMContentLoaded', () => {
+        if (new URLSearchParams(window.location.search).get('action') === 'add') {
+            openAddResModal();
+        }
+    });
 </script>
 
 <style>
@@ -287,7 +296,6 @@
         .bill-header { flex-direction: column; align-items: flex-start; gap: 16px; }
         .bill-actions { width: 100%; }
         .btn-primary { width: 100%; justify-content: center; }
-        .filter-bar { padding: 12px; }
         .filter-group { min-width: 100%; }
     }
 </style>

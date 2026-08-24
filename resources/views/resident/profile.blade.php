@@ -17,15 +17,15 @@
         <form class="responsive-grid grid-2">
             <div style="grid-column: span 2;">
                 <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Full Name</label>
-                <input type="text" id="profName" class="filter-select" style="width: 100%; margin-top: 8px;" value="Juan Dela Cruz">
+                <input type="text" id="profName" class="filter-select" style="width: 100%; margin-top: 8px;" value="{{ \Illuminate\Support\Facades\Auth::user()->name }}">
             </div>
             <div>
                 <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Primary Email</label>
-                <input type="email" id="profEmail" class="filter-select" style="width: 100%; margin-top: 8px;" value="juan@example.com">
+                <input type="email" id="profEmail" class="filter-select" style="width: 100%; margin-top: 8px;" value="{{ \Illuminate\Support\Facades\Auth::user()->email }}">
             </div>
             <div>
                 <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Contact Number</label>
-                <input type="text" id="profContact" class="filter-select" style="width: 100%; margin-top: 8px;" value="0917-123-4567">
+                <input type="text" id="profContact" class="filter-select" style="width: 100%; margin-top: 8px;" value="{{ \Illuminate\Support\Facades\Auth::user()->contact_number }}">
             </div>
             <div style="grid-column: span 2; display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-top: 8px;">
                 <span id="profStatus" style="font-size: 13px; font-weight: 600; color: #10b981; display: none;">✓ Profile Saved</span>

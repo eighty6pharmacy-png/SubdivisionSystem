@@ -418,12 +418,15 @@
     
     <div class="filter-group" style="margin:0;">
         <div class="filter-label">Block Filter</div>
-        <div class="filter-container" id="blockFilters">
-            <button class="filter-btn active" data-block="all" onclick="setFilter('block', 'all')">All Blocks</button>
-            @for($i = 1; $i <= 8; $i++)
-                <button class="filter-btn" data-block="{{$i}}" onclick="setFilter('block', '{{$i}}')">Block {{$i}}</button>
-            @endfor
-        </div>
+        <select id="blockFilter" onchange="setFilter('block', this.value)" style="padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; color: var(--text-dark); background: var(--surface);">
+            <option value="all">All Blocks</option>
+            @php
+                $uniqueBlocks = collect($houses)->pluck('block')->unique()->sort();
+            @endphp
+            @foreach($uniqueBlocks as $b)
+                <option value="{{ $b }}">Block {{ $b }}</option>
+            @endforeach
+        </select>
     </div>
 </div>
 
@@ -518,8 +521,14 @@
 
 @push('scripts')
 <script>
-    const ELEC_RATE = 10;
-    const WATER_RATE = 15;
+    let ELEC_RATE = {{ \App\Models\Setting::where('key', 'elec_rate')->value('value') ?? 10 }};
+    let WATER_RATE = {{ \App\Models\Setting::where('key', 'water_rate')->value('value') ?? 15 }};
+    
+    // Fetch rates dynamically to ensure they are always up-to-date
+    fetch('/api/settings').then(r => r.json()).then(data => {
+        if(data.elec_rate) ELEC_RATE = parseFloat(data.elec_rate);
+        if(data.water_rate) WATER_RATE = parseFloat(data.water_rate);
+    }).catch(e => console.error('Failed to load rates', e));
     
     let activeUtility = 'elec'; // 'elec' or 'water'
     let filterStatus = 'all';
@@ -569,8 +578,6 @@
             document.querySelector(`#statusFilters .filter-btn[data-status="${value}"]`).classList.add('active');
         } else {
             filterBlock = value;
-            document.querySelectorAll('#blockFilters .filter-btn').forEach(b => b.classList.remove('active'));
-            document.querySelector(`#blockFilters .filter-btn[data-block="${value}"]`).classList.add('active');
         }
         applyFiltersAndSort();
     }
@@ -625,8 +632,8 @@
 
         if (isElec) {
             title.innerHTML = '<span style="color: #eab308;">⚡</span> Electricity Reading';
-            lblPrev.innerText = 'Previous Reading (kWh)';
-            lblCurr.innerText = 'Current Reading (kWh)';
+            lblPrev.innerText = 'Previous Usage (kWh)';
+            lblCurr.innerText = 'Current Usage (kWh)';
             valPrev.value = currentHouseData.prev_elec;
             
             if (currentHouseData.elec_status === 'Billed' && currentHouseData.curr_elec) {
@@ -639,8 +646,8 @@
             calcRate.innerText = `₱${ELEC_RATE.toFixed(2)}`;
         } else {
             title.innerHTML = '<span style="color: #3b82f6;">💧</span> Water Reading';
-            lblPrev.innerText = 'Previous Reading (m³)';
-            lblCurr.innerText = 'Current Reading (m³)';
+            lblPrev.innerText = 'Previous Usage (m³)';
+            lblCurr.innerText = 'Current Usage (m³)';
             valPrev.value = currentHouseData.prev_water;
             
             if (currentHouseData.water_status === 'Billed' && currentHouseData.curr_water) {
@@ -669,7 +676,7 @@
     function calculateBill() {
         const prev = parseFloat(document.getElementById('valPrev').value) || 0;
         const curr = parseFloat(document.getElementById('valCurr').value) || 0;
-        let usage = curr - prev;
+        let usage = curr;
         if (usage < 0) usage = 0;
         
         const isElec = activeUtility === 'elec';
@@ -685,9 +692,17 @@
         const curr = document.getElementById('valCurr').value;
 
         if (!curr) {
-            alert('Please enter a current reading.');
+            alert('Please enter a current usage.');
             return;
         }
+        
+        let usage = parseFloat(curr);
+        if (usage < 0) usage = 0;
+
+        const isElec = activeUtility === 'elec';
+        const rate = isElec ? ELEC_RATE : WATER_RATE;
+        const amount = usage * rate;
+        const type = isElec ? 'electricity' : 'water';
 
         const btn = document.getElementById('btnSubmitBill');
         const isUpdate = btn.innerText === 'Update Bill';
@@ -695,38 +710,68 @@
         btn.innerText = 'Processing...';
         btn.disabled = true;
 
-        setTimeout(() => {
-            const utilityName = activeUtility === 'elec' ? 'Electricity' : 'Water';
-            const verb = isUpdate ? 'Updated' : 'Generated';
-            
-            document.getElementById('successTitle').innerText = `Bill ${verb}`;
-            document.getElementById('successMessage').innerText = `The ${utilityName} bill has been successfully ${verb.toLowerCase()} for Block ${currentHouseData.block}, Lot ${currentHouseData.lot}.`;
-            
-            document.getElementById('successModalOverlay').classList.add('show');
-            document.getElementById('successModal').classList.add('show');
+        fetch('/finance/api/billing/reading', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                type: type,
+                lot: currentHouseData.lot,
+                block: currentHouseData.block,
+                usage: usage,
+                amount: amount
+            })
+        }).then(response => response.json())
+          .then(data => {
+              if (data.success) {
+                  const utilityName = activeUtility === 'elec' ? 'Electricity' : 'Water';
+                  const verb = isUpdate ? 'Updated' : 'Generated';
+                  
+                  document.getElementById('successTitle').innerText = `Bill ${verb}`;
+                  document.getElementById('successMessage').innerText = `The ${utilityName} bill has been successfully ${verb.toLowerCase()} for Block ${currentHouseData.block}, Lot ${currentHouseData.lot}.`;
+                  
+                  document.getElementById('successModalOverlay').classList.add('show');
+                  document.getElementById('successModal').classList.add('show');
 
-            btn.innerText = origText;
-            btn.disabled = false;
-            
-            // Update local data so UI reflects changes immediately
-            if (activeUtility === 'elec') {
-                currentHouseData.elec_status = 'Billed';
-                currentHouseData.curr_elec = parseFloat(curr);
-                currentHouseCard.setAttribute('data-elec-status', 'billed');
-            } else {
-                currentHouseData.water_status = 'Billed';
-                currentHouseData.curr_water = parseFloat(curr);
-                currentHouseCard.setAttribute('data-water-status', 'billed');
-            }
-            
-            // Re-stringify the data object and save to DOM
-            currentHouseCard.dataset.house = JSON.stringify(currentHouseData);
-            
-            // Re-apply visually
-            switchUtility(activeUtility);
-            
-            closeReadingPanel();
-        }, 600);
+                  // Update local data so UI reflects changes immediately
+                  if (activeUtility === 'elec') {
+                      currentHouseData.elec_status = 'Billed';
+                      currentHouseData.curr_elec = parseFloat(curr);
+                      currentHouseCard.setAttribute('data-elec-status', 'billed');
+                  } else {
+                      currentHouseData.water_status = 'Billed';
+                      currentHouseData.curr_water = parseFloat(curr);
+                      currentHouseCard.setAttribute('data-water-status', 'billed');
+                  }
+                  
+                  // Re-stringify the data object and save to DOM
+                  currentHouseCard.dataset.house = JSON.stringify(currentHouseData);
+                  
+                  // Re-apply visually
+                  switchUtility(activeUtility);
+                  
+                  closeReadingPanel();
+                  
+                  if (window.pushSystemNotification) {
+                      window.pushSystemNotification(
+                          `${utilityName} Billed`,
+                          `Block ${currentHouseData.block} Lot ${currentHouseData.lot} successfully billed.`,
+                          'Just now'
+                      );
+                  }
+              } else {
+                  alert(data.message || 'Failed to update billing record.');
+              }
+          })
+          .catch(err => {
+              console.error(err);
+              alert('Error communicating with server.');
+          }).finally(() => {
+              btn.innerText = origText;
+              btn.disabled = false;
+          });
     }
 
     function closeSuccessModal() {

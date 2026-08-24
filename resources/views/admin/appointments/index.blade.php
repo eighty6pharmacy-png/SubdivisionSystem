@@ -81,13 +81,13 @@
                 </thead>
                 <tbody id="aptTableBody">
                     @foreach($appointments as $apt)
-                    <tr class="apt-row" data-id="{{ $apt['id'] }}" data-client="{{ strtolower($apt['client'] . ' ' . $apt['contact']) }}" data-status="{{ $apt['status'] }}" data-type="{{ isset($apt['type']) ? $apt['type'] : 'General Inquiry' }}" data-report="{{ isset($apt['report']) ? $apt['report'] : '' }}">
+                    <tr class="apt-row" data-id="{{ $apt['id'] }}" data-client="{{ strtolower($apt['client'] . ' ' . ($apt['contact'] ?? '') . ' ' . ($apt['email'] ?? '')) }}" data-status="{{ $apt['status'] }}" data-type="{{ isset($apt['type']) ? $apt['type'] : 'General Inquiry' }}" data-report="{{ isset($apt['report']) ? $apt['report'] : '' }}" data-contact="{{ $apt['contact'] ?? '' }}" data-email="{{ $apt['email'] ?? '' }}">
                         <td style="font-family: monospace; font-weight: 700; color: #64748b;">
                             {{ $apt['id'] }}
                         </td>
                         <td>
                             <div style="font-weight: 700; color: #0f172a;">{{ $apt['client'] }}</div>
-                            <div style="font-size: 12px; color: var(--bill-primary);">{{ $apt['contact'] }}</div>
+                            <div style="font-size: 12px; color: var(--bill-primary);">{{ $apt['contact'] ?? 'No Contact' }} &bull; {{ $apt['email'] ?? 'No Email' }}</div>
                         </td>
                         <td>
                             <div style="font-weight: 700; color: #334155;">{{ date('M d, Y', strtotime($apt['date'])) }}</div>
@@ -150,7 +150,10 @@
                 <div style="background: #f8fafc; padding: 16px; border-radius: 12px;">
                     <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Contact Info</span>
                     <div id="modalContact" style="font-size: 16px; font-weight: 600; color: #334155; margin-top: 4px;">Phone</div>
-                    <div id="modalEmail" style="font-size: 14px; font-weight: 500; color: #64748b; margin-top: 2px;">Email</div>
+                    <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
+                        <input type="email" id="modalEmailInput" class="filter-select" style="padding: 4px 8px; font-size: 13px; height: auto; width: 100%;" placeholder="No Email (Enter to save)">
+                        <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px;" onclick="updateAptEmail()">Save</button>
+                    </div>
                 </div>
                 <div style="background: #f8fafc; padding: 16px; border-radius: 12px;">
                     <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Status</span>
@@ -200,6 +203,10 @@
             <div>
                 <label style="font-size: 12px; font-weight: 700; color: #64748b;">Contact Infomation</label>
                 <input type="text" id="addAptContact" class="filter-select" required style="width: 100%; margin-top: 4px;">
+            </div>
+            <div>
+                <label style="font-size: 12px; font-weight: 700; color: #64748b;">Email Address</label>
+                <input type="email" id="addAptEmail" class="filter-select" style="width: 100%; margin-top: 4px;">
             </div>
             <div style="display: flex; gap: 12px;">
                 <div style="flex: 1;">
@@ -298,7 +305,7 @@
                 <div id="successGeneratedPin" style="font-size: 32px; font-weight: 900; letter-spacing: 0.1em; color: #10b981; font-family: monospace;">123456</div>
             </div>
 
-            <button onclick="document.getElementById('adminSuccessModal').style.display = 'none'" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 14px; font-size: 15px;">
+            <button onclick="document.getElementById('adminSuccessModal').style.display = 'none'; window.location.reload();" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 14px; font-size: 15px;">
                 Done
             </button>
         </div>
@@ -321,7 +328,7 @@
     });
 
     function renderAppointmentsFromStore() {
-        allAppointments = SubdivisionStore.getAppointments();
+        allAppointments = {!! json_encode($appointments) !!};
         applyAptFilters();
         initCalendar();
     }
@@ -356,7 +363,7 @@
                 <td style="font-family: monospace; font-weight: 700; color: #64748b;">${apt.id}</td>
                 <td>
                     <div style="font-weight: 700; color: #0f172a;">${apt.client}</div>
-                    <div style="font-size: 12px; color: var(--bill-primary);">${apt.contact || apt.email || 'N/A'}</div>
+                    <div style="font-size: 12px; color: var(--bill-primary);">${apt.contact || 'No Contact'} &bull; ${apt.email || 'No Email'}</div>
                 </td>
                 <td>
                     <div style="font-weight: 700; color: #334155;">${apt.date}</div>
@@ -392,6 +399,17 @@
         }
     }
 
+    let globalBlackouts = [];
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        fetch('/api/appointments/availability')
+            .then(res => res.json())
+            .then(data => {
+                globalBlackouts = data.unavailable_dates || [];
+                initCalendar();
+            });
+    });
+
     function initCalendar() {
         const calendarEl = document.getElementById('calendar');
         if (!calendarEl) return;
@@ -407,8 +425,7 @@
             };
         });
 
-        const blackouts = JSON.parse(localStorage.getItem('unavailableDates') || '[]');
-        blackouts.forEach(dateStr => {
+        globalBlackouts.forEach(dateStr => {
             evts.push({
                 title: 'Unavailable',
                 start: dateStr,
@@ -445,15 +462,12 @@
                     return;
                 }
 
-                // Need to offset timezone difference if user clicks, but dateStr is usually YYYY-MM-DD
                 const formattedDate = clickedDate.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
 
-                let blackouts = JSON.parse(localStorage.getItem('unavailableDates') || '[]');
-                if (blackouts.includes(dateRaw) || blackouts.includes(formattedDate)) {
+                if (globalBlackouts.includes(dateRaw) || globalBlackouts.includes(formattedDate)) {
                     if (confirm(`Remove blackout for ${formattedDate}?`)) {
-                        blackouts = blackouts.filter(d => d !== dateRaw && d !== formattedDate);
-                        localStorage.setItem('unavailableDates', JSON.stringify(blackouts));
-                        initCalendar();
+                        globalBlackouts = globalBlackouts.filter(d => d !== dateRaw && d !== formattedDate);
+                        saveBlackouts(globalBlackouts, () => initCalendar());
                     }
                 } else {
                     openBlackoutModal(dateRaw);
@@ -462,6 +476,46 @@
             height: 500
         });
         calendar.render();
+    }
+
+    function saveBlackouts(blackoutsArray, callback) {
+        fetch('/api/settings', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                unavailable_dates: blackoutsArray
+            })
+        }).then(res => res.json()).then(data => {
+            if (callback) callback();
+        }).catch(err => console.error("Error saving availability:", err));
+    }
+
+    function updateAptEmail() {
+        const id = document.getElementById('modalAptId').textContent;
+        const newEmail = document.getElementById('modalEmailInput').value;
+        if (!newEmail) {
+            alert('Please enter a valid email.');
+            return;
+        }
+        
+        fetch(`/api/appointments/${id}/email`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({ email: newEmail })
+        }).then(res => res.json()).then(data => {
+            if(data.success) {
+                if(window.pushSystemNotification) {
+                    window.pushSystemNotification('Email Updated', `Updated email for appointment ${id}.`, 'Just Now', true);
+                }
+                setTimeout(() => window.location.reload(), 1000);
+            }
+        }).catch(err => console.error(err));
     }
 
     function generateAppointmentPin(aptId, clientName) {
@@ -477,21 +531,9 @@
         });
         localStorage.setItem('appointmentPins', JSON.stringify(existingPins));
         
-        // Dispatch Live Gmail Approval Email
-        const aptObj = SubdivisionStore.getAppointments().find(a => a.id === aptId);
-        const emailToSend = (aptObj && aptObj.email) ? aptObj.email : 'eighty6pharmacy@gmail.com';
-        const dateToSend = (aptObj && aptObj.date) ? aptObj.date : 'Upcoming Date';
-        
-        fetch('/api/send-approval-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
-            body: JSON.stringify({
-                email: emailToSend,
-                name: clientName,
-                pin: pin,
-                date: dateToSend
-            })
-        }).catch(err => console.error("Approval email dispatch error:", err));
+        // Approval email is now handled securely by the backend when status changes to Scheduled.
+        // We just need to ensure the PIN is passed.
+        window.tempAptPin = pin;
 
         // Render Admin Success Modal
         document.getElementById('successClientName').textContent = clientName;
@@ -518,10 +560,14 @@
 
     // Modal Add functions
     function openAddAptModal() {
+        if (new URLSearchParams(window.location.search).get('action') !== 'add') {
+            window.history.pushState(null, '', '?action=add');
+        }
         document.getElementById('addAptModal').style.display = 'flex';
     }
     
     function closeAddAptModal() {
+        window.history.replaceState(null, '', window.location.pathname);
         document.getElementById('addAptModal').style.display = 'none';
         document.getElementById('addAptForm').reset();
     }
@@ -531,6 +577,7 @@
         
         const client = document.getElementById('addAptName').value;
         const contact = document.getElementById('addAptContact').value;
+        const email = document.getElementById('addAptEmail').value;
         const dateRaw = document.getElementById('addAptDate').value;
         const timeRaw = document.getElementById('addAptTime').value;
 
@@ -547,20 +594,24 @@
 
         const newId = 'APT-' + Math.floor(2000 + Math.random() * 9000);
         
-        SubdivisionStore.addAppointment({
-            id: newId,
-            client: client,
-            contact: contact,
-            date: formattedDate,
-            time: formattedTime,
-            status: 'Scheduled',
-            type: 'Manual Walk-In',
-            notes: '',
-            report: ''
-        });
-
-        renderAppointmentsFromStore();
-        closeAddAptModal();
+        fetch('/api/appointments', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                client_name: client,
+                contact_number: contact,
+                email: email,
+                date: dateRaw,
+                time: timeRaw,
+                type: 'Manual Walk-In',
+                notes: ''
+            })
+        }).then(() => {
+            window.location.reload();
+        }).catch(err => console.error(err));
         
         generateAppointmentPin(newId, client);
         
@@ -570,6 +621,9 @@
     }
 
     function openBlackoutModal(prefillDate = '') {
+        if (new URLSearchParams(window.location.search).get('action') !== 'blackout') {
+            window.history.pushState(null, '', '?action=blackout');
+        }
         if (prefillDate) {
             document.getElementById('blackoutDate').value = prefillDate;
         }
@@ -577,6 +631,7 @@
     }
 
     function closeBlackoutModal() {
+        window.history.replaceState(null, '', window.location.pathname);
         document.getElementById('blackoutModal').style.display = 'none';
         document.getElementById('blackoutForm').reset();
     }
@@ -594,19 +649,17 @@
             return;
         }
 
-        let blackouts = JSON.parse(localStorage.getItem('unavailableDates') || '[]');
-        if (!blackouts.includes(formattedDate)) {
-            blackouts.push(formattedDate);
-            if(formattedDate !== dateRaw) {
-                blackouts.push(dateRaw);
-            }
-            localStorage.setItem('unavailableDates', JSON.stringify(blackouts));
-        }
-
-        closeBlackoutModal();
-        initCalendar(); // Refresh calendar to show the new blackout date
-        if (window.pushSystemNotification) {
-            window.pushSystemNotification('Date Blocked', `${formattedDate} marked as unavailable.`, 'Just Now', true);
+        if (!globalBlackouts.includes(formattedDate) && !globalBlackouts.includes(dateRaw)) {
+            globalBlackouts.push(dateRaw);
+            saveBlackouts(globalBlackouts, () => {
+                closeBlackoutModal();
+                initCalendar(); // Refresh calendar to show the new blackout date
+                if (window.pushSystemNotification) {
+                    window.pushSystemNotification('Date Blocked', `${formattedDate} marked as unavailable.`, 'Just Now', true);
+                }
+            });
+        } else {
+            closeBlackoutModal();
         }
     }
 
@@ -628,6 +681,9 @@
         currentAptRow = rowElement;
         
         const id = rowElement.dataset.id || rowElement.cells[0].textContent.trim();
+        if (new URLSearchParams(window.location.search).get('apt') !== id) {
+            window.history.pushState(null, '', '?apt=' + id);
+        }
         currentAptId = id;
         const status = rowElement.dataset.status;
         const clientText = rowElement.cells[1].querySelector('div:first-child').textContent;
@@ -643,7 +699,7 @@
         document.getElementById('modalAptId').textContent = id;
         document.getElementById('modalClient').textContent = clientText;
         document.getElementById('modalContact').textContent = contactText;
-        document.getElementById('modalEmail').textContent = emailText;
+        document.getElementById('modalEmailInput').value = emailText !== 'No Email' ? emailText : '';
         
         // Parse the dynamic format
         document.getElementById('modalDateTime').textContent = `${dateText} at ${timeText}`;
@@ -691,17 +747,26 @@
     }
 
     function closeAptModal() {
+        window.history.replaceState(null, '', window.location.pathname);
         document.getElementById('aptModal').style.display = 'none';
     }
 
     // Modal Triggers
     function openReportModal() {
         if(!currentAptRow) return;
+        if (new URLSearchParams(window.location.search).get('action') !== 'report') {
+            window.history.pushState(null, '', '?apt=' + currentAptId + '&action=report');
+        }
         document.getElementById('reportForm').reset();
         document.getElementById('reportModal').style.display = 'flex';
     }
 
     function closeReportModal() {
+        if (currentAptId) {
+            window.history.replaceState(null, '', '?apt=' + currentAptId);
+        } else {
+            window.history.replaceState(null, '', window.location.pathname);
+        }
         document.getElementById('reportModal').style.display = 'none';
     }
 
@@ -720,11 +785,19 @@
 
     function openCancelModal() {
         if(!currentAptRow) return;
+        if (new URLSearchParams(window.location.search).get('action') !== 'cancel') {
+            window.history.pushState(null, '', '?apt=' + currentAptId + '&action=cancel');
+        }
         document.getElementById('cancelForm').reset();
         document.getElementById('cancelModal').style.display = 'flex';
     }
 
     function closeCancelModal() {
+        if (currentAptId) {
+            window.history.replaceState(null, '', '?apt=' + currentAptId);
+        } else {
+            window.history.replaceState(null, '', window.location.pathname);
+        }
         document.getElementById('cancelModal').style.display = 'none';
     }
 
@@ -734,45 +807,43 @@
         const sendEmail = document.getElementById('cancelEmail').checked;
         
         closeCancelModal();
-        changeState('Cancelled');
+        changeState('Cancelled', false, sendEmail ? reason : '');
         
         if (sendEmail && currentAptId) {
-            const aptObj = SubdivisionStore.getAppointments().find(a => a.id === currentAptId);
+            const aptObj = allAppointments.find(a => a.id === currentAptId);
             const emailToSend = (aptObj && aptObj.email) ? aptObj.email : 'eighty6pharmacy@gmail.com';
-            const clientName = (aptObj && aptObj.client) ? aptObj.client : 'Valued Client';
-
-            fetch('/api/send-cancellation-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
-                body: JSON.stringify({
-                    email: emailToSend,
-                    name: clientName,
-                    reason: reason
-                })
-            }).then(() => {
-                alert(`Cancellation logged.\nAn automated email detailing "${reason}" has been dispatched to ${emailToSend}.`);
-            }).catch(err => console.error("Cancellation email error:", err));
+            alert(`Cancellation logged.\nAn automated email detailing "${reason}" has been dispatched to ${emailToSend}.`);
         }
     }
 
-    function changeState(newState, generatePin = false) {
+    function changeState(newState, generatePin = false, cancelReason = '') {
         if (!currentAptRow || !currentAptId) return;
-
-        SubdivisionStore.updateAppointmentStatus(currentAptId, newState, {
-            report: currentAptRow.dataset.report || ''
-        });
 
         if (newState === 'Scheduled' && generatePin) {
             const clientName = currentAptRow.cells[1].querySelector('div:first-child').textContent;
             generateAppointmentPin(currentAptId, clientName);
         }
 
-        renderAppointmentsFromStore();
-        closeAptModal();
-        
-        if (newState === 'Scheduled' && window.pushSystemNotification) {
-            window.pushSystemNotification("Pipeline Updated", `Inquiry ${currentAptId} shifted to ${newState}.`, 'Just Now', false);
-        }
+        fetch(`/api/appointments/${currentAptId}/status`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                status: newState,
+                report: currentAptRow.dataset.report || '',
+                reason: cancelReason,
+                pin: window.tempAptPin || null
+            })
+        }).then(() => {
+            window.tempAptPin = null; // reset
+            window.location.reload();
+            
+            if (newState === 'Scheduled' && window.pushSystemNotification) {
+                window.pushSystemNotification("Pipeline Updated", `Inquiry ${currentAptId} shifted to ${newState}.`, 'Just Now', false);
+            }
+        });
     }
 
     // Close modal on outside click
@@ -780,5 +851,34 @@
         const modal = document.getElementById('aptModal');
         if (event.target == modal) closeAptModal();
     }
+    window.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(window.location.search);
+        const action = params.get('action');
+        const apt = params.get('apt');
+
+        setTimeout(() => {
+            if (apt && !action) {
+                const row = document.querySelector(`tr[data-id="${apt}"]`) || [...document.querySelectorAll('tr')].find(r => r.cells[0] && r.cells[0].textContent.trim() === apt);
+                if (row) viewAptDetail(row);
+            } else if (action === 'add') {
+                openAddAptModal();
+            } else if (action === 'blackout') {
+                openBlackoutModal();
+            } else if (action === 'report' && apt) {
+                const row = document.querySelector(`tr[data-id="${apt}"]`) || [...document.querySelectorAll('tr')].find(r => r.cells[0] && r.cells[0].textContent.trim() === apt);
+                if (row) {
+                    viewAptDetail(row);
+                    openReportModal();
+                }
+            } else if (action === 'cancel' && apt) {
+                const row = document.querySelector(`tr[data-id="${apt}"]`) || [...document.querySelectorAll('tr')].find(r => r.cells[0] && r.cells[0].textContent.trim() === apt);
+                if (row) {
+                    viewAptDetail(row);
+                    openCancelModal();
+                }
+            }
+        }, 150);
+    });
+
 </script>
 @endsection

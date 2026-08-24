@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="description" content="Log In - Althesa Subdivision Management System">
     <title>Log In — Althesa</title>
     <link rel="stylesheet" href="{{ asset('css/app.css') }}">
@@ -418,8 +419,8 @@
 </div>
 
 <script>
-    function doLogin() {
-        const email = document.getElementById('email-input').value.trim().toLowerCase();
+    async function doLogin() {
+        const email = document.getElementById('email-input').value.trim();
         const password = document.getElementById('password-input').value;
         const errEl = document.getElementById('login-error');
         const btnText = document.getElementById('login-btn-text');
@@ -433,27 +434,42 @@
             return;
         }
 
-        btnText.textContent = 'Signing in...';
+        btnText.textContent = 'Authenticating...';
         btn.disabled = true;
         btn.style.opacity = '0.75';
 
-        setTimeout(() => {
-            btnText.textContent = 'Authenticating...';
-            
-            setTimeout(() => {
-                let target = '/resident/dashboard'; // Default resident portal
-                
-                if (email.includes('admin')) {
-                    target = '/admin/dashboard';
-                } else if (email.includes('guard') || email.includes('security')) {
-                    target = '/guard/dashboard';
-                } else if (email.includes('finance') || email.includes('cpa') || email.includes('officer')) {
-                    target = '/finance/dashboard';
-                }
-                
-                window.location.href = target;
-            }, 800);
-        }, 1200);
+        try {
+            const response = await fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify({ email, password })
+            });
+
+            // Prevent crash if server returns HTML (e.g. 500 error or 419 Page Expired)
+            const contentType = response.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                throw new Error("Server configuration error. Please try refreshing the page.");
+            }
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                btnText.textContent = 'Success! Redirecting...';
+                window.location.href = data.redirect;
+            } else {
+                throw new Error(data.message || 'Authentication failed.');
+            }
+        } catch (error) {
+            errEl.textContent = error.message;
+            errEl.style.display = 'block';
+            btnText.textContent = 'Sign In →';
+            btn.disabled = false;
+            btn.style.opacity = '1';
+        }
     }
 
     // Toggle password visibility

@@ -30,7 +30,7 @@
 
     <!-- Stats & Filters -->
     <div style="display: flex; flex-direction: column; gap: 24px; margin-bottom: 32px;">
-        <div class="ann-stats responsive-grid grid-4">
+        <div class="ann-stats responsive-grid grid-3">
             <div class="ann-stat-card active-stat" data-status="all" style="cursor: pointer; border-color: var(--ann-primary);">
                 <span class="ann-stat-label">Total Active</span>
                 <div class="ann-stat-value">
@@ -40,19 +40,13 @@
             <div class="ann-stat-card" data-status="published" style="cursor: pointer;">
                 <span class="ann-stat-label">Published</span>
                 <div class="ann-stat-value" style="color: var(--ann-success);">
-                    <span id="stat-published">{{ collect($announcements)->where('status', 'published')->count() }}</span>
-                </div>
-            </div>
-            <div class="ann-stat-card" data-status="scheduled" style="cursor: pointer;">
-                <span class="ann-stat-label">Scheduled</span>
-                <div class="ann-stat-value" style="color: var(--ann-info);">
-                    <span id="stat-scheduled">{{ collect($announcements)->where('status', 'scheduled')->count() }}</span>
+                    <span id="stat-published">{{ collect($announcements)->filter(function($a) { return strtolower($a['status']) === 'published'; })->count() }}</span>
                 </div>
             </div>
             <div class="ann-stat-card" data-status="archived" style="cursor: pointer;">
                 <span class="ann-stat-label">Archived</span>
                 <div class="ann-stat-value" style="color: var(--ann-danger);">
-                    <span id="stat-archived">0</span>
+                    <span id="stat-archived">{{ collect($announcements)->filter(function($a) { return strtolower($a['status']) === 'archived'; })->count() }}</span>
                 </div>
             </div>
         </div>
@@ -112,28 +106,22 @@
                 <label style="display: block; font-size: 13px; font-weight: 700; color: var(--ann-text-main); margin-bottom: 8px;">Announcement Title</label>
                 <input type="text" id="annTitle" placeholder="e.g. Schedule Maintenance" style="width: 100%; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--ann-border); font-size: 14px;" required>
             </div>
-            <div class="responsive-grid grid-2">
-                <div>
-                    <label style="display: block; font-size: 13px; font-weight: 700; color: var(--ann-text-main); margin-bottom: 8px;">Category</label>
-                    <select id="annCat" style="width: 100%; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--ann-border); background: white; font-size: 14px;">
-                        <option value="General">General</option>
-                        <option value="Emergency">Emergency</option>
-                        <option value="Maintenance">Maintenance</option>
-                        <option value="Event">Event</option>
-                    </select>
-                </div>
-                <div>
-                    <label style="display: block; font-size: 13px; font-weight: 700; color: var(--ann-text-main); margin-bottom: 8px;">Schedule Date</label>
-                    <input type="date" id="annDate" style="width: 100%; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--ann-border); font-size: 14px;" required>
-                </div>
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 13px; font-weight: 700; color: var(--ann-text-main); margin-bottom: 8px;">Category</label>
+                <select id="annCat" style="width: 100%; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--ann-border); font-size: 14px; outline: none;">
+                    <option value="General">General Updates</option>
+                    <option value="Emergency">Emergency Alert</option>
+                    <option value="Maintenance">Maintenance</option>
+                    <option value="Event">Event</option>
+                </select>
             </div>
             <div>
                 <label style="display: block; font-size: 13px; font-weight: 700; color: var(--ann-text-main); margin-bottom: 8px;">Content Message</label>
                 <textarea id="annContent" rows="4" placeholder="Describe the details of the announcement..." style="width: 100%; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--ann-border); font-size: 14px; font-family: inherit; resize: none;" required></textarea>
             </div>
             <div style="display: flex; gap: 12px; margin-top: 12px;">
-                <button type="button" class="btn btn-outline" style="flex: 1; padding: 14px;" onclick="createPost('draft')">Save Draft</button>
-                <button type="button" class="btn btn-primary" style="flex: 2; padding: 14px;" onclick="createPost('published')">Publish Now</button>
+                <button type="button" id="btnDraft" class="btn btn-outline" style="flex: 1; padding: 14px;" onclick="createPost('draft')">Save Draft</button>
+                <button type="button" id="btnPublish" class="btn btn-primary" style="flex: 2; padding: 14px;" onclick="createPost('published')">Publish Now</button>
             </div>
         </form>
     </div>
@@ -279,61 +267,63 @@
             // Note: Drafts stat removed from top, but still tracked in counts
         }
 
-        window.createPost = function(status) {
+        let isPublishing = false;
+        window.createPost = async function(status) {
+            if (isPublishing) return;
+            isPublishing = true;
+
+            const btnDraft = document.getElementById('btnDraft');
+            const btnPublish = document.getElementById('btnPublish');
+            btnDraft.disabled = true; btnDraft.style.opacity = '0.5'; btnDraft.style.pointerEvents = 'none';
+            btnPublish.disabled = true; btnPublish.style.opacity = '0.5'; btnPublish.style.pointerEvents = 'none';
+            btnPublish.textContent = 'Publishing...';
+
             const title = document.getElementById('annTitle').value;
             const cat = document.getElementById('annCat').value;
-            const date = document.getElementById('annDate').value;
             const content = document.getElementById('annContent').value;
 
-            if (!title || !date || !content) {
+            if (!title || !content) {
                 alert('Please fill in all required fields.');
+                isPublishing = false;
+                btnDraft.disabled = false; btnDraft.style.opacity = '1'; btnDraft.style.pointerEvents = 'auto';
+                btnPublish.disabled = false; btnPublish.style.opacity = '1'; btnPublish.style.pointerEvents = 'auto';
+                btnPublish.textContent = 'Publish Now';
                 return;
             }
 
-            const formattedDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
-            
-            const newCard = document.createElement('div');
-            newCard.className = 'ann-card';
-            newCard.setAttribute('data-title', title.toLowerCase());
-            newCard.setAttribute('data-cat', cat);
-            newCard.setAttribute('data-status-val', status);
-            newCard.setAttribute('data-archived', 'false');
-            newCard.style.display = 'flex';
-            
-            newCard.innerHTML = `
-                <div class="ann-card-header">
-                    <span class="ann-category cat-${cat.toLowerCase()}">${cat}</span>
-                    <span class="ann-status status-${status}" title="${status.charAt(0).toUpperCase() + status.slice(1)}"></span>
-                </div>
-                <h3>${title}</h3>
-                <p>${content}</p>
-                <div class="ann-footer">
-                    <div class="ann-meta">
-                        <span class="ann-author">Current Admin</span>
-                        <span class="ann-date">📅 ${formattedDate}</span>
-                    </div>
-                    <div class="ann-actions">
-                        <button class="ann-btn-icon btn-restore" title="Restore" style="display: none; color: var(--ann-success);" onclick="restorePost(this.closest('.ann-card'))">
-                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                        </button>
-                        <button class="ann-btn-icon btn-edit" title="Edit Announcement">
-                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                        </button>
-                        <button class="ann-btn-icon btn-archive" title="Archive" style="color: var(--ann-text-sub);" onclick="archivePost(this.closest('.ann-card'))">
-                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
-                        </button>
-                    </div>
-                </div>
-            `;
+            try {
+                const response = await fetch('/admin/announcements', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    },
+                    body: JSON.stringify({
+                        title: title,
+                        category: cat,
+                        content: content
+                    })
+                });
 
-            const grid = document.getElementById('annGrid');
-            grid.insertBefore(newCard, grid.firstChild);
-
-            // Clean up
-            document.getElementById('annForm').reset();
-            closeModal();
-            updateStats();
-            filterCards(); // Refresh current view
+                const result = await response.json();
+                if (result.success) {
+                    alert('Announcement posted! An email has been sent to the residents.');
+                    window.location.reload();
+                } else {
+                    alert('Failed to post announcement.');
+                    isPublishing = false;
+                    btnDraft.disabled = false; btnDraft.style.opacity = '1'; btnDraft.style.pointerEvents = 'auto';
+                    btnPublish.disabled = false; btnPublish.style.opacity = '1'; btnPublish.style.pointerEvents = 'auto';
+                    btnPublish.textContent = 'Publish Now';
+                }
+            } catch (error) {
+                console.error(error);
+                alert('An error occurred.');
+                isPublishing = false;
+                btnDraft.disabled = false; btnDraft.style.opacity = '1'; btnDraft.style.pointerEvents = 'auto';
+                btnPublish.disabled = false; btnPublish.style.opacity = '1'; btnPublish.style.pointerEvents = 'auto';
+                btnPublish.textContent = 'Publish Now';
+            }
         }
     });
 </script>

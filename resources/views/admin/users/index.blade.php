@@ -80,7 +80,7 @@
                 </thead>
                 <tbody id="userTableBody">
                     @foreach($users as $user)
-                    <tr class="user-row" data-name="{{ strtolower($user['name']) }}" data-email="{{ strtolower($user['email']) }}" data-role="{{ $user['role'] }}" data-status="{{ $user['status'] }}">
+                    <tr class="user-row" data-dbid="{{ $user['db_id'] }}" data-name="{{ strtolower($user['name']) }}" data-email="{{ strtolower($user['email']) }}" data-role="{{ $user['role'] }}" data-status="{{ $user['status'] }}">
                         <td style="font-family: monospace; font-weight: 700; color: #64748b;">{{ $user['id'] }}</td>
                         <td>
                             <div style="display: flex; align-items: center; gap: 12px;">
@@ -109,11 +109,11 @@
                         </td>
                         <td>
                             <div style="display: flex; gap: 8px;">
-                                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openEditModal('{{ $user['id'] }}', '{{ $user['name'] }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ $user['meta'] }}')">Edit</button>
+                                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openEditModal('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ $user['contact_number'] ?? '' }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}')">Edit</button>
                                 @if($user['status'] === 'Active')
-                                    <button class="btn btn-outline archive-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="archiveUser('{{ $user['id'] }}', this)">Archive</button>
+                                    <button class="btn btn-outline archive-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="archiveUser('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', this)">Archive</button>
                                 @else
-                                    <button class="btn btn-outline restore-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #10b981; border-color: #a7f3d0;" onclick="restoreUser('{{ $user['id'] }}', this)">Restore</button>
+                                    <button class="btn btn-outline restore-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #10b981; border-color: #a7f3d0;" onclick="restoreUser('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', this)">Restore</button>
                                 @endif
                             </div>
                         </td>
@@ -148,14 +148,26 @@
                 </select>
             </div>
 
-            <div>
-                <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Full Legal Name</label>
-                <input type="text" id="userName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Enter full name">
+            <div style="display: flex; gap: 12px;">
+                <div style="flex: 1;">
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">First Name</label>
+                    <input type="text" id="userFirstName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="First name">
+                </div>
+                <div style="flex: 1;">
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Last Name</label>
+                    <input type="text" id="userLastName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Last name">
+                </div>
             </div>
 
-            <div>
-                <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Email Address (Primary Login)</label>
-                <input type="email" id="userEmail" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="user@gmail.com">
+            <div style="display: flex; gap: 12px;">
+                <div style="flex: 1;">
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Email Address (Primary Login)</label>
+                    <input type="email" id="userEmail" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="user@gmail.com">
+                </div>
+                <div style="flex: 1;">
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Contact Number</label>
+                    <input type="text" id="userContact" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Optional">
+                </div>
             </div>
 
             <div id="roleSpecificFields">
@@ -163,11 +175,11 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                         <div>
                             <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Block</label>
-                            <input type="number" id="resBlock" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px;" placeholder="1">
+                            <select id="resBlock" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px;"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option></select>
                         </div>
                         <div>
                             <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Lot</label>
-                            <input type="number" id="resLot" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px;" placeholder="5">
+                            <select id="resLot" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px;"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option></select>
                         </div>
                     </div>
                 </div>
@@ -205,19 +217,42 @@
 
         <form id="editUserForm" onsubmit="saveUserChanges(event)" style="display: flex; flex-direction: column; gap: 16px;">
             <input type="hidden" id="editUserId">
-            <div>
-                <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Full Name</label>
-                <input type="text" id="editUserName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
+    <input type="hidden" id="editUserDbId">
+            <div style="display: flex; gap: 12px;">
+                <div style="flex: 1;">
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">First Name</label>
+                    <input type="text" id="editUserFirstName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Last Name</label>
+                    <input type="text" id="editUserLastName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
+                </div>
             </div>
 
-            <div>
-                <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Email Address</label>
-                <input type="email" id="editUserEmail" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
+            <div style="display: flex; gap: 12px;">
+                <div style="flex: 1;">
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Email Address</label>
+                    <input type="email" id="editUserEmail" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Contact Number</label>
+                    <input type="text" id="editUserContact" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Optional">
+                </div>
             </div>
 
-            <div>
-                <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Role Info / Scope (Block/Lot or Badge ID)</label>
-                <input type="text" id="editUserMeta" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
+            <div id="editResidentFields" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Block</label>
+                    <select id="editResBlock" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px;">
+                        @for($i=1; $i<=16; $i++) <option value="{{$i}}">{{$i}}</option> @endfor
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Lot</label>
+                    <select id="editResLot" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px;">
+                        @for($i=1; $i<=15; $i++) <option value="{{$i}}">{{$i}}</option> @endfor
+                    </select>
+                </div>
             </div>
 
             <div>
@@ -243,54 +278,128 @@
         document.getElementById('editUserPassword').value = pass;
     }
 
-    function openEditModal(id, name, email, role, meta) {
+    function openEditModal(id, dbid, name, email, role, contact, block, lot) {
+        if (new URLSearchParams(window.location.search).get('edit') !== id) {
+            window.history.pushState(null, '', '?edit=' + id);
+        }
         document.getElementById('editUserId').value = id;
+        document.getElementById('editUserDbId').value = dbid;
         document.getElementById('editUserIdLabel').innerText = `Updating ${id} (${role})`;
-        document.getElementById('editUserName').value = name;
+        
+        const names = name.split(' ');
+        const firstName = names[0];
+        const lastName = names.slice(1).join(' ');
+        document.getElementById('editUserFirstName').value = firstName;
+        document.getElementById('editUserLastName').value = lastName;
+        
         document.getElementById('editUserEmail').value = email;
-        document.getElementById('editUserMeta').value = meta;
+        document.getElementById('editUserContact').value = contact;
+        
+        const resFields = document.getElementById('editResidentFields');
+        if (role === 'Resident') {
+            resFields.style.display = 'grid';
+            document.getElementById('editResBlock').value = block;
+            document.getElementById('editResLot').value = lot;
+        } else {
+            resFields.style.display = 'none';
+        }
+        
         document.getElementById('editUserPassword').value = ''; // Clear password field
         document.getElementById('editUserModal').style.display = 'flex';
     }
 
     function closeEditModal() {
+        window.history.replaceState(null, '', window.location.pathname);
         document.getElementById('editUserModal').style.display = 'none';
     }
 
-    function saveUserChanges(e) {
+    async function saveUserChanges(e) {
         e.preventDefault();
         const id = document.getElementById('editUserId').value;
-        const name = document.getElementById('editUserName').value;
-        const email = document.getElementById('editUserEmail').value;
+        const dbid = document.getElementById('editUserDbId').value;
+        const firstName = document.getElementById('editUserFirstName').value.trim();
+        const lastName = document.getElementById('editUserLastName').value.trim();
+        const email = document.getElementById('editUserEmail').value.trim();
+        const contact_number = document.getElementById('editUserContact').value.trim();
         const newPass = document.getElementById('editUserPassword').value;
         
-        // Find row and update UI
-        const rows = document.querySelectorAll('.user-row');
-        rows.forEach(row => {
-            if (row.querySelector('td').innerText === id) {
-                row.querySelector('div[style*="font-weight: 700; color: #0f172a;"]').innerText = name;
-                row.querySelector('div[style*="font-size: 12px; color: #64748b;"]').innerText = email;
-                row.dataset.name = name.toLowerCase();
-                row.dataset.email = email.toLowerCase();
-            }
-        });
-
-        let successMsg = `Account ${id} has been successfully updated.`;
-        if (newPass) {
-            successMsg += `\n\nPassword has been reset to: ${newPass}\nThe old password was invalidated and "flashed" out of the system.`;
+        if (!firstName || !lastName || !email || !contact_number) {
+            alert('Please fill in all mandatory fields (First Name, Last Name, Email, Contact Number).');
+            return;
         }
 
-        alert(successMsg);
-        closeEditModal();
+        const name = `${firstName} ${lastName}`.trim();
+        const payload = { name, email, contact_number, password: newPass };
+        
+        const resFields = document.getElementById('editResidentFields');
+        if (resFields.style.display !== 'none') {
+            payload.block = document.getElementById('editResBlock').value;
+            payload.lot = document.getElementById('editResLot').value;
+            if (!payload.block || !payload.lot) {
+                alert('Block and Lot are mandatory for Resident accounts.');
+                return;
+            }
+        }
+        
+        try {
+            const res = await fetch(`/admin/users/${dbid}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if(data.success) {
+                // Find row and update UI
+                const rows = document.querySelectorAll('.user-row');
+                rows.forEach(row => {
+                    if (row.querySelector('td').innerText === id) {
+                        row.querySelector('div[style*="font-weight: 700; color: #0f172a;"]').innerText = name;
+                        row.querySelector('div[style*="font-size: 12px; color: #64748b;"]').innerText = email;
+                        row.dataset.name = name.toLowerCase();
+                        row.dataset.email = email.toLowerCase();
+                    }
+                });
+
+                let successMsg = `Account ${id} has been successfully updated.`;
+                if (newPass) {
+                    successMsg += `\n\nPassword has been reset to: ${newPass}\nThe old password was invalidated.`;
+                }
+
+                alert(successMsg);
+                window.location.reload();
+            } else {
+                alert('Failed to update user.');
+            }
+        } catch(e) {
+            console.error(e);
+            alert('An error occurred');
+        }
     }
     function openAddUserModal() {
+        if (new URLSearchParams(window.location.search).get('action') !== 'add') {
+            window.history.pushState(null, '', '?action=add');
+        }
         document.getElementById('addUserModal').style.display = 'flex';
     }
 
     function closeAddUserModal() {
+        window.history.replaceState(null, '', window.location.pathname);
         document.getElementById('addUserModal').style.display = 'none';
         document.getElementById('addUserForm').reset();
     }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('action') === 'add') {
+            openAddUserModal();
+        } else if (params.get('edit')) {
+            const editBtn = document.querySelector(`button[onclick*="openEditModal('${params.get('edit')}'"]`);
+            if (editBtn) editBtn.click();
+        }
+    });
 
     function updateRoleFields() {
         const role = document.getElementById('newRole').value;
@@ -326,157 +435,94 @@
         });
     }
 
-    function submitNewUser(e) {
+    async function submitNewUser(e) {
         e.preventDefault();
         
-        const name = document.getElementById('userName').value;
+        const firstName = document.getElementById('userFirstName').value.trim();
+        const lastName = document.getElementById('userLastName').value.trim();
         const role = document.getElementById('newRole').value;
-        const email = document.getElementById('userEmail').value;
-        const id = 'USR-' + (1000 + Math.floor(Math.random() * 9000));
+        const email = document.getElementById('userEmail').value.trim();
+        const contact_number = document.getElementById('userContact').value.trim();
         
-        // Software Engineer Logic: Generate a secure temporary password
-        const tempPassword = 'Alth' + Math.random().toString(36).slice(-6).toUpperCase() + '!';
+        if (!firstName || !lastName || !email || !contact_number) {
+            alert('Please fill in all mandatory fields (First Name, Last Name, Email, Contact Number).');
+            return;
+        }
+
+        const name = `${firstName} ${lastName}`.trim();
+        const payload = { name, email, contact_number, role, status: 'Active' };
         
-        let meta = "";
         if (role === 'Resident') {
-            meta = `Block ${document.getElementById('resBlock').value}, Lot ${document.getElementById('resLot').value}`;
-        } else {
-            meta = `ID: ${document.getElementById('staffId').value}`;
+            payload.block = document.getElementById('resBlock').value;
+            payload.lot = document.getElementById('resLot').value;
+            if (!payload.block || !payload.lot) {
+                alert('Block and Lot are mandatory for Resident accounts.');
+                return;
+            }
         }
-
-        const tbody = document.getElementById('userTableBody');
-        const newRow = document.createElement('tr');
-        newRow.className = 'user-row';
-        newRow.dataset.name = name.toLowerCase();
-        newRow.dataset.email = email.toLowerCase();
-        newRow.dataset.role = role;
-        newRow.dataset.status = 'Active';
-
-        newRow.innerHTML = `
-            <td style="font-family: monospace; font-weight: 700; color: #64748b;">${id}</td>
-            <td>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <div style="width: 32px; height: 32px; border-radius: 8px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; font-weight: 800; color: var(--bill-primary); font-size: 12px;">
-                        ${name.charAt(0)}
-                    </div>
-                    <div>
-                        <div style="font-weight: 700; color: #0f172a;">${name}</div>
-                        <div style="font-size: 12px; color: #64748b;">${email}</div>
-                    </div>
-                </div>
-            </td>
-            <td>
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <span style="font-weight: 700; font-size: 12px; color: #0f172a;">${role}</span>
-                    <span style="font-size: 11px; color: var(--bill-primary);">${meta}</span>
-                </div>
-            </td>
-            <td style="font-size: 12px; color: #64748b;">
-                Created: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-            </td>
-            <td>
-                <span class="badge badge-success" style="padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700;">ACTIVE</span>
-            </td>
-            <td>
-                <div style="display: flex; gap: 8px;">
-                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openEditModal('${id}', '${name}', '${email}', '${role}', '${meta}')">Edit</button>
-                    <button class="btn btn-outline archive-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="archiveUser('${id}', this)">Archive</button>
-                </div>
-            </td>
-        `;
-
-        tbody.prepend(newRow);
         
-        // Update Stats
-        document.getElementById('statTotal').innerText = parseInt(document.getElementById('statTotal').innerText) + 1;
-        if (role === 'Resident') document.getElementById('statResidents').innerText = parseInt(document.getElementById('statResidents').innerText) + 1;
-        if (role === 'Security Guard') document.getElementById('statSecurity').innerText = parseInt(document.getElementById('statSecurity').innerText) + 1;
-        if (role === 'Finance Officer') document.getElementById('statFinance').innerText = parseInt(document.getElementById('statFinance').innerText) + 1;
-
-        if (window.pushSystemNotification) {
-            window.pushSystemNotification("Account Provisioned", `Temporary password generated for ${name}`, new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), true);
+        // Generate a secure temporary password
+        const tempPassword = 'Alth' + Math.random().toString(36).slice(-6).toUpperCase() + '!';
+        payload.password = tempPassword;
+        
+        try {
+            const res = await fetch('/admin/users', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if(data.success) {
+                alert(`Account created successfully!\n\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nPlease provide this password to the user.`);
+                window.location.reload();
+            } else {
+                alert('Failed to create account. Email may already be in use.');
+            }
+        } catch(err) {
+            console.error(err);
+            alert('An error occurred.');
         }
-
-        // Display Password to Admin
-        const successMsg = `
-            <div style="text-align: left;">
-                <p style="font-weight: 700; color: #166534; margin-bottom: 12px;">Account Created Successfully!</p>
-                <div style="background: #f8fafc; padding: 16px; border: 1px solid #e2e8f0; border-radius: 12px;">
-                    <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Initial Password:</div>
-                    <div style="font-family: monospace; font-size: 20px; font-weight: 800; color: #0f172a; margin-top: 4px; letter-spacing: 2px;">${tempPassword}</div>
-                </div>
-                <p style="font-size: 12px; color: #64748b; margin-top: 12px;">Please copy this password and provide it to the resident or staff member. They will use this for their first login.</p>
-            </div>
-        `;
-        
-        // Custom Alert/Dialog for Password Visibility
-        const overlay = document.createElement('div');
-        overlay.style = "position:fixed; inset:0; background:rgba(15,23,42,0.8); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; z-index:3000;";
-        overlay.innerHTML = `
-            <div style="background:white; padding:40px; border-radius:24px; max-width:400px; width:90%; text-align:center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
-                ${successMsg}
-                <button onclick="this.parentElement.parentElement.remove()" class="btn btn-primary" style="width:100%; margin-top:24px; justify-content:center; padding:14px;">I have noted the password</button>
-            </div>
-        `;
-        document.body.appendChild(overlay);
-
-        closeAddUserModal();
     }
 
     function resetPassword(id) {
         alert(`A secure password reset link has been dispatched to the registered email for user ${id}.`);
     }
 
-    function archiveUser(id, btnElement) {
-        if (confirm(`Are you sure you want to archive user ${id}? Account status will be set to Archived.`)) {
-            const rows = document.querySelectorAll('.user-row');
-            rows.forEach(row => {
-                if (row.querySelector('td').innerText === id) {
-                    row.dataset.status = 'Archived';
-                    const badge = row.querySelector('.badge');
-                    badge.innerText = 'ARCHIVED';
-                    badge.className = 'badge badge-danger';
-
-                    // Switch button to Restore
-                    const btn = btnElement || row.querySelector('.archive-btn');
-                    if (btn) {
-                        btn.innerText = 'Restore';
-                        btn.style.color = '#10b981';
-                        btn.style.borderColor = '#a7f3d0';
-                        btn.onclick = function() { restoreUser(id, btn); };
-                        btn.className = 'btn btn-outline restore-btn';
+    async function archiveUser(id, dbid, btnElement) {
+        if (confirm(`Are you sure you want to permanently delete user ${id}? This action cannot be undone.`)) {
+            try {
+                const res = await fetch(`/admin/users/${dbid}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                     }
+                });
+                const data = await res.json();
+                if(data.success) {
+                    const rows = document.querySelectorAll('.user-row');
+                    rows.forEach(row => {
+                        if (row.dataset.dbid === dbid.toString()) {
+                            row.remove();
+                        }
+                    });
+                    const statTotal = document.getElementById('statTotal');
+                    if (statTotal) statTotal.innerText = Math.max(0, parseInt(statTotal.innerText) - 1);
+                    alert('User deleted permanently.');
+                } else {
+                    alert('Failed to delete user.');
                 }
-            });
-            const statTotal = document.getElementById('statTotal');
-            if (statTotal) statTotal.innerText = Math.max(0, parseInt(statTotal.innerText) - 1);
+            } catch(e) {
+                console.error(e);
+                alert('An error occurred.');
+            }
         }
     }
 
-    function restoreUser(id, btnElement) {
-        if (confirm(`Are you sure you want to restore user ${id}? This will reactivate their access.`)) {
-            const rows = document.querySelectorAll('.user-row');
-            rows.forEach(row => {
-                if (row.querySelector('td').innerText === id) {
-                    row.dataset.status = 'Active';
-                    const badge = row.querySelector('.badge');
-                    badge.innerText = 'ACTIVE';
-                    badge.className = 'badge badge-success';
-
-                    // Switch button to Archive
-                    const btn = btnElement || row.querySelector('.restore-btn');
-                    if (btn) {
-                        btn.innerText = 'Archive';
-                        btn.style.color = '#ef4444';
-                        btn.style.borderColor = '#fee2e2';
-                        btn.onclick = function() { archiveUser(id, btn); };
-                        btn.className = 'btn btn-outline archive-btn';
-                    }
-                }
-            });
-            const statTotal = document.getElementById('statTotal');
-            if (statTotal) statTotal.innerText = parseInt(statTotal.innerText) + 1;
-        }
+    function restoreUser(id, dbid, btnElement) {
+        alert('Restore functionality is not connected to PostgreSQL delete as we used a hard delete. Create a new user instead.');
     }
 </script>
 

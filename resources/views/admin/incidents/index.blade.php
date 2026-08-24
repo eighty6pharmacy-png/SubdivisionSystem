@@ -159,7 +159,6 @@
                     <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
                         <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Reported By</span>
                         <div id="modalIncRes" style="font-size: 15px; font-weight: 700; color: #0f172a; margin-top: 4px;"></div>
-                        <div id="modalIncContact" style="font-size: 13px; font-weight: 500; color: #64748b; margin-top: 2px;"></div>
                     </div>
                     <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
                         <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Update Status</span>
@@ -173,7 +172,7 @@
             </div>
             <div style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px;">
                 <button class="btn btn-outline" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-weight: 600;" onclick="closeIncidentModal()">Cancel</button>
-                <button class="btn btn-primary" style="padding: 8px 16px; border-radius: 8px; background: var(--bill-primary); color: #fff; font-weight: 600; border: none;" onclick="saveIncidentStatus()">Save Changes</button>
+                <button class="btn btn-primary" style="padding: 12px 28px; border-radius: 10px; background: linear-gradient(135deg, #059669, #10b981); color: #fff; font-weight: 700; font-size: 14px; border: none; cursor: pointer; box-shadow: 0 4px 14px rgba(16,185,129,0.4); transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(16,185,129,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 14px rgba(16,185,129,0.4)'" onclick="saveIncidentStatus()">✅ Save Changes</button>
             </div>
         </div>
     </div>
@@ -205,6 +204,7 @@
 </div>
 
 <script>
+    const rawIncidents = @json($incidents);
     const categoryMeta = {
         'Security':    { icon: '🛡️', color: '#ef4444' },
         'Maintenance': { icon: '🛠️', color: '#f59e0b' },
@@ -219,7 +219,7 @@
     });
 
     function recalculateIncidentMetrics() {
-        let incidents = SubdivisionStore.getIncidents();
+        let incidents = rawIncidents;
         const dateFilter = document.getElementById('incidentDateFilter').value;
         const now = new Date();
         
@@ -332,7 +332,7 @@
         activeCategory = cat;
         currentPage = 1;
         
-        const storeIncidents = SubdivisionStore.getIncidents();
+        const storeIncidents = rawIncidents;
         const catData = storeIncidents.filter(d => (d.type || '').toLowerCase() === cat.toLowerCase());
 
         const panel    = document.getElementById('reportPanel');
@@ -355,7 +355,7 @@
     function renderGrid() {
         if(!activeCategory) return;
         
-        const storeIncidents = SubdivisionStore.getIncidents();
+        const storeIncidents = rawIncidents;
         const catData = storeIncidents.filter(d => (d.type || '').toLowerCase() === activeCategory.toLowerCase());
         
         filteredData = applyFiltersAndSearch(catData);
@@ -382,6 +382,13 @@
             
             pageData.forEach(d => {
                 const statusLabel = { pending: 'Pending', progress: 'In Progress', resolved: 'Resolved' }[d.status] || d.status;
+                let formattedDate = 'Today';
+                if (d.date) {
+                    const dObj = new Date(d.date);
+                    if (!isNaN(dObj)) {
+                        formattedDate = dObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+                    }
+                }
                 grid.innerHTML += `
                     <div class="incident-card" style="display:flex; flex-direction:column; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';" onmouseout="this.style.transform=''; this.style.boxShadow='var(--shadow-sm)';" onclick="openIncidentModal('${d.id}')">
                         <div class="status-dot">
@@ -398,8 +405,7 @@
                         </div>
                         <p class="incident-preview">${d.desc}</p>
                         <div class="incident-footer" style="margin-top:12px; border-top:1px solid #f1f5f9; padding-top:8px;">
-                            <div style="font-size:11px;font-weight:700;color:#0f172a;">📞 Contact: ${d.contact || 'Not provided'}</div>
-                            <div style="font-size:11px;font-weight:600;color:var(--incident-text-sub);">${d.date || 'Today'}</div>
+                            <div style="font-size:11px;font-weight:600;color:var(--incident-text-sub);">${formattedDate}</div>
                         </div>
                     </div>`;
             });
@@ -440,7 +446,10 @@
     let currentIncidentId = null;
 
     function openIncidentModal(id) {
-        const incidents = SubdivisionStore.getIncidents();
+        if (new URLSearchParams(window.location.search).get('incident') !== id) {
+            window.history.pushState(null, '', '?incident=' + id);
+        }
+        const incidents = rawIncidents;
         const inc = incidents.find(i => i.id === id);
         if (!inc) return;
 
@@ -449,10 +458,16 @@
         document.getElementById('modalIncId').textContent = inc.id;
         document.getElementById('modalIncSubject').textContent = inc.sub;
         document.getElementById('modalIncType').textContent = inc.type;
-        document.getElementById('modalIncDate').textContent = inc.date || 'Today';
+        let formattedDate = 'Today';
+        if (inc.date) {
+            const dObj = new Date(inc.date);
+            if (!isNaN(dObj)) {
+                formattedDate = dObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+            }
+        }
+        document.getElementById('modalIncDate').textContent = formattedDate;
         document.getElementById('modalIncDesc').textContent = inc.desc;
         document.getElementById('modalIncRes').textContent = inc.res || 'Resident';
-        document.getElementById('modalIncContact').textContent = inc.contact || 'Not provided';
         document.getElementById('modalIncStatus').value = inc.status;
 
         const mediaContainer = document.getElementById('modalIncMedia');
@@ -464,8 +479,8 @@
             mediaContainer.innerHTML = `<div style="display: flex; gap: 12px; width: 100%; height: 100%; overflow-x: auto; padding-bottom: 4px;">${photosHtml}</div>`;
             mediaContainer.style.border = 'none';
             mediaContainer.style.background = 'transparent';
-        } else if (inc.photo) {
-            mediaContainer.innerHTML = `<img src="${inc.photo}" onclick="openFullscreenImage('${inc.photo}')" style="width:100%; height:100%; object-fit:cover; border-radius:6px; cursor: pointer;" alt="Attachment">`;
+        } else if (inc.img) {
+            mediaContainer.innerHTML = `<img src="${inc.img}" onclick="openFullscreenImage('${inc.img}')" style="width:100%; height:100%; object-fit:cover; border-radius:6px; cursor: pointer;" alt="Attachment">`;
             mediaContainer.style.border = 'none';
         } else {
             mediaContainer.innerHTML = `<div style="text-align:center;">
@@ -480,20 +495,34 @@
     }
 
     function closeIncidentModal() {
+        window.history.replaceState(null, '', window.location.pathname);
         document.getElementById('incidentModal').style.display = 'none';
         currentIncidentId = null;
     }
 
-    function saveIncidentStatus() {
+    async function saveIncidentStatus() {
         if (!currentIncidentId) return;
         const newStatus = document.getElementById('modalIncStatus').value;
         
-        SubdivisionStore.updateIncidentStatus(currentIncidentId, newStatus);
-        
-        closeIncidentModal();
-        recalculateIncidentMetrics();
-        if (activeCategory) {
-            showCategory(activeCategory);
+        try {
+            const response = await fetch(`/api/incidents/${currentIncidentId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ status: newStatus })
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                window.location.reload(); // Reload to fetch fresh data from DB
+            } else {
+                alert('Failed to update status.');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('An error occurred.');
         }
     }
 

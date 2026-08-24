@@ -341,10 +341,14 @@
     }
 
     function openWalkInModal() {
+        if (new URLSearchParams(window.location.search).get('action') !== 'walkin') {
+            window.history.pushState(null, '', '?action=walkin');
+        }
         document.getElementById('walkinModal').style.display = 'flex';
     }
 
     function closeWalkInModal() {
+        window.history.replaceState(null, '', window.location.pathname);
         document.getElementById('walkinModal').style.display = 'none';
     }
 

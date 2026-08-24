@@ -33,6 +33,25 @@
         </div>
     </div>
 
+    <!-- Consumption Chart -->
+    <div class="analytic-card" style="padding: 24px; margin-bottom: 24px; border-radius: 24px; border: 1px solid var(--bill-border); background: #ffffff;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+            <div>
+                <h3 style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">💧 Water Consumption Trend</h3>
+                <p style="font-size: 13px; color: #64748b;">Track your monthly usage in m³.</p>
+            </div>
+            <select id="waterTimeRange" onchange="updateWaterChartRange(this.value)" style="padding: 6px 12px; font-size: 12px; border-radius: 12px; border: 1px solid #cbd5e1; background: #fff; color: #475569; font-weight: 600; cursor: pointer;">
+                <option value="6">Last 6 Months</option>
+                <option value="12">Last 12 Months</option>
+            </select>
+        </div>
+        <div style="background: #f8fafc; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0;">
+            <div style="position: relative; height: 250px; width: 100%;">
+                <canvas id="waterChart"></canvas>
+            </div>
+        </div>
+    </div>
+
     <!-- Payment History -->
     <div class="analytic-card" style="padding: 0; overflow: hidden;">
         <div style="padding: 20px 24px; border-bottom: 1px solid var(--bill-border);">
@@ -69,6 +88,85 @@
     function onGcashPaymentComplete(ctx) {
         location.reload();
     }
+
+    let waterChart = null;
+    let currentWaterRange = 6;
+    
+    @php
+        $months = [];
+        for ($i = 11; $i >= 0; $i--) {
+            $months[] = date('M Y', strtotime("-$i months"));
+        }
+    @endphp
+    
+    const fullMonthLabels = {!! json_encode($months) !!};
+    const fullWaterHistory = {!! json_encode($waterBill['usage_history']) !!};
+
+    function updateWaterChartRange(monthsCount) {
+        currentWaterRange = parseInt(monthsCount);
+        renderWaterChart();
+    }
+
+    function renderWaterChart() {
+        const slicedLabels = fullMonthLabels.slice(-currentWaterRange);
+        const slicedData = fullWaterHistory.slice(-currentWaterRange);
+        
+        const ctx = document.getElementById('waterChart').getContext('2d');
+        
+        if (waterChart) waterChart.destroy();
+        
+        waterChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: slicedLabels,
+                datasets: [{
+                    label: 'Water Consumption',
+                    data: slicedData,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#ffffff',
+                    pointBorderColor: '#3b82f6',
+                    pointBorderWidth: 3,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) { return context.parsed.y + ' m³'; }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        grid: { color: '#e2e8f0', drawBorder: false },
+                        ticks: {
+                            callback: function(value) { return value + ' m³'; },
+                            color: '#64748b', font: { size: 11 }
+                        }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#64748b', font: { size: 11 } }
+                    }
+                },
+                interaction: { intersect: false, mode: 'index' }
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        renderWaterChart();
+    });
 </script>
 
 @endsection

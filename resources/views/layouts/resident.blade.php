@@ -3,10 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Resident Portal — Althesa</title>
     <link rel="stylesheet" href="{{ asset('css/app.css') }}">
     <link rel="stylesheet" href="{{ asset('css/admin.css') }}">
     <script src="{{ asset('js/subdivision-store.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --res-primary: #059669; /* Emerald 600 */
@@ -110,7 +112,12 @@
                 </div>
 
                 <div id="resLotBadge" style="background: var(--res-primary-soft); color: var(--res-primary); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;">
-                    Block 1 Lot 5
+                    @php $userLot = \Illuminate\Support\Facades\Auth::user()->lots->first(); @endphp
+                    @if($userLot)
+                        Block {{ $userLot->block }} Lot {{ $userLot->lot_number }}
+                    @else
+                        No Assigned Lot
+                    @endif
                 </div>
             </div>
         </header>
@@ -216,12 +223,22 @@
     }
 
     function openLogoutModal() {
+        if (new URLSearchParams(window.location.search).get('action') !== 'logout') {
+            window.history.pushState(null, '', '?action=logout');
+        }
         document.getElementById('logoutModal').style.display = 'flex';
     }
 
     function closeLogoutModal() {
+        window.history.replaceState(null, '', window.location.pathname);
         document.getElementById('logoutModal').style.display = 'none';
     }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        if (new URLSearchParams(window.location.search).get('action') === 'logout') {
+            openLogoutModal();
+        }
+    });
 
 </script>
 </body>
