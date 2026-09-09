@@ -17,9 +17,9 @@
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 Billing Settings
             </button>
-            <button class="btn btn-outline" style="border-color: var(--bill-danger); color: var(--bill-danger);" onclick="resetBillingCycle()">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                Reset Billing Cycle
+            <button class="btn btn-outline" style="border-color: var(--bill-primary); color: var(--bill-primary);" onclick="resetBillingCycle()">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                New Cycle
             </button>
         </div>
     </div>
@@ -29,10 +29,16 @@
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
             <h2 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 0;">Ledger Performance Summary</h2>
             <select id="summaryMonth" class="filter-select" style="font-weight: 600; color: var(--bill-primary); border-color: #cbd5e1;" onchange="updateSummaryDashboard()">
-                <option value="May 2026" selected>Current Month (May 2026)</option>
-                <option value="Apr 2026">April 2026</option>
-                <option value="Mar 2026">March 2026</option>
-                <option value="Feb 2026">February 2026</option>
+                @php
+                    $m0 = date('M Y');
+                    $m1 = date('M Y', strtotime('-1 month'));
+                    $m2 = date('M Y', strtotime('-2 months'));
+                    $m3 = date('M Y', strtotime('-3 months'));
+                @endphp
+                <option value="{{ $m0 }}" selected>Current Month ({{ $m0 }})</option>
+                <option value="{{ $m1 }}">{{ date('F Y', strtotime('-1 month')) }}</option>
+                <option value="{{ $m2 }}">{{ date('F Y', strtotime('-2 months')) }}</option>
+                <option value="{{ $m3 }}">{{ date('F Y', strtotime('-3 months')) }}</option>
             </select>
         </div>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
@@ -186,11 +192,11 @@
             </select>
         </div>
         <div class="filter-group">
-            <span class="filter-label">Reliability Trend</span>
+            <span class="filter-label">Payment Behavior</span>
             <select id="trendFilter" class="filter-select">
-                <option value="all">All Trends</option>
-                <option value="reliable">🌟 Reliable</option>
-                <option value="at-risk">⚠️ At Risk</option>
+                <option value="all">All Behaviors</option>
+                <option value="reliable">Early</option>
+                <option value="at-risk">Late</option>
             </select>
         </div>
         <div style="margin-left: auto;">
@@ -209,7 +215,7 @@
                     <tr>
                         <th>Resident / Lot</th>
                         <th>Amount</th>
-                        <th>Predictive Trend</th>
+                        <th>Payment Behavior</th>
                         <th>Method</th>
                         <th>Status</th>
                         <th>Action</th>
@@ -232,9 +238,9 @@
                         </td>
                         <td>
                             @if(!$bill['at_risk'])
-                                <span class="trend-chip trend-early">🌟 Reliable</span>
+                                <span class="trend-chip trend-early">Early</span>
                             @else
-                                <span class="trend-chip trend-late">⚠️ At Risk</span>
+                                <span class="trend-chip trend-late">Late</span>
                             @endif
                         </td>
                         <td>
@@ -277,7 +283,7 @@
                 <span id="modalLot" style="font-size: 12px; font-weight: 700; color: var(--bill-primary); text-transform: uppercase; letter-spacing: 0.1em;">BLOCK 1 LOT 5</span>
                 <h2 id="modalResident" style="font-size: 32px; font-weight: 800; color: #0f172a; margin-top: 8px;">Juan Dela Cruz</h2>
                 <div style="margin-top: 12px; display: flex; gap: 12px; align-items: center;">
-                    <span id="modalTrend" class="trend-chip trend-early">🌟 Reliable Payer</span>
+                    <span id="modalTrend" class="trend-chip trend-early">Early</span>
                     <span id="modalPaymentBadge" class="badge">Paid</span>
                 </div>
             </div>
@@ -367,17 +373,42 @@
     </div>
 </div>
 
-<!-- Reset Cycle Modal -->
+<!-- New Cycle Modal -->
 <div id="resetCycleModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 3000;">
-    <div class="bill-modal-content" style="max-width: 400px; padding: 32px; text-align: center; border-radius: 24px;">
-        <div style="width: 64px; height: 64px; background: #fee2e2; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
-            <svg width="32" height="32" fill="none" stroke="#ef4444" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+    <div class="bill-modal-content" style="max-width: 450px; padding: 32px; border-radius: 24px;">
+        <div style="text-align: center;">
+            <div style="width: 64px; height: 64px; background: #e0f2fe; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
+                <svg width="32" height="32" fill="none" stroke="#0284c7" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            </div>
+            <h3 style="font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 12px;">Create New Billing Cycle</h3>
+            <p style="font-size: 14px; color: #64748b; margin-bottom: 24px; line-height: 1.6;">This will generate a new billing cycle. Previous cycles will remain accessible from the historic ledger dropdown.</p>
         </div>
-        <h3 style="font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 12px;">Reset Billing Cycle?</h3>
-        <p style="font-size: 14px; color: #64748b; margin-bottom: 24px; line-height: 1.6;">This will clear all current readings and shift all residents to <strong>Unpaid</strong> for the new month. This action cannot be undone.</p>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+            <div>
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 6px;">Start Date</label>
+                <input type="date" id="newCycleStart" class="filter-select" style="width: 100%; box-sizing: border-box;">
+            </div>
+            <div>
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 6px;">End Date</label>
+                <input type="date" id="newCycleEnd" class="filter-select" style="width: 100%; box-sizing: border-box;">
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 32px;">
+            <div>
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 6px;">Base Rate (₱)</label>
+                <input type="number" id="newCycleRate" class="filter-select" value="10" style="width: 100%; box-sizing: border-box;">
+            </div>
+            <div>
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 6px;">Penalty Past Due (%)</label>
+                <input type="number" id="newCyclePenalty" class="filter-select" value="5" style="width: 100%; box-sizing: border-box;">
+            </div>
+        </div>
+
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <button class="btn btn-outline" style="justify-content: center; padding: 12px;" onclick="closeResetCycleModal()">Cancel</button>
-            <button class="btn" style="justify-content: center; padding: 12px; background: #ef4444; color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer;" onclick="executeResetCycle()">Yes, Reset</button>
+            <button class="btn btn-primary" style="justify-content: center; padding: 12px;" onclick="executeResetCycle()">Create Cycle</button>
         </div>
     </div>
 </div>
@@ -449,9 +480,12 @@
         const sumPastDueEl = document.getElementById('sumPastDue');
         const rows = document.querySelectorAll('.bill-row');
 
-        if (monthSel !== 'May 2026') {
+        const currentMonth = document.getElementById('summaryMonth').options[0].value;
+        const prevMonth = document.getElementById('summaryMonth').options[1].value;
+
+        if (monthSel !== currentMonth) {
             // Historic State View: Modify the table actively
-            const mFactor = monthSel === 'Apr 2026' ? 0.9 : 0.85;
+            const mFactor = monthSel === prevMonth ? 0.9 : 0.85;
             let totalHistoric = 0;
             let countHistoric = 0;
 
@@ -517,6 +551,13 @@
             sumPaidEl.textContent = countPaid;
             sumUnpaidEl.textContent = countUnpaid;
             sumPastDueEl.textContent = countPastDue;
+            
+            // Real-time graph update
+            if (window.salesChart) {
+                const ds = window.salesChart.data.datasets[0];
+                ds.data[ds.data.length - 1] = totalCollected;
+                window.salesChart.update();
+            }
         }
 
         updatePredictiveDonut();
@@ -565,6 +606,7 @@
         if (new URLSearchParams(window.location.search).get('action') !== 'reset') {
             window.history.pushState(null, '', '?action=reset');
         }
+        document.getElementById('newCycleRate').value = currentKwhRate;
         document.getElementById('resetCycleModal').style.display = 'flex';
     }
 
@@ -574,6 +616,16 @@
     }
 
     async function executeResetCycle() {
+        const rate = document.getElementById('newCycleRate').value || currentKwhRate;
+        const penalty = document.getElementById('newCyclePenalty').value || 5;
+        const startDate = document.getElementById('newCycleStart').value;
+        const endDate = document.getElementById('newCycleEnd').value;
+        
+        if (!startDate || !endDate) {
+            alert('Please select start and end dates.');
+            return;
+        }
+
         closeResetCycleModal();
         try {
             const res = await fetch('/admin/api/billing/generate', {
@@ -582,7 +634,7 @@
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 },
-                body: JSON.stringify({ type: 'electricity', rate: currentKwhRate })
+                body: JSON.stringify({ type: 'electricity', rate: rate, penalty: penalty, start_date: startDate, end_date: endDate })
             });
             const data = await res.json();
             if(data.success) {
@@ -643,7 +695,7 @@
         document.getElementById('modalAmount').innerHTML = amountHtml;
         
         const trendEl = document.getElementById('modalTrend');
-        trendEl.textContent = !atRiskBool ? '🌟 Reliable Payer' : '⚠️ At Risk';
+        trendEl.textContent = !atRiskBool ? 'Early' : 'Late';
         trendEl.className = 'trend-chip ' + (!atRiskBool ? 'trend-early' : 'trend-late');
 
         // Payment Action Button
@@ -795,17 +847,29 @@
     document.addEventListener('DOMContentLoaded', function() {
         const ctx = document.getElementById('electricitySalesChart')?.getContext('2d');
         if (ctx) {
-            new Chart(ctx, {
+            @php
+                $graphLabels = [];
+                $graphData = [];
+                $graphColors = [];
+                
+                for ($i = 11; $i >= 1; $i--) {
+                    $graphLabels[] = date('M', strtotime("-{$i} months"));
+                    $graphData[] = rand(45000, 70000); 
+                    $graphColors[] = '#38bdf8';
+                }
+                $graphLabels[] = date('M') . ' (Now)';
+                $graphData[] = 0; 
+                $graphColors[] = '#0284c7'; 
+            @endphp
+
+            window.salesChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May (Now)', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                    labels: @json($graphLabels),
                     datasets: [{
                         label: 'Electricity Collection (₱)',
-                        data: [142500, 155000, 168000, 192400, 215800, 175000, 185000, 198000, 170000, 160000, 152000, 165000],
-                        backgroundColor: [
-                            '#10b981', '#10b981', '#10b981', '#10b981', '#3b82f6',
-                            '#e2e8f0', '#e2e8f0', '#e2e8f0', '#e2e8f0', '#e2e8f0', '#e2e8f0', '#e2e8f0'
-                        ],
+                        data: @json($graphData),
+                        backgroundColor: @json($graphColors),
                         borderRadius: 6,
                         borderSkipped: false
                     }]

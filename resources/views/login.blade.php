@@ -400,7 +400,7 @@
                     </div>
                 </div>
 
-                <div class="login-forgot">Forgot your password?</div>
+                <div class="login-forgot" onclick="openForgotModal()">Forgot your password?</div>
 
                 <button class="login-submit" id="login-btn" onclick="doLogin()">
                     <span id="login-btn-text">Sign In →</span>
@@ -428,8 +428,16 @@
 
         errEl.style.display = 'none';
 
-        if (!email || !password) {
+        if (!email && !password) {
             errEl.textContent = 'Please enter your email and password.';
+            errEl.style.display = 'block';
+            return;
+        } else if (!email) {
+            errEl.textContent = 'Please enter your email address.';
+            errEl.style.display = 'block';
+            return;
+        } else if (!password) {
+            errEl.textContent = 'Please enter your password.';
             errEl.style.display = 'block';
             return;
         }
@@ -488,8 +496,192 @@
 
     // Enter key support
     document.addEventListener('keydown', e => {
-        if (e.key === 'Enter') doLogin();
+        if (e.key === 'Enter') {
+            if (document.activeElement.id === 'email-input') {
+                document.getElementById('password-input').focus();
+            } else {
+                doLogin();
+            }
+        }
     });
+</script>
+
+<!-- Forgot Password Modal -->
+<div id="forgotPwModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: var(--bg); width: 90%; max-width: 400px; border-radius: 16px; padding: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h3 style="margin: 0; font-family: var(--font-display); font-size: 20px; color: var(--text-dark);">Reset Password</h3>
+            <button onclick="closeForgotModal()" style="background: none; border: none; font-size: 20px; color: #94a3b8; cursor: pointer;">✕</button>
+        </div>
+        
+        <div id="fp-step-1">
+            <p style="font-size: 14px; color: var(--text-mid); margin-bottom: 16px;">Enter your email address and we'll send you a 6-digit OTP to reset your password.</p>
+            <input type="email" id="fp-email" class="form-input" placeholder="you@example.com" style="width: 100%; box-sizing: border-box; margin-bottom: 16px; padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
+            <button class="login-submit" onclick="sendOtp()" id="fp-btn-send">Send OTP</button>
+        </div>
+        
+        <div id="fp-step-2" style="display: none;">
+            <p style="font-size: 14px; color: var(--text-mid); margin-bottom: 16px;">Enter the 6-digit OTP sent to your email.</p>
+            <input type="text" id="fp-otp" class="form-input" placeholder="123456" style="width: 100%; box-sizing: border-box; margin-bottom: 16px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; text-align: center; letter-spacing: 4px; font-weight: bold;">
+            <button class="login-submit" onclick="verifyOtp()" id="fp-btn-verify">Verify OTP</button>
+        </div>
+        
+        <div id="fp-step-3" style="display: none;">
+            <p style="font-size: 14px; color: var(--text-mid); margin-bottom: 16px;">Set your new password.</p>
+            <div class="input-icon-wrap" style="margin-bottom: 12px;">
+                <input type="password" id="fp-new-pw" class="form-input" placeholder="New Password" style="width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--border); border-radius: 8px; padding-right: 40px;">
+                <button type="button" class="input-show-pw" onclick="toggleFpPw('fp-new-pw', this)" style="right: 12px;">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+            </div>
+            <div class="input-icon-wrap" style="margin-bottom: 16px;">
+                <input type="password" id="fp-confirm-pw" class="form-input" placeholder="Confirm New Password" style="width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--border); border-radius: 8px; padding-right: 40px;">
+                <button type="button" class="input-show-pw" onclick="toggleFpPw('fp-confirm-pw', this)" style="right: 12px;">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+            </div>
+            <button class="login-submit" onclick="resetPassword()" id="fp-btn-reset">Reset Password</button>
+        </div>
+        
+        <div id="fp-error" style="display: none; background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 8px; font-size: 13px; margin-top: 16px; text-align: center;"></div>
+        <div id="fp-success" style="display: none; background: #d1fae5; color: #065f46; padding: 10px; border-radius: 8px; font-size: 13px; margin-top: 16px; text-align: center;"></div>
+    </div>
+</div>
+
+<script>
+    function openForgotModal() {
+        document.getElementById('forgotPwModal').style.display = 'flex';
+        document.getElementById('fp-step-1').style.display = 'block';
+        document.getElementById('fp-step-2').style.display = 'none';
+        document.getElementById('fp-step-3').style.display = 'none';
+        document.getElementById('fp-email').value = '';
+        document.getElementById('fp-error').style.display = 'none';
+        document.getElementById('fp-success').style.display = 'none';
+    }
+    
+    function closeForgotModal() {
+        document.getElementById('forgotPwModal').style.display = 'none';
+    }
+    
+    async function sendOtp() {
+        const email = document.getElementById('fp-email').value.trim();
+        if (!email) {
+            showFpError("Please enter your email.");
+            return;
+        }
+        
+        const btn = document.getElementById('fp-btn-send');
+        btn.textContent = 'Sending...';
+        btn.disabled = true;
+        hideFpError();
+        
+        try {
+            const res = await fetch('/forgot-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') },
+                body: JSON.stringify({ email })
+            });
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('fp-step-1').style.display = 'none';
+                document.getElementById('fp-step-2').style.display = 'block';
+                document.getElementById('fp-otp').value = '';
+            } else {
+                showFpError(data.message || "Failed to send OTP.");
+            }
+        } catch (e) {
+            showFpError("An error occurred.");
+        }
+        btn.textContent = 'Send OTP';
+        btn.disabled = false;
+    }
+
+    async function verifyOtp() {
+        const email = document.getElementById('fp-email').value.trim();
+        const otp = document.getElementById('fp-otp').value.trim();
+        if (!otp) { showFpError("Please enter OTP."); return; }
+        
+        const btn = document.getElementById('fp-btn-verify');
+        btn.textContent = 'Verifying...';
+        btn.disabled = true;
+        hideFpError();
+        
+        try {
+            const res = await fetch('/verify-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') },
+                body: JSON.stringify({ email, otp })
+            });
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('fp-step-2').style.display = 'none';
+                document.getElementById('fp-step-3').style.display = 'block';
+                document.getElementById('fp-new-pw').value = '';
+            } else {
+                showFpError(data.message || "Invalid OTP.");
+            }
+        } catch (e) {
+            showFpError("An error occurred.");
+        }
+        btn.textContent = 'Verify OTP';
+        btn.disabled = false;
+    }
+
+    async function resetPassword() {
+        const email = document.getElementById('fp-email').value.trim();
+        const otp = document.getElementById('fp-otp').value.trim();
+        const password = document.getElementById('fp-new-pw').value;
+        const confirmPassword = document.getElementById('fp-confirm-pw').value;
+        if (!password || password.length < 8) { showFpError("Password must be at least 8 characters."); return; }
+        if (password !== confirmPassword) { showFpError("Passwords do not match."); return; }
+        
+        const btn = document.getElementById('fp-btn-reset');
+        btn.textContent = 'Resetting...';
+        btn.disabled = true;
+        hideFpError();
+        
+        try {
+            const res = await fetch('/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') },
+                body: JSON.stringify({ email, otp, password })
+            });
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('fp-step-3').style.display = 'none';
+                const successEl = document.getElementById('fp-success');
+                successEl.textContent = "Password reset successfully! You can now log in.";
+                successEl.style.display = 'block';
+                setTimeout(() => { closeForgotModal(); }, 3000);
+            } else {
+                showFpError(data.message || "Failed to reset password.");
+            }
+        } catch (e) {
+            showFpError("An error occurred.");
+        }
+        btn.textContent = 'Reset Password';
+        btn.disabled = false;
+    }
+    
+    function showFpError(msg) {
+        const el = document.getElementById('fp-error');
+        el.textContent = msg;
+        el.style.display = 'block';
+    }
+    function hideFpError() {
+        document.getElementById('fp-error').style.display = 'none';
+    }
+    
+    function toggleFpPw(inputId, btn) {
+        const inp = document.getElementById(inputId);
+        if (inp.type === 'password') {
+            inp.type = 'text';
+            btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+        } else {
+            inp.type = 'password';
+            btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+        }
+    }
 </script>
 </body>
 </html>

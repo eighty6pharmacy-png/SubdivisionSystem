@@ -80,10 +80,13 @@
         </nav>
         
         <div class="sidebar-footer">
-            <a href="/login" class="nav-item" onclick="return confirm('Are you sure you want to log out?')">
+            <a href="#" class="nav-item" onclick="if(confirm('Are you sure you want to log out?')) { document.getElementById('logout-form').submit(); } return false;">
                 <span class="nav-icon">🚪</span>
                 <span>Logout</span>
             </a>
+            <form id="logout-form" action="/logout" method="POST" style="display: none;">
+                @csrf
+            </form>
         </div>
     </aside>
 
@@ -181,5 +184,12 @@
         };
     </script>
     @stack('scripts')
+    <script>
+        window.addEventListener('pageshow', function (event) {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        });
+    </script>
 </body>
 </html>

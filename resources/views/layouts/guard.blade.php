@@ -47,10 +47,13 @@
         </nav>
         
         <div class="sidebar-footer">
-            <a href="/login" class="nav-item" onclick="return confirm('End Shift and Log out?')">
+            <a href="#" class="nav-item" onclick="if(confirm('End Shift and Log out?')) { document.getElementById('logout-form').submit(); } return false;">
                 <span class="nav-icon">🚪</span>
                 <span>End Shift</span>
             </a>
+            <form id="logout-form" action="/logout" method="POST" style="display: none;">
+                @csrf
+            </form>
         </div>
     </aside>
 
@@ -85,5 +88,12 @@
         overlay.classList.toggle('active');
     }
 </script>
+    <script>
+        window.addEventListener('pageshow', function (event) {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        });
+    </script>
 </body>
 </html>

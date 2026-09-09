@@ -70,8 +70,9 @@ if (!function_exists('getElectricalBills')) {
                     $bill = $resident->utilityBills->first();
                     
                     $payments = [];
-                    if ($bill) {
-                        $payments = $bill->payments->map(function ($p) {
+                    if ($resident->utilityBills->count() > 0) {
+                        $allPayments = $resident->utilityBills->flatMap->payments;
+                        $payments = $allPayments->map(function ($p) {
                             return [
                                 'month' => \Carbon\Carbon::parse($p->payment_date)->format('M Y'),
                                 'amount' => $p->amount_paid,
@@ -121,8 +122,9 @@ if (!function_exists('getWaterBills')) {
                     $bill = $resident->utilityBills->first();
                     
                     $payments = [];
-                    if ($bill) {
-                        $payments = $bill->payments->map(function ($p) {
+                    if ($resident->utilityBills->count() > 0) {
+                        $allPayments = $resident->utilityBills->flatMap->payments;
+                        $payments = $allPayments->map(function ($p) {
                             return [
                                 'month' => \Carbon\Carbon::parse($p->payment_date)->format('M Y'),
                                 'amount' => $p->amount_paid,
@@ -236,7 +238,7 @@ Route::get('/appointment', function () {
 
 Route::get('/login', function () {
     return view('login');
-})->name('login');
+})->name('login')->middleware('guest');
 
 Route::post('/login', function (\Illuminate\Http\Request $request) {
     $credentials = $request->validate([
@@ -264,13 +266,94 @@ Route::post('/login', function (\Illuminate\Http\Request $request) {
         'success' => false,
         'message' => 'Username or password is invalid!!',
     ], 401);
-});
+})->middleware('throttle:5,1');
 
 Route::post('/logout', function (\Illuminate\Http\Request $request) {
     \Illuminate\Support\Facades\Auth::logout();
     $request->session()->invalidate();
     $request->session()->regenerateToken();
-    return redirect('/');
+    return redirect('/login');
+});
+
+Route::post('/forgot-password', function (\Illuminate\Http\Request $request) {
+    $request->validate(['email' => 'required|email']);
+    $user = \App\Models\User::where('email', $request->email)->first();
+    
+    if (!$user) {
+        return response()->json(['success' => false, 'message' => 'Email address not found in the system.']);
+    }
+    
+    $otp = sprintf('%06d', rand(100000, 999999));
+    \Illuminate\Support\Facades\Cache::put('otp_' . $user->email, $otp, now()->addMinutes(15));
+    
+    try {
+        \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($user, $otp) {
+            $message->to($user->email)
+                ->subject('Password Reset OTP — Althesa Subdivision')
+                ->html("
+                    <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff;'>
+                        <div style='background: #3b82f6; padding: 20px; border-radius: 12px; text-align: center;'>
+                            <h2 style='color: #ffffff; margin: 0;'>Althesa Subdivision</h2>
+                            <p style='color: #eff6ff; margin: 4px 0 0 0; font-size: 13px;'>Password Reset Request</p>
+                        </div>
+                        <div style='padding: 20px 0;'>
+                            <p style='font-size: 16px; color: #0f172a;'>Hello <strong>{$user->name}</strong>,</p>
+                            <p style='color: #475569;'>We received a request to reset your password. Use the following One-Time Password (OTP) to proceed.</p>
+                            <div style='background: #eff6ff; border: 2px dashed #3b82f6; padding: 20px; border-radius: 12px; text-align: center; margin: 20px 0;'>
+                                <span style='font-size: 13px; color: #1d4ed8; text-transform: uppercase; font-weight: 700;'>Your Reset OTP</span>
+                                <div style='font-size: 36px; font-weight: 800; color: #1d4ed8; letter-spacing: 6px; margin-top: 8px;'>{$otp}</div>
+                            </div>
+                            <p style='color: #475569; font-size: 13px;'>This OTP will expire in 15 minutes. If you did not request a password reset, please ignore this email.</p>
+                        </div>
+                        <div style='border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 12px; color: #94a3b8; text-align: center;'>
+                            Althesa Subdivision Management Office
+                        </div>
+                    </div>
+                ");
+        });
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('Failed to send OTP email: ' . $e->getMessage());
+        return response()->json(['success' => false, 'message' => 'Failed to send email.']);
+    }
+    
+    return response()->json(['success' => true]);
+});
+
+Route::post('/verify-otp', function (\Illuminate\Http\Request $request) {
+    $request->validate([
+        'email' => 'required|email',
+        'otp' => 'required|string'
+    ]);
+    
+    $cachedOtp = \Illuminate\Support\Facades\Cache::get('otp_' . $request->email);
+    
+    if ($cachedOtp && $cachedOtp === $request->otp) {
+        return response()->json(['success' => true]);
+    }
+    
+    return response()->json(['success' => false, 'message' => 'Invalid or expired OTP.']);
+});
+
+Route::post('/reset-password', function (\Illuminate\Http\Request $request) {
+    $request->validate([
+        'email' => 'required|email',
+        'otp' => 'required|string',
+        'password' => 'required|string|min:8'
+    ]);
+    
+    $cachedOtp = \Illuminate\Support\Facades\Cache::get('otp_' . $request->email);
+    
+    if ($cachedOtp && $cachedOtp === $request->otp) {
+        $user = \App\Models\User::where('email', $request->email)->first();
+        if ($user) {
+            $user->password = \Illuminate\Support\Facades\Hash::make($request->password);
+            $user->save();
+            \Illuminate\Support\Facades\Cache::forget('otp_' . $request->email);
+            return response()->json(['success' => true]);
+        }
+    }
+    
+    return response()->json(['success' => false, 'message' => 'Failed to reset password.']);
 });
 
 if (!function_exists('getVisitorPins')) {
@@ -571,8 +654,8 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
     // User Management System
     Route::get('/users', function () { 
-        $users = \App\Models\User::with('lots')->get()->map(function($u) {
-            $role = $u->getRoleNames()->first() ?? 'Resident';
+        $users = \App\Models\User::with(['lots', 'roles'])->get()->map(function(/** @var \App\Models\User */ $u) {
+            $role = $u->roles->first()->name ?? 'Resident';
             $lot = $u->lots->first();
             return [
                 'id' => 'USR-' . str_pad($u->id, 4, '0', STR_PAD_LEFT),
@@ -1038,31 +1121,18 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
         foreach ($lots as $lot) {
             $user = $lot->users->first();
             
-            // Check if there's already an unpaid bill for this cycle to prevent duplicates
-            $existing = \App\Models\UtilityBill::where('lot_id', $lot->id)
-                ->where('type', $type)
-                ->where('status', 'unpaid')
-                ->first();
-                
-            if ($existing) {
-                $existing->update([
-                    'usage_value' => 0,
-                    'amount' => 0,
-                    'due_date' => null
-                ]);
-            } else {
-                \App\Models\UtilityBill::create([
-                    'id' => (string) \Illuminate\Support\Str::uuid(),
-                    'type' => $type,
-                    'user_id' => $user ? $user->id : null,
-                    'lot_id' => $lot->id,
-                    'usage_value' => 0,
-                    'amount' => 0,
-                    'due_date' => null,
-                    'status' => 'unpaid',
-                    'is_at_risk' => false,
-                ]);
-            }
+            // Always create a new bill for the new cycle
+            \App\Models\UtilityBill::create([
+                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'type' => $type,
+                'user_id' => $user ? $user->id : null,
+                'lot_id' => $lot->id,
+                'usage_value' => 0,
+                'amount' => 0,
+                'due_date' => null,
+                'status' => 'unpaid',
+                'is_at_risk' => false,
+            ]);
         }
         return response()->json(['success' => true]);
     });

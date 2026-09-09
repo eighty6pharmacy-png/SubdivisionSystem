@@ -90,7 +90,10 @@
             <p style="font-size: 14px; color: #64748b; line-height: 1.6; margin-bottom: 32px;">Are you sure you want to log out? Any unsaved changes in your profile or reports may be lost.</p>
             <div style="display: flex; gap: 12px;">
                 <button class="btn btn-outline" style="flex: 1; justify-content: center; padding: 14px;" onclick="closeLogoutModal()">Cancel</button>
-                <a href="/login" class="btn btn-primary" style="flex: 1; justify-content: center; padding: 14px; background: #ef4444; border-color: #ef4444; text-decoration: none;">Yes, Log Out</a>
+                <a href="#" onclick="document.getElementById('resident-logout-form').submit(); return false;" class="btn btn-primary" style="flex: 1; justify-content: center; padding: 14px; background: #ef4444; border-color: #ef4444; text-decoration: none;">Yes, Log Out</a>
+                <form id="resident-logout-form" action="/logout" method="POST" style="display: none;">
+                    @csrf
+                </form>
             </div>
         </div>
     </div>
@@ -241,5 +244,12 @@
     });
 
 </script>
+    <script>
+        window.addEventListener('pageshow', function (event) {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        });
+    </script>
 </body>
 </html>
