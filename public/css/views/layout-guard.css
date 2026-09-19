@@ -1,0 +1,7 @@
+:root {
+            --guard-primary: #1e3a8a; /* Blue 900 */
+            --guard-primary-soft: #eff6ff; /* Blue 50 */
+            --guard-accent: #3b82f6; /* Blue 500 */
+        }
+        .sidebar-logo p { color: var(--guard-accent); font-weight: 700; }
+        .nav-item.active { background: var(--guard-primary-soft); color: var(--guard-primary); border-left: 4px solid var(--guard-primary); }

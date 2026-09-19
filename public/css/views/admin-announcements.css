@@ -1,0 +1,5 @@
+.active-filter {
+        background: var(--ann-primary) !important;
+        color: white !important;
+        border-color: var(--ann-primary) !important;
+    }

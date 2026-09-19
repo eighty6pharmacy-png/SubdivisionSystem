@@ -3,58 +3,9 @@
 @section('title', 'Gate Scanner Operations')
 
 @section('content')
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
-<style>
-    /* PIN Inputs for Guard */
-    .guard-pin-form {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        width: 100%;
-        max-width: 480px;
-        margin: 0 auto;
-    }
-
-    .guard-pin-digits {
-        display: flex;
-        gap: 12px;
-        margin-bottom: 24px;
-        justify-content: center;
-        width: 100%;
-    }
-
-    .guard-pin-digit {
-        width: 60px;
-        height: 70px;
-        font-size: 32px;
-        font-weight: 800;
-        text-align: center;
-        border: 2px solid var(--border);
-        border-radius: 12px;
-        background: #fff;
-        color: var(--guard-primary);
-        transition: all 0.2s ease;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    }
-
-    .guard-pin-digit:focus {
-        outline: none;
-        border-color: var(--guard-accent);
-        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
-        transform: translateY(-2px);
-    }
-
-    .walkin-card {
-        border: 2px dashed #3b82f6;
-        background: #f0f9ff;
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
-    .walkin-card:hover {
-        background: #e0f2fe;
-        transform: translateY(-2px);
-    }
-</style>
+<link rel="stylesheet" href="{{ asset('css/views/guard-dashboard.css') }}">
 
 <div class="fade-in">
 
@@ -70,14 +21,9 @@
                 Input the 6-digit access PIN provided by the guest to verify entry and unlock routing.
             </p>
 
-            <form class="guard-pin-form" onsubmit="validatePin(event)">
-                <div class="guard-pin-digits">
-                    <input type="text" class="guard-pin-digit" maxlength="1" id="pin-0" inputmode="numeric" autofocus>
-                    <input type="text" class="guard-pin-digit" maxlength="1" id="pin-1" inputmode="numeric">
-                    <input type="text" class="guard-pin-digit" maxlength="1" id="pin-2" inputmode="numeric">
-                    <input type="text" class="guard-pin-digit" maxlength="1" id="pin-3" inputmode="numeric">
-                    <input type="text" class="guard-pin-digit" maxlength="1" id="pin-4" inputmode="numeric">
-                    <input type="text" class="guard-pin-digit" maxlength="1" id="pin-5" inputmode="numeric">
+            <form class="guard-pin-form" id="guardPinForm" onsubmit="event.preventDefault(); validatePin(event);">
+                <div class="guard-pin-digits" style="display: flex; justify-content: center; gap: 8px;">
+                    <input type="text" id="pin-input" class="guard-pin-digit" maxlength="6" inputmode="numeric" autofocus style="width: 240px; text-align: center; letter-spacing: 8px; font-size: 24px; padding: 12px; font-weight: 700;">
                 </div>
 
                 <div id="pinErrorBox" style="display: none; width: 100%; padding: 12px; background: #fee2e2; border: 1px solid #f87171; color: #991b1b; border-radius: 8px; font-size: 13px; font-weight: 600; text-align: center; margin-bottom: 16px;">
@@ -105,7 +51,7 @@
     <div class="analytic-card" style="padding: 0; overflow: hidden; margin-top: 24px;">
         <div style="padding: 20px 24px; border-bottom: 1px solid var(--bill-border); display: flex; justify-content: space-between; align-items: center;">
             <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0;">Today's Expected Visitors</h3>
-            <span style="font-size: 13px; color: #64748b; font-weight: 600;">Total: {{ count($pins) }}</span>
+            <span style="font-size: 13px; color: #64748b; font-weight: 600;" id="totalVisitorsCount">Total: 0</span>
         </div>
         <div class="bill-table-container">
             <table class="bill-table" id="dailyLogTable">
@@ -118,70 +64,54 @@
                         <th>Status</th>
                     </tr>
                 </thead>
-                <tbody>
-                    @foreach($pins as $index => $pin)
-                    <tr>
-                        <td style="font-family: monospace; font-size: 12px; font-weight: 700; color: #64748b;">
-                            {{ $pin['id'] }}
-                        </td>
-                        <td>
-                            <div style="font-weight: 700; color: #0f172a;">{{ $pin['visitor'] }}</div>
-                        </td>
-                        <td>
-                            <div style="background: var(--guard-primary-soft); color: var(--guard-primary); padding: 4px 10px; border-radius: 6px; display: inline-block; font-weight: 700; font-size: 12px;">
-                                Blk {{ $pin['block'] }} Lot {{ $pin['lot'] }}
-                            </div>
-                            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">{{ $pin['host'] }}</div>
-                        </td>
-                        <td style="font-size: 13px; color: #475569;">
-                            {{ $pin['purpose'] }}
-                        </td>
-                        <td>
-                            <span class="badge {{ $pin['status'] === 'Entered' ? 'badge-success' : ($pin['status'] === 'Pending' ? 'badge-warning' : '') }}" style="padding: 4px 12px; border-radius: 20px;">
-                                {{ $pin['status'] }}
-                            </span>
-                            @if($pin['status'] === 'Entered' && isset($pin['arrival_time']))
-                                <div style="font-size: 11px; color: #10b981; margin-top: 4px; font-weight: 700;">Entered: {{ $pin['arrival_time'] }}</div>
-                            @endif
-                        </td>
-                    </tr>
-                    @endforeach
+                <tbody id="guardVisitorTableBody">
+                    <!-- Populated by JS -->
                 </tbody>
             </table>
         </div>
     </div>
 </div>
+@endsection
 
+@section('scripts')
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ asset('js/dijkstra.js') }}"></script>
+<script src="{{ asset('js/gis-map.js') }}"></script>
 <script>
-    // Pin inputs behavior
-    const digits = document.querySelectorAll('.guard-pin-digit');
-    digits.forEach((digit, idx) => {
-        digit.addEventListener('input', function(e) {
-            e.target.value = e.target.value.replace(/[^0-9]/g, '');
-            if (e.target.value && idx < digits.length - 1) digits[idx + 1].focus();
-        });
-        digit.addEventListener('keydown', function(e) {
-            if (e.key === 'Backspace' && !e.target.value && idx > 0) digits[idx - 1].focus();
-        });
-        digit.addEventListener('paste', function(e) {
-            e.preventDefault();
-            const pasted = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
-            pasted.split('').forEach((char, i) => { if (digits[i]) digits[i].value = char; });
-            if (pasted.length > 0) digits[Math.min(pasted.length, digits.length - 1)].focus();
-        });
+    // Pin input behavior
+    const pinInput = document.getElementById('pin-input');
+    const guardPinForm = document.getElementById('guardPinForm');
+
+    pinInput.addEventListener('input', function(e) {
+        e.target.value = e.target.value.replace(/[^0-9]/g, '');
+        if (e.target.value.length === 6) {
+            validatePin(new Event('submit', { cancelable: true, bubbles: true }));
+        }
     });
 
-    const staticPins = {!! json_encode($pins) !!};
-    const adminApprovedPins = JSON.parse(localStorage.getItem('approved_visitor_pins') || '[]');
-    const mockDatabase = [...adminApprovedPins, ...staticPins];
-    const mockUsers = {!! json_encode($users ?? []) !!};
+    // Fetch and render daily log
+    function loadDailyLog() {
+        fetch('/api/visitors')
+        .then(res => res.json())
+        .then(visitors => {
+            const tbody = document.getElementById('guardVisitorTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            
+            let count = 0;
 
-    // Prepend Admin-approved visitor PINs to table on page load
-    document.addEventListener('DOMContentLoaded', () => {
-        const tbody = document.querySelector('#dailyLogTable tbody');
-        if (tbody && adminApprovedPins.length > 0) {
-            adminApprovedPins.forEach(pin => {
+            visitors.forEach(pin => {
+                count++;
                 const tr = document.createElement('tr');
+                let badgeClass = '';
+                if(pin.status === 'Entered') badgeClass = 'badge-success';
+                if(pin.status === 'Pending' || pin.status === 'Awaiting Admin Approval') badgeClass = 'badge-warning';
+
+                let arrivalHtml = '';
+                if(pin.status === 'Entered' && pin.arrival_time) {
+                    arrivalHtml = `<div style="font-size: 11px; color: #10b981; margin-top: 4px; font-weight: 700;">Entered: ${pin.arrival_time}</div>`;
+                }
+
                 tr.innerHTML = `
                     <td style="font-family: monospace; font-size: 12px; font-weight: 700; color: #64748b;">${pin.id}</td>
                     <td><div style="font-weight: 700; color: #0f172a;">${pin.visitor}</div></td>
@@ -190,107 +120,112 @@
                         <div style="font-size: 11px; color: #64748b; margin-top: 4px;">${pin.host}</div>
                     </td>
                     <td style="font-size: 13px; color: #475569;">${pin.purpose}</td>
-                    <td><span class="badge badge-warning" style="padding: 4px 12px; border-radius: 20px; background:#fef3c7; color:#b45309;">Approved (PIN: ${pin.pin})</span></td>
+                    <td>
+                        <span class="badge ${badgeClass}" style="padding: 4px 12px; border-radius: 20px;">${pin.status}</span>
+                        ${arrivalHtml}
+                    </td>
                 `;
-                tbody.insertBefore(tr, tbody.firstChild);
+                tbody.appendChild(tr);
             });
-        }
+
+            document.getElementById('totalVisitorsCount').textContent = `Total: ${count}`;
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadDailyLog();
     });
 
     function validatePin(e) {
-        e.preventDefault();
-        const pin = Array.from(digits).map(d => d.value).join('');
+        if (e && e.preventDefault) e.preventDefault();
+        const pin = document.getElementById('pin-input').value;
         const errBox = document.getElementById('pinErrorBox');
+        const pInput = document.getElementById('pin-input');
         
         errBox.style.display = 'none';
 
         if (pin.length !== 6) {
             errBox.style.display = 'block';
             errBox.textContent = '❌ PLEASE ENTER A 6-DIGIT PIN';
+            pInput.style.borderColor = '#ef4444';
+            pInput.style.color = '#ef4444';
+            pInput.style.background = '#fef2f2';
+            setTimeout(() => { 
+                pInput.style.borderColor = ''; 
+                pInput.style.color = ''; 
+                pInput.style.background = ''; 
+            }, 1500);
             return;
         }
 
-        let record = null;
-        let recordType = 'Visitor';
-
-        // 1. Search SubdivisionStore for visitor PINs
-        const storeVisitors = SubdivisionStore.getVisitors();
-        const storeRecord = storeVisitors.find(p => p.pin === pin && p.status !== 'Expired');
-        if (storeRecord) {
-            record = storeRecord;
-            recordType = 'Visitor';
-        }
-
-        // 2. Search mock visitor database
-        if (!record) {
-            const visitorRecord = mockDatabase.find(p => p.pin === pin && p.status !== 'Expired');
-            if (visitorRecord) {
-                record = visitorRecord;
-                recordType = 'Visitor';
-            }
-        }
-
-        // 3. Search appointment pins from localStorage
-        if (!record) {
-            let apptPins = JSON.parse(localStorage.getItem('appointmentPins') || '[]');
-            const apptRecord = apptPins.find(p => p.pin === pin && p.status !== 'Expired');
-            if (apptRecord) {
-                record = {
-                    id: apptRecord.id,
-                    visitor: apptRecord.client,
-                    block: 'N/A',
-                    lot: 'N/A',
-                    host: 'Sales Office (Property Viewing)',
-                    purpose: 'Scheduled Appointment'
-                };
-                recordType = 'Appointment';
-            }
-        }
-
-        // 4. Search Resident PINs
-        if (!record && mockUsers) {
-            const resident = mockUsers.find(u => u.pin === pin && u.role === 'Resident');
-            if (resident) {
-                const parts = resident.meta.split(', ');
-                let block = 'N/A', lot = 'N/A';
-                if (parts.length === 2) {
-                    block = parts[0].replace('Block ', '');
-                    lot = parts[1].replace('Lot ', '');
+        fetch('/api/validate-pin', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify({ pin: pin })
+        })
+        .then(res => {
+            if (!res.ok) throw new Error("Server Error");
+            return res.json();
+        })
+        .then(data => {
+            if (data.success) {
+                // Map API response to renderSuccess format
+                let block = 'N/A';
+                let lot = 'N/A';
+                let host = data.destination;
+                
+                if (data.destination && data.destination.includes('Block')) {
+                    const parts = data.destination.split(', ');
+                    if(parts.length === 2) {
+                        block = parts[0].replace('Block ', '');
+                        lot = parts[1].replace('Lot ', '');
+                    }
                 }
-                record = {
-                    id: resident.id,
-                    visitor: resident.name,
+                
+                let record = {
+                    id: data.visitor_id,
+                    visitor: data.visitor_name,
                     block: block,
                     lot: lot,
-                    host: 'Resident Self-Entry',
-                    purpose: 'Returning Resident'
+                    host: host
                 };
-                recordType = 'Resident';
-            }
-        }
 
-        if (record) {
-            // Success! Render GIS and Details
-            renderSuccess(record, recordType);
-        } else {
-            // Failed
-            errBox.style.display = 'block';
-            errBox.textContent = '❌ ACCESS DENIED: INVALID OR EXPIRED PIN';
-            digits.forEach(d => {
-                d.style.borderColor = '#ef4444';
-                d.style.color = '#ef4444';
-                d.style.background = '#fef2f2';
+                // Automatically mark as entered
+                fetch('/api/visitors/' + data.visitor_id + '/enter', {
+                    method: 'PUT',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                    },
+                    body: JSON.stringify({ plate_number: 'N/A' })
+                }).then(() => {
+                    renderSuccess(record, 'Visitor');
+                });
+            } else {
+                errBox.style.display = 'block';
+                errBox.textContent = '❌ ' + (data.message || 'INVALID OR EXPIRED PIN');
+                pInput.style.borderColor = '#ef4444';
+                pInput.style.color = '#ef4444';
+                pInput.style.background = '#fef2f2';
                 setTimeout(() => { 
-                    d.style.borderColor = ''; 
-                    d.style.color = ''; 
-                    d.style.background = ''; 
+                    pInput.style.borderColor = ''; 
+                    pInput.style.color = ''; 
+                    pInput.style.background = ''; 
                 }, 1500);
-            });
-        }
+            }
+        }).catch(err => {
+            errBox.style.display = 'block';
+            errBox.textContent = '❌ SERVER ERROR';
+            console.error(err);
+        });
     }
 
     function renderSuccess(record, type = 'Visitor') {
         const resultCard = document.getElementById('authResultCard');
+        resultCard.onclick = null; // Remove the walk-in modal click
         resultCard.style.padding = '0';
         resultCard.style.border = 'none';
         resultCard.style.background = '#fff';
@@ -303,41 +238,62 @@
             <div style="background: ${headerColor}; color: white; padding: 16px 24px; border-radius: 20px 20px 0 0; width: 100%; display: flex; align-items: center; justify-content: space-between;">
                 <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px;">
                     <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
-                    ${type.toUpperCase()} PIN VALIDATED
+                    VISIT RECORDED & VALIDATED
                 </div>
                 <div style="font-size: 12px; font-family: monospace; background: rgba(0,0,0,0.15); padding: 4px 10px; border-radius: 12px;">ID: ${record.id}</div>
             </div>
 
             <div style="padding: 24px; width: 100%;">
-                <div style="margin-bottom: 20px;">
-                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">${type === 'Resident' ? 'Resident Name' : 'Visitor'}</div>
-                    <div style="font-size: 20px; font-weight: 800; color: #0f172a;">${record.visitor}</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                    <div>
+                        <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">${type === 'Resident' ? 'Resident Name' : 'Visitor'}</div>
+                        <div style="font-size: 18px; font-weight: 800; color: #0f172a;">${record.visitor}</div>
+                    </div>
+                    <div style="background: var(--guard-primary-soft); padding: 12px; border-radius: 12px; border: 1px solid #dbeafe;">
+                        <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Destination</div>
+                        <div style="font-size: 13px; font-weight: 800; color: #1e3a8a;">Blk ${record.block} Lot ${record.lot}</div>
+                    </div>
                 </div>
 
-                <div style="background: var(--guard-primary-soft); padding: 16px; border-radius: 12px; border: 1px solid #dbeafe; margin-bottom: 20px;">
-                    <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Destination</div>
-                    <div style="font-size: 14px; font-weight: 800; color: #1e3a8a;">Blk ${record.block} Lot ${record.lot} - ${record.host}</div>
-                </div>
+                <div id="guardMapContainer" style="width: 100%; height: 250px; border-radius: 12px; margin-bottom: 20px; background: #f1f5f9; overflow: hidden; border: 1px solid #cbd5e1;"></div>
 
                 <div style="margin-bottom: 20px;">
                     <label style="font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; display: block; margin-bottom: 8px;">Vehicle Plate Number (Optional)</label>
-                    <input type="text" id="plateNo" class="filter-select" style="width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px;" placeholder="e.g. ABC 1234">
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="plateNo" class="filter-select" style="flex: 1; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px;" placeholder="e.g. ABC 1234">
+                        <button class="btn btn-secondary" onclick="updatePlate('${record.id}')" style="padding: 12px 20px; font-weight: 700; border-radius: 8px;">Save</button>
+                    </div>
                 </div>
 
-                <button class="btn btn-primary" style="width: 100%; justify-content: center; background: ${headerColor}; border-color: ${headerColor}; padding: 14px;" onclick="markEntered('${record.id}')">
-                    Approve Entry
+                <button class="btn btn-primary" style="width: 100%; justify-content: center; background: ${headerColor}; border-color: ${headerColor}; padding: 14px;" onclick="location.reload()">
+                    Next Visitor
                 </button>
             </div>
         `;
+
+        setTimeout(() => {
+            initGISMap('guardMapContainer', {
+                interactive: true,
+                showRouting: true,
+                endNode: record.block !== 'N/A' && record.lot !== 'N/A' ? \`B\${record.block} L\${record.lot}\` : null
+            });
+        }, 100);
     }
 
-    function markEntered(id) {
+    function updatePlate(id) {
         const plate = document.getElementById('plateNo')?.value || 'N/A';
-        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        SubdivisionStore.updateVisitorStatus(id, 'Entered');
-        alert(`Visitor approved! Plate: ${plate}. Entry logged at ${now}.`);
-        location.reload();
+        fetch('/api/visitors/' + id + '/enter', {
+            method: 'PUT',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify({ plate_number: plate })
+        }).then(res => res.json()).then(data => {
+            if (data.success) {
+                alert('Plate number updated!');
+            }
+        });
     }
 
     function openWalkInModal() {
@@ -361,30 +317,32 @@
             plate_number: document.getElementById('wPlate').value || 'N/A'
         };
 
-        fetch('/simulate/walk-in', {
+        fetch('/api/visitors', {
             method: 'POST',
             headers: { 
-                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(data)
-        }).then(() => {
-            alert(`Walk-in recorded for ${data.name}.`);
-            location.reload();
+            body: JSON.stringify({
+                visitor_name: data.name,
+                purpose: data.purpose,
+                plate_number: data.plate_number,
+                type: 'Walk-in',
+                validity: 'Today'
+            })
+        }).then(res => res.json()).then(response => {
+            if(response.success) {
+                alert(`Walk-in recorded for ${data.name}.`);
+                location.reload();
+            } else {
+                alert('Failed to record walk-in.');
+            }
         });
     }
 
 </script>
 
-<style>
-    @media (max-width: 900px) {
-        div[style*="display: grid; grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
-    }
-    @media (max-width: 480px) {
-        .guard-pin-digit { width: 45px; height: 55px; font-size: 24px; }
-        .guard-pin-digits { gap: 8px; }
-    }
-</style>
+
 <!-- Walk-in Registration Modal -->
 <div id="walkinModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center; padding:20px;">
     <div class="analytic-card" style="width:100%; max-width:500px; padding:0; overflow:hidden;">

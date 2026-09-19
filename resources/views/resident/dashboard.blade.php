@@ -14,27 +14,67 @@
     <!-- Quick Stats for Resident -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-bottom: 32px;">
         @php
-            $totalOwed = 0;
+            $elecBase = $elecBill['base_amount'] ?? 0;
+            $elecPrevBalance = $elecBill['previous_balance'] ?? 0;
+            $elecAmountBefore = $elecBase + $elecPrevBalance;
+            $elecPenalty = isset($elecBill['at_risk']) && $elecBill['at_risk'] ? ($elecAmountBefore * 0.05) : 0;
+            $elecTotalPaid = $elecBill['total_paid'] ?? 0;
+            $elecTotalOwed = max(0, $elecAmountBefore + $elecPenalty - $elecTotalPaid);
+            
+            $waterBase = $waterBill['base_amount'] ?? 0;
+            $waterPrevBalance = $waterBill['previous_balance'] ?? 0;
+            $waterAmountBefore = $waterBase + $waterPrevBalance;
+            $waterPenalty = isset($waterBill['at_risk']) && $waterBill['at_risk'] ? ($waterAmountBefore * 0.05) : 0;
+            $waterTotalPaid = $waterBill['total_paid'] ?? 0;
+            $waterTotalOwed = max(0, $waterAmountBefore + $waterPenalty - $waterTotalPaid);
+
+            $totalOwed = $elecTotalOwed + $waterTotalOwed;
+            
             $nextDue = 'N/A';
-            if($elecBill['status'] !== 'paid') {
-                $totalOwed += $elecBill['amount'];
-                $nextDue = $elecBill['due'];
-            }
-            if($waterBill['status'] !== 'paid') {
-                $totalOwed += $waterBill['amount'];
-                if($nextDue === 'N/A' || $waterBill['due'] < $nextDue) $nextDue = $waterBill['due'];
+            if($elecTotalOwed > 0) $nextDue = $elecBill['due'] ?? 'N/A';
+            if($waterTotalOwed > 0) {
+                if($nextDue === 'N/A' || (isset($waterBill['due']) && $waterBill['due'] < $nextDue)) $nextDue = $waterBill['due'];
             }
         @endphp
         <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); padding: 24px; border-radius: 24px; color: #fff; box-shadow: 0 10px 15px -3px rgba(5, 150, 105, 0.2);">
             <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; opacity: 0.8;">Utility Balance Due</div>
             <div style="font-size: 36px; font-weight: 800; margin-top: 8px; font-family: var(--font-display);">₱ {{ number_format($totalOwed, 2) }}</div>
+            
+            <div style="margin-top: 16px; background: rgba(0,0,0,0.1); padding: 12px; border-radius: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
+                <div>⚡ Elec Base: ₱{{ number_format($elecBase, 2) }}</div>
+                <div>💧 Water Base: ₱{{ number_format($waterBase, 2) }}</div>
+                <div>Previous Bal: ₱{{ number_format($elecPrevBalance + $waterPrevBalance, 2) }}</div>
+                <div>Penalty: ₱{{ number_format($elecPenalty + $waterPenalty, 2) }}</div>
+                <div style="grid-column: span 2; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); margin-top: 4px;">
+                    Total Paid: -₱{{ number_format($elecTotalPaid + $waterTotalPaid, 2) }}
+                </div>
+            </div>
+            
             <div style="margin-top: 20px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.2); width: fit-content; padding: 6px 12px; border-radius: 12px;">
                 <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
                 Next Due: {{ $nextDue }}
             </div>
         </div>
 
-
+        <div style="background: #fff; padding: 24px; border-radius: 24px; border: 1px solid var(--bill-border);">
+            <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 12px;">Current Meter Readings</div>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div style="background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 13px; font-weight: 700; color: #047857;">⚡ Electricity</div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 10px; color: #64748b;">Prev: {{ $elecBill['prev_reading'] ?? 0 }} | Curr: {{ $elecBill['curr_reading'] ?? 0 }}</div>
+                        <div style="font-size: 16px; font-weight: 800; color: #0f172a;">{{ $elecBill['usage_kwh'] ?? 0 }} kWh</div>
+                    </div>
+                </div>
+                <div style="background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 13px; font-weight: 700; color: #0284c7;">💧 Water</div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 10px; color: #64748b;">Prev: {{ $waterBill['prev_reading'] ?? 0 }} | Curr: {{ $waterBill['curr_reading'] ?? 0 }}</div>
+                        <div style="font-size: 16px; font-weight: 800; color: #0f172a;">{{ $waterBill['usage_cbm'] ?? ($waterBill['usage_m3'] ?? 0) }} m³</div>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div style="background: #fff; padding: 24px; border-radius: 24px; border: 1px solid var(--bill-border); display: flex; flex-direction: column; justify-content: space-between;">
             <div>
                 <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Active Incident Reports</div>
@@ -73,12 +113,22 @@
             </div>
         </div>
 
+        <div style="background: #f8fafc; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; margin-top: 16px;">
+            <h4 style="font-size: 14px; font-weight: 700; color: #475569; margin-bottom: 12px; margin-top: 0;">Billing Amount (₱)</h4>
+            <div style="position: relative; height: 250px; width: 100%;">
+                <canvas id="amountChart"></canvas>
+            </div>
+        </div>
+
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 20px;">
             <div style="background: #f0fdf4; padding: 16px; border-radius: 16px; border: 1px solid #bbf7d0; display: flex; align-items: center; gap: 12px;">
                 <div style="width: 40px; height: 40px; border-radius: 12px; background: #dcfce7; color: #166534; display: flex; align-items: center; justify-content: center; font-size: 20px;">⚡</div>
                 <div>
                     <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase;">Avg Electricity Usage</div>
-                    @php $elecAvg = count($elecBill['usage_history']) > 0 ? round(array_sum($elecBill['usage_history']) / count($elecBill['usage_history'])) : 0; @endphp
+                    @php 
+                        $elecNonZero = array_filter($elecBill['usage_history'], function($v) { return $v > 0; });
+                        $elecAvg = count($elecNonZero) > 0 ? round(array_sum($elecNonZero) / count($elecNonZero)) : 0; 
+                    @endphp
                     <div style="font-size: 18px; font-weight: 800; color: #064e3b; margin-top: 2px;">{{ $elecAvg }} kWh / mo</div>
                 </div>
             </div>
@@ -86,7 +136,10 @@
                 <div style="width: 40px; height: 40px; border-radius: 12px; background: #e0f2fe; color: #0369a1; display: flex; align-items: center; justify-content: center; font-size: 20px;">💧</div>
                 <div>
                     <div style="font-size: 11px; font-weight: 700; color: #0369a1; text-transform: uppercase;">Avg Water Usage</div>
-                    @php $waterAvg = count($waterBill['usage_history']) > 0 ? round(array_sum($waterBill['usage_history']) / count($waterBill['usage_history'])) : 0; @endphp
+                    @php 
+                        $waterNonZero = array_filter($waterBill['usage_history'], function($v) { return $v > 0; });
+                        $waterAvg = count($waterNonZero) > 0 ? round(array_sum($waterNonZero) / count($waterNonZero)) : 0; 
+                    @endphp
                     <div style="font-size: 18px; font-weight: 800; color: #075985; margin-top: 2px;">{{ $waterAvg }} m³ / mo</div>
                 </div>
             </div>
@@ -104,10 +157,13 @@
         const fullMonthLabels = {!! json_encode($months) !!};
         const fullElecHistory = {!! json_encode($elecBill['usage_history']) !!};
         const fullWaterHistory = {!! json_encode($waterBill['usage_history']) !!};
+        const fullElecAmount = {!! json_encode($elecBill['amount_history']) !!};
+        const fullWaterAmount = {!! json_encode($waterBill['amount_history']) !!};
 
         let currentUtilityType = 'elec';
         let currentRange = 6;
         let utilityChart = null;
+        let amountChart = null;
 
         function updateChartRange(monthsCount) {
             currentRange = parseInt(monthsCount);
@@ -128,17 +184,23 @@
             }
 
             const ctx = document.getElementById('utilityChart').getContext('2d');
+            const ctxAmount = document.getElementById('amountChart').getContext('2d');
             const color = type === 'elec' ? '#10b981' : '#3b82f6';
             const bgColor = type === 'elec' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)';
             const unit = type === 'elec' ? 'kWh' : 'm³';
             const label = type === 'elec' ? 'Electricity Consumption' : 'Water Consumption';
             const fullData = type === 'elec' ? fullElecHistory : fullWaterHistory;
+            const fullAmountData = type === 'elec' ? fullElecAmount : fullWaterAmount;
 
             const slicedLabels = fullMonthLabels.slice(-currentRange);
             const slicedData = fullData.slice(-currentRange);
+            const slicedAmountData = fullAmountData.slice(-currentRange);
 
             if (utilityChart) {
                 utilityChart.destroy();
+            }
+            if (amountChart) {
+                amountChart.destroy();
             }
 
             utilityChart = new Chart(ctx, {
@@ -183,6 +245,57 @@
                             ticks: {
                                 callback: function(value) {
                                     return value + ' ' + unit;
+                                },
+                                color: '#64748b',
+                                font: { size: 11 }
+                            }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#64748b', font: { size: 11 } }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index',
+                    }
+                }
+            });
+
+            amountChart = new Chart(ctxAmount, {
+                type: 'bar',
+                data: {
+                    labels: slicedLabels,
+                    datasets: [{
+                        label: 'Billing Amount',
+                        data: slicedAmountData,
+                        backgroundColor: color,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return '₱ ' + context.parsed.y;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: '#e2e8f0',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return '₱ ' + value;
                                 },
                                 color: '#64748b',
                                 font: { size: 11 }

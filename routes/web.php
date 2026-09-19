@@ -2,243 +2,31 @@
 
 use Illuminate\Support\Facades\Route;
 
-// Shared Incident Data Function for Simulation
-if (!function_exists('getIncidents')) {
-    function getIncidents() {
-        try {
-            if (\Illuminate\Support\Facades\Schema::hasTable('incidents') && \App\Models\Incident::count() > 0) {
-                return \App\Models\Incident::with('user')->get()->map(function ($inc) {
-                    $resName = 'Anonymous';
-                    if ($inc->user) {
-                        $role = $inc->user->roles->first()->name ?? 'Resident';
-                        if ($role === 'Resident' && $inc->user->lots->count() > 0) {
-                            $lot = $inc->user->lots->first();
-                            $resName = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
-                        } else {
-                            $resName = $inc->user->name;
-                        }
-                    }
-                    return [
-                        'id' => substr($inc->id, 0, 8),
-                        'sub' => $inc->subject,
-                        'type' => $inc->type,
-                        'res' => $resName,
-                        'desc' => $inc->description,
-                        'img' => $inc->image_url,
-                        'photos' => $inc->image_url ? [$inc->image_url] : [],
-                        'status' => $inc->status,
-                        'date' => $inc->created_at ? $inc->created_at->toIso8601String() : now()->toIso8601String(),
-                    ];
-                })->toArray();
-            }
-        } catch (\Exception $e) {} 
-        return [];
-    }
-}
-
-if (!function_exists('getAnnouncements')) {
-    function getAnnouncements() {
-        try {
-            if (\Illuminate\Support\Facades\Schema::hasTable('announcements') && \App\Models\Announcement::count() > 0) {
-                return \App\Models\Announcement::all()->map(function ($ann) {
-                    return [
-                        'id' => substr($ann->id, 0, 8),
-                        'title' => $ann->title,
-                        'cat' => $ann->category,
-                        'status' => $ann->status,
-                        'date' => \Carbon\Carbon::parse($ann->publish_date)->format('Y-m-d'),
-                        'content' => $ann->content,
-                        'author' => $ann->author,
-                    ];
-                })->toArray();
-            }
-        } catch (\Exception $e) {} 
-        return [];
-    }
-}
-
-if (!function_exists('getElectricalBills')) {
-    function getElectricalBills() {
-        try {
-            if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
-                $residents = \App\Models\User::role('Resident')->with(['lots', 'utilityBills' => function($q) {
-                    $q->where('type', 'electricity')->latest();
-                }])->get();
-                
-                return $residents->map(function ($resident) {
-                    $lot = $resident->lots->first();
-                    $bill = $resident->utilityBills->first();
-                    
-                    $payments = [];
-                    if ($resident->utilityBills->count() > 0) {
-                        $allPayments = $resident->utilityBills->flatMap->payments;
-                        $payments = $allPayments->map(function ($p) {
-                            return [
-                                'month' => \Carbon\Carbon::parse($p->payment_date)->format('M Y'),
-                                'amount' => $p->amount_paid,
-                                'status' => 'Paid',
-                                'date' => \Carbon\Carbon::parse($p->payment_date)->format('y-m-d'),
-                                'trn' => $p->trn,
-                            ];
-                        })->toArray();
-                    }
-                    
-                    return [
-                        'id' => $bill ? substr($bill->id, 0, 8) : 'NEW-' . $resident->id,
-                        'db_id' => $bill ? $bill->id : null,
-                        'lot' => $lot ? 'B' . $lot->block . ' L' . $lot->lot_number : 'N/A',
-                        'block' => $lot ? $lot->block : 'N/A',
-                        'resident' => $resident->name,
-                        'amount' => $bill ? $bill->amount : 0,
-                        'usage' => ($bill ? $bill->usage_value : 0) . ' kWh',
-                        'usage_kwh' => $bill ? $bill->usage_value : 0,
-                        'base_amount' => $bill ? $bill->amount : 0,
-                        'status' => $bill ? $bill->status : 'unpaid',
-                        'due' => ($bill && $bill->due_date) ? \Carbon\Carbon::parse($bill->due_date)->format('Y-m-d') : 'N/A',
-                        'paid_date' => count($payments) > 0 ? $payments[0]['date'] : null,
-                        'method' => count($payments) > 0 ? 'Office' : null,
-                        'usage_history' => array_fill(0, 12, $bill ? $bill->usage_value : 0),
-                        'at_risk' => $bill ? $bill->is_at_risk : false,
-                        'payment_history' => $payments,
-                        'audit_log' => [['action' => 'Statement Generated', 'date' => \Carbon\Carbon::now()->format('Y-m-d h:i A'), 'user' => 'System']],
-                    ];
-                })->toArray();
-            }
-        } catch (\Exception $e) {} 
-        return [];
-    }
-}
-
-if (!function_exists('getWaterBills')) {
-    function getWaterBills() {
-        try {
-            if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
-                $residents = \App\Models\User::role('Resident')->with(['lots', 'utilityBills' => function($q) {
-                    $q->where('type', 'water')->latest();
-                }])->get();
-                
-                return $residents->map(function ($resident) {
-                    $lot = $resident->lots->first();
-                    $bill = $resident->utilityBills->first();
-                    
-                    $payments = [];
-                    if ($resident->utilityBills->count() > 0) {
-                        $allPayments = $resident->utilityBills->flatMap->payments;
-                        $payments = $allPayments->map(function ($p) {
-                            return [
-                                'month' => \Carbon\Carbon::parse($p->payment_date)->format('M Y'),
-                                'amount' => $p->amount_paid,
-                                'status' => 'Paid',
-                                'date' => \Carbon\Carbon::parse($p->payment_date)->format('y-m-d'),
-                                'trn' => $p->trn,
-                            ];
-                        })->toArray();
-                    }
-                    
-                    return [
-                        'id' => $bill ? substr($bill->id, 0, 8) : 'NEW-' . $resident->id,
-                        'db_id' => $bill ? $bill->id : null,
-                        'lot' => $lot ? 'B' . $lot->block . ' L' . $lot->lot_number : 'N/A',
-                        'block' => $lot ? $lot->block : 'N/A',
-                        'resident' => $resident->name,
-                        'amount' => $bill ? $bill->amount : 0,
-                        'usage' => ($bill ? $bill->usage_value : 0) . ' m³',
-                        'usage_m3' => $bill ? $bill->usage_value : 0,
-                        'usage_cbm' => $bill ? $bill->usage_value : 0,
-                        'base_amount' => $bill ? $bill->amount : 0,
-                        'status' => $bill ? $bill->status : 'unpaid',
-                        'due' => ($bill && $bill->due_date) ? \Carbon\Carbon::parse($bill->due_date)->format('Y-m-d') : 'N/A',
-                        'paid_date' => count($payments) > 0 ? $payments[0]['date'] : null,
-                        'method' => count($payments) > 0 ? 'Office' : null,
-                        'usage_history' => array_fill(0, 12, $bill ? $bill->usage_value : 0),
-                        'at_risk' => $bill ? $bill->is_at_risk : false,
-                        'payment_history' => $payments,
-                        'audit_log' => [['action' => 'Statement Generated', 'date' => \Carbon\Carbon::now()->format('Y-m-d h:i A'), 'user' => 'System']],
-                    ];
-                })->toArray();
-            }
-        } catch (\Exception $e) {} 
-        return [];
-    }
-}
-
-if (!function_exists('getReservationFees')) {
-    function getReservationFees() {
-        try {
-            if (\Illuminate\Support\Facades\Schema::hasTable('reservations') && \App\Models\Reservation::count() > 0) {
-                return \App\Models\Reservation::with(['lot'])->get()->map(function ($res) {
-                    return [
-                        'id' => substr($res->id, 0, 8),
-                        'buyer' => $res->notes ?? 'Guest', // Stored in notes
-                        'contact' => '0917-000-0000', // Mock
-                        'block' => $res->lot->block ?? 'N/A',
-                        'lot' => $res->lot->lot_number ?? 'N/A',
-                        'amount' => $res->amount,
-                        'date' => \Carbon\Carbon::parse($res->reservation_date)->format('Y-m-d'),
-                        'status' => $res->status,
-                        'agent' => 'Admin',
-                        'notes' => 'Database record',
-                    ];
-                })->toArray();
-            }
-        } catch (\Exception $e) {} 
-        return [];
-    }
-}
-
-if (!function_exists('getDownpaymentFees')) {
-    function getDownpaymentFees() {
-        try {
-            if (\Illuminate\Support\Facades\Schema::hasTable('downpayments') && \App\Models\Downpayment::count() > 0) {
-                return \App\Models\Downpayment::with(['reservation.lot'])->get()->map(function ($dp) {
-                    $res = $dp->reservation;
-                    return [
-                        'id' => substr($dp->id, 0, 8),
-                        'buyer' => $res->notes ?? 'Guest',
-                        'block' => $res->lot->block ?? 'N/A',
-                        'lot' => $res->lot->lot_number ?? 'N/A',
-                        'total_dp' => $dp->amount + $dp->balance,
-                        'paid_amount' => $dp->amount,
-                        'monthly_amortization' => 15000,
-                        'months_paid' => floor($dp->amount / 15000),
-                        'total_months' => floor(($dp->amount + $dp->balance) / 15000),
-                        'status' => $dp->status,
-                        'next_due' => \Carbon\Carbon::parse($dp->due_date)->format('Y-m-d'),
-                        'last_payment' => \Carbon\Carbon::parse($dp->updated_at)->format('Y-m-d'),
-                    ];
-                })->toArray();
-            }
-        } catch (\Exception $e) {} 
-        return [];
-    }
-}
-
-
-
-if (!function_exists('getLotStatus')) {
-    function getLotStatus() {
-        return [
-            ['lot' => 'B1 L5', 'managed' => true, 'provider' => 'Subdivision'],
-            ['lot' => 'B2 L12', 'managed' => true, 'provider' => 'Subdivision'],
-            ['lot' => 'B3 L8', 'managed' => true, 'provider' => 'Subdivision'],
-            ['lot' => 'A1 L4', 'managed' => false, 'provider' => 'CASURECO'],
-            ['lot' => 'A2 L1', 'managed' => false, 'provider' => 'CASURECO'],
-            ['lot' => 'C1 L10', 'managed' => true, 'provider' => 'Subdivision'],
-        ];
-    }
-}
-
 Route::get('/', function () {
     return view('welcome');
+});
+
+Route::get('/home', function () {
+    $user = \Illuminate\Support\Facades\Auth::user();
+    if (!$user) return redirect('/login');
+    if ($user->hasRole('Admin')) return redirect('/admin/dashboard');
+    if ($user->hasRole('Security Guard')) return redirect('/guard/dashboard');
+    if ($user->hasRole('Finance Officer')) return redirect('/finance/dashboard');
+    return redirect('/resident/dashboard');
 });
 
 Route::get('/appointment', function () {
     return view('appointment');
 });
 
-Route::get('/login', function () {
+Route::get('/login', function (\Illuminate\Http\Request $request) {
+    if (\Illuminate\Support\Facades\Auth::check()) {
+        \Illuminate\Support\Facades\Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+    }
     return view('login');
-})->name('login')->middleware('guest');
+})->name('login');
 
 Route::post('/login', function (\Illuminate\Http\Request $request) {
     $credentials = $request->validate([
@@ -356,64 +144,7 @@ Route::post('/reset-password', function (\Illuminate\Http\Request $request) {
     return response()->json(['success' => false, 'message' => 'Failed to reset password.']);
 });
 
-if (!function_exists('getVisitorPins')) {
-    function getVisitorPins() {
-        try {
-            if (\Illuminate\Support\Facades\Schema::hasTable('visitors') && \App\Models\Visitor::count() > 0) {
-                $base = \App\Models\Visitor::with('host')->get()->map(function ($vis) {
-                    $block = 'N/A';
-                    $lotNum = 'N/A';
-                    $hostName = 'Unknown';
-                    
-                    if ($vis->host) {
-                        $hostName = $vis->host->name;
-                        if ($vis->host->lots->count() > 0) {
-                            $lot = $vis->host->lots->first();
-                            $block = $lot->block;
-                            $lotNum = $lot->lot_number;
-                        }
-                    }
-
-                    return [
-                        'id' => substr($vis->id, 0, 8),
-                        'pin' => $vis->pin,
-                        'visitor' => $vis->visitor_name,
-                        'host' => $hostName,
-                        'block' => $block,
-                        'lot' => $lotNum,
-                        'purpose' => $vis->purpose,
-                        'validity' => $vis->validity,
-                        'status' => $vis->status,
-                        'arrival_time' => $vis->arrival_time,
-                        'type' => $vis->type,
-                        'plate_number' => $vis->plate_number,
-                    ];
-                })->toArray();
-            } else {
-                $base = [
-                    ['id' => 'VIS-3001', 'pin' => '482910', 'visitor' => 'Alex Mendez', 'host' => 'Juan Dela Cruz', 'block' => '1', 'lot' => '5', 'purpose' => 'Plumbing Repair', 'validity' => 'Today', 'status' => 'Pending'],
-                    ['id' => 'VIS-3002', 'pin' => '910234', 'visitor' => 'Grab Delivery', 'host' => 'Maria Santos', 'block' => '2', 'lot' => '12', 'purpose' => 'Food Delivery', 'validity' => 'Today', 'status' => 'Entered', 'arrival_time' => '10:15 AM'],
-                    ['id' => 'VIS-3003', 'pin' => '551029', 'visitor' => 'Sarah Connor', 'host' => 'Ricardo Reyes', 'block' => '3', 'lot' => '8', 'purpose' => 'Family Visit', 'validity' => 'May 25, 2026', 'status' => 'Pending'],
-                ];
-            }
-        } catch (\Exception $e) {
-            $base = [
-                ['id' => 'VIS-3001', 'pin' => '482910', 'visitor' => 'Alex Mendez', 'host' => 'Juan Dela Cruz', 'block' => '1', 'lot' => '5', 'purpose' => 'Plumbing Repair', 'validity' => 'Today', 'status' => 'Pending'],
-                ['id' => 'VIS-3002', 'pin' => '910234', 'visitor' => 'Grab Delivery', 'host' => 'Maria Santos', 'block' => '2', 'lot' => '12', 'purpose' => 'Food Delivery', 'validity' => 'Today', 'status' => 'Entered', 'arrival_time' => '10:15 AM'],
-                ['id' => 'VIS-3003', 'pin' => '551029', 'visitor' => 'Sarah Connor', 'host' => 'Ricardo Reyes', 'block' => '3', 'lot' => '8', 'purpose' => 'Family Visit', 'validity' => 'May 25, 2026', 'status' => 'Pending'],
-            ];
-        }
-
-        // Simulate persistence via session
-        $overrides = session('visitor_overrides', []);
-        foreach ($base as &$vis) {
-            if (isset($overrides[$vis['id']])) {
-                $vis = array_merge($vis, $overrides[$vis['id']]);
-            }
-        }
-        return $base;
-    }
-}
+// getVisitorPins() removed, now using API endpoints and controller
 
 // Resident Routes
 Route::prefix('resident')->middleware(['auth', 'web', 'role:Resident'])->group(function () {
@@ -425,116 +156,22 @@ Route::prefix('resident')->middleware(['auth', 'web', 'role:Resident'])->group(f
 // Guard Security Portal Routes
 Route::prefix('guard')->middleware(['auth', 'web', 'role:Security Guard'])->group(function () {
     Route::get('/dashboard', function () {
-        return view('guard.dashboard', ['pins' => getVisitorPins(), 'users' => getUsers()]);
+        return view('guard.dashboard');
     });
     Route::get('/history', function () {
-        return view('guard.history', ['pins' => getVisitorPins()]);
+        return view('guard.history');
     });
 });
 
-// API Routes for Data Persistence
-Route::post('/api/visitors', function (\Illuminate\Http\Request $request) {
-    \App\Models\Visitor::create([
-        'visitor_name' => $request->input('visitor_name'),
-        'purpose' => $request->input('purpose'),
-        'type' => $request->input('type'),
-        'validity' => $request->input('validity', 'Today'),
-        'status' => $request->input('status', 'Pending'),
-        'arrival_time' => $request->input('arrival_time'),
-        'plate_number' => $request->input('plate_number'),
-        'pin' => $request->input('pin', (string)rand(100000, 999999)),
-        'host_id' => null, // Optional mapping
-    ]);
-    return response()->json(['success' => true]);
+// API Routes for Visitors
+Route::post('/api/validate-pin', [\App\Http\Controllers\VisitorController::class, 'validatePin']);
+Route::get('/api/visitors', [\App\Http\Controllers\VisitorController::class, 'index']);
+Route::middleware(['auth'])->group(function() {
+    Route::post('/api/visitors', [\App\Http\Controllers\VisitorController::class, 'store']);
+    Route::put('/api/visitors/{id}/approve', [\App\Http\Controllers\VisitorController::class, 'approve']);
+    Route::put('/api/visitors/{id}/reject', [\App\Http\Controllers\VisitorController::class, 'reject']);
+    Route::put('/api/visitors/{id}/enter', [\App\Http\Controllers\VisitorController::class, 'markEntered']);
 });
-
-Route::put('/api/visitors/{id}/status', function (\Illuminate\Http\Request $request, $id) {
-    $visitor = \App\Models\Visitor::where('id', 'like', $id . '%')->first();
-    if ($visitor) {
-        $visitor->update([
-            'status' => $request->input('status'),
-            'arrival_time' => $request->input('arrival_time', $visitor->arrival_time)
-        ]);
-    }
-    return response()->json(['success' => true]);
-});
-
-if (!function_exists('getUsers')) {
-    function getUsers() {
-        try {
-            if (\Illuminate\Support\Facades\Schema::hasTable('users') && \App\Models\User::count() > 0) {
-                return \App\Models\User::with(['lots', 'roles'])->get()->map(function ($u) {
-                    $role = $u->roles->first()->name ?? 'Resident';
-                    $meta = 'N/A';
-                    if ($role === 'Resident' && $u->lots->count() > 0) {
-                        $lot = $u->lots->first();
-                        $meta = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
-                    } elseif ($role === 'Security Guard') {
-                        $meta = 'Badge #' . rand(10, 99);
-                    } elseif ($role === 'Finance Officer') {
-                        $meta = 'Chief Accountant';
-                    }
-                    return [
-                        'db_id' => $u->id,
-                        'id' => substr($u->id, 0, 8), // shorten uuid for UI
-                        'name' => $u->name,
-                        'contact_number' => $u->contact_number,
-                        'role' => $role,
-                        'email' => $u->email,
-                        'status' => $u->status,
-                        'joined' => $u->joined_at ? \Carbon\Carbon::parse($u->joined_at)->format('Y-m-d') : null,
-                        'meta' => $meta,
-                        'block' => isset($lot) ? $lot->block : '',
-                        'lot' => isset($lot) ? $lot->lot_number : '',
-                        'pin' => rand(100000, 999999),
-                    ];
-                })->toArray();
-            }
-        } catch (\Exception $e) {
-            // Ignore DB errors if not setup yet
-        }
-
-        return [
-            // Residents
-            ['id' => 'USR-1001', 'name' => 'Juan Dela Cruz', 'role' => 'Resident', 'email' => 'juan@gmail.com', 'status' => 'Active', 'joined' => '2024-01-15', 'meta' => 'Block 1, Lot 5', 'pin' => '884219'],
-            ['id' => 'USR-1002', 'name' => 'Maria Santos', 'role' => 'Resident', 'email' => 'maria@gmail.com', 'status' => 'Active', 'joined' => '2024-02-20', 'meta' => 'Block 2, Lot 12', 'pin' => '729104'],
-            ['id' => 'USR-1003', 'name' => 'Ricardo Reyes', 'role' => 'Resident', 'email' => 'ricardo@gmail.com', 'status' => 'Active', 'joined' => '2024-03-05', 'meta' => 'Block 3, Lot 8'],
-            
-            // Security Guards
-            ['id' => 'USR-2001', 'name' => 'Sgt. Robert Miller', 'role' => 'Security Guard', 'email' => 'robert.guard@althesa.com', 'status' => 'Active', 'joined' => '2023-10-10', 'meta' => 'Badge #042'],
-            ['id' => 'USR-2002', 'name' => 'Officer Jane Doe', 'role' => 'Security Guard', 'email' => 'jane.guard@althesa.com', 'status' => 'Active', 'joined' => '2023-12-05', 'meta' => 'Badge #088'],
-            
-            // Finance Officer (Single Lead)
-            ['id' => 'USR-3001', 'name' => 'CPA Michael Tan', 'role' => 'Finance Officer', 'email' => 'michael.finance@althesa.com', 'status' => 'Active', 'joined' => '2023-11-20', 'meta' => 'Chief Accountant'],
-            
-            ['id' => 'USR-1004', 'name' => 'Elena Gomez', 'role' => 'Resident', 'email' => 'elena@gmail.com', 'status' => 'Archived', 'joined' => '2023-11-12', 'meta' => 'Block 1, Lot 22'],
-        ];
-    }
-}
-
-if (!function_exists('getAppointments')) {
-    function getAppointments() {
-        try {
-            if (\Illuminate\Support\Facades\Schema::hasTable('appointments') && \App\Models\Appointment::count() > 0) {
-                return \App\Models\Appointment::orderBy('created_at', 'desc')->get()->map(function ($apt) {
-                    return [
-                        'id' => substr($apt->id, 0, 8),
-                        'client' => $apt->client_name,
-                        'contact' => $apt->contact_number,
-                        'email' => $apt->email,
-                        'date' => \Carbon\Carbon::parse($apt->date)->format('Y-m-d'),
-                        'time' => $apt->time,
-                        'status' => $apt->status,
-                        'type' => $apt->type,
-                        'notes' => $apt->notes,
-                        'report' => $apt->report,
-                    ];
-                })->toArray();
-            }
-        } catch (\Exception $e) {} 
-        return [];
-    }
-}
 
 Route::post('/api/appointments', function (\Illuminate\Http\Request $request) {
     \App\Models\Appointment::create([
@@ -677,44 +314,28 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         return redirect('/admin/users'); 
     });
     Route::get('/billing', function () {
-        $bills = getElectricalBills();
+        $bills = getElectricalBills(request('cycle'));
         $lots = getLotStatus();
+        $validCycles = getValidBillingCycles('electricity');
         
         // Consistent Simulated Statistical Data for Graphing (Reliable)
-        $yearly_stats = [
-            '2025' => [
-                'May' => 10200, 'Jun' => 11500, 'Jul' => 12800, 'Aug' => 14000, 
-                'Sep' => 13500, 'Oct' => 12000, 'Nov' => 11000, 'Dec' => 15500,
-                'Jan' => 16500, 'Feb' => 14000, 'Mar' => 13200, 'Apr' => 15000
-            ],
-            '2026' => [
-                'May' => 11000, 'Jun' => 12500, 'Jul' => 13500, 'Aug' => 14500, 
-                'Sep' => 14000, 'Oct' => 13000, 'Nov' => 12500, 'Dec' => 16000,
-                'Jan' => 17000, 'Feb' => 15500, 'Mar' => 14200, 'Apr' => 16500
-            ],
-            'today_paid' => 4550.00
-        ];
+        $yearly_stats = calculateBillingStats('electricity');
 
         return view('admin.billing.index', [
             'bills' => $bills,
             'lots' => $lots,
-            'stats' => $yearly_stats
+            'stats' => $yearly_stats,
+            'validCycles' => $validCycles
         ]);
     });
     
     Route::get('/water', function () {
-        // Reuse identical statistical graphs for simulation 
-        $yearly_stats = [
-            '2026' => [
-                'May' => 3100, 'Jun' => 4500, 'Jul' => 5500, 'Aug' => 6500, 
-                'Sep' => 6000, 'Oct' => 5000, 'Nov' => 4500, 'Dec' => 7000,
-                'Jan' => 8000, 'Feb' => 7500, 'Mar' => 6200, 'Apr' => 8500
-            ],
-            'today_paid' => 1250.00
-        ];
+        $yearly_stats = calculateBillingStats('water');
+        $validCycles = getValidBillingCycles('water');
         return view('admin.water.index', [
-            'bills' => getWaterBills(),
-            'stats' => $yearly_stats
+            'bills' => getWaterBills(request('cycle')),
+            'stats' => $yearly_stats,
+            'validCycles' => $validCycles
         ]);
     });
 
@@ -743,16 +364,54 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'status' => 'Pending',
             'reservation_date' => now(),
             'amount' => 0,
-            'notes' => $request->input('name') ?? 'New Buyer'
+            'notes' => $request->input('name') ?? 'New Buyer',
+            'first_name' => $request->input('first_name'),
+            'last_name' => $request->input('last_name')
         ]);
         $dp = \App\Models\Downpayment::create([
             'reservation_id' => $res->id,
             'amount' => 0,
             'balance' => $request->input('dpAmount') ?? 0,
             'due_date' => \Carbon\Carbon::parse($request->input('nextDate') ?? now()->addMonth()),
-            'status' => 'Good Standing'
+            'status' => 'Good Standing',
+            'monthly_amortization' => $request->input('monthly_amortization') ?? 15000,
+            'months_to_pay' => $request->input('months_to_pay') ?? 24,
+            'contract_date' => $request->input('contract_date') ? \Carbon\Carbon::parse($request->input('contract_date')) : now()
         ]);
         return response()->json(['success' => true, 'id' => substr($dp->id, 0, 8)]);
+    });
+
+    Route::post('/downpayment-fee/pay', function (\Illuminate\Http\Request $request) {
+        $dp = \App\Models\Downpayment::where('id', 'LIKE', $request->input('id') . '%')->first();
+        if ($dp) {
+            $payment_amount = (float)$request->input('amount');
+            $dp->amount += $payment_amount;
+            $dp->balance -= $payment_amount;
+            if ($dp->balance <= 0) {
+                $dp->status = 'Fully Paid';
+                $dp->balance = 0;
+            } else {
+                $dp->status = 'Good Standing';
+            }
+            // Update next due date to next month
+            $dp->due_date = \Carbon\Carbon::parse($dp->due_date)->addMonth();
+            $dp->save();
+            
+            // Record in downpayment_histories
+            \Illuminate\Support\Facades\DB::table('downpayment_histories')->insert([
+                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'downpayment_id' => $dp->id,
+                'amount' => $payment_amount,
+                'payment_date' => now(),
+                'trn' => strtoupper(\Illuminate\Support\Str::random(10)),
+                'status' => 'Paid',
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            return response()->json(['success' => true]);
+        }
+        return response()->json(['success' => false], 404);
     });
 
     Route::get('/reservation-fee', function () {
@@ -824,7 +483,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         return response()->json(['success' => true, 'message' => 'Announcement posted and emails sent.']);
     });
     Route::get('/visitors', function () {
-        return view('admin.visitors.index', ['pins' => getVisitorPins()]);
+        return view('admin.visitors.index');
     });
     Route::get('/gis', function () { return view('admin.gis.index'); });
 });
@@ -849,16 +508,32 @@ Route::post('/api/settings', function (\Illuminate\Http\Request $request) {
 Route::prefix('resident')->middleware(['auth', 'role:Resident'])->group(function () {
     Route::get('/dashboard', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
-        $elecBills = getElectricalBills();
-        $waterBills = getWaterBills();
+        $elecBills = getElectricalBills(request('cycle'));
+        $waterBills = getWaterBills(request('cycle'));
         $elecBill = collect($elecBills)->firstWhere('resident', $user->name ?? 'Jepuso') ?? [
-            'status' => 'paid', 'amount' => 0, 'due' => 'N/A', 'usage_history' => [0],
-            'id' => 'N/A', 'resident' => $user->name ?? 'Resident', 'period' => 'N/A',
+            'id' => 'N/A', 'db_id' => null, 'lot' => 'N/A', 'block' => 'N/A',
+            'resident' => $user->name ?? 'Resident',
+            'amount' => 0, 'usage' => '0 kWh', 'usage_kwh' => 0, 'base_amount' => 0,
+            'status' => 'no-bill', 'due' => 'N/A', 'paid_date' => null, 'method' => null,
+            'usage_history' => array_fill(0, 12, 0),
+            'amount_history' => array_fill(0, 12, 0),
+            'at_risk' => false,
+            'payment_history' => [],
+            'payment_behavior' => 'On-Time',
+            'audit_log' => [],
             'kwh' => 0, 'rate' => 0, 'prev' => 0, 'curr' => 0,
         ];
         $waterBill = collect($waterBills)->firstWhere('resident', $user->name ?? 'Jepuso') ?? [
-            'status' => 'paid', 'amount' => 0, 'due' => 'N/A', 'usage_history' => [0],
-            'id' => 'N/A', 'resident' => $user->name ?? 'Resident', 'period' => 'N/A',
+            'id' => 'N/A', 'db_id' => null, 'lot' => 'N/A', 'block' => 'N/A',
+            'resident' => $user->name ?? 'Resident',
+            'amount' => 0, 'usage' => '0 m³', 'usage_cubic' => 0, 'base_amount' => 0,
+            'status' => 'no-bill', 'due' => 'N/A', 'paid_date' => null, 'method' => null,
+            'usage_history' => array_fill(0, 12, 0),
+            'amount_history' => array_fill(0, 12, 0),
+            'at_risk' => false,
+            'payment_history' => [],
+            'payment_behavior' => 'On-Time',
+            'audit_log' => [],
             'cubic' => 0, 'rate' => 0, 'prev' => 0, 'curr' => 0,
         ];
         
@@ -873,29 +548,48 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident'])->group(function
     Route::get('/profile', function () {
         return view('resident.profile');
     });
+    Route::get('/map', function () {
+        return view('resident.map');
+    });
     Route::get('/visitors', function () {
-        $pins = collect(getVisitorPins())->where('host', 'Juan Dela Cruz')->values()->all();
-        return view('resident.visitors.index', ['pins' => $pins]);
+        return view('resident.visitors.index');
     });
     Route::get('/electricity', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
-        $elecBills = getElectricalBills();
+        $elecBills = getElectricalBills(request('cycle'));
+        $lot = $user->lots()->first();
+        $providerManaged = $lot ? $lot->provider_managed : false;
+        
         $elecBill = collect($elecBills)->firstWhere('resident', $user->name) ?? [
-            'id' => 'N/A', 'resident' => $user->name, 'period' => 'N/A', 'status' => 'paid',
-            'amount' => 0, 'due' => 'N/A', 'paid_date' => 'N/A', 'usage' => '0 kWh',
-            'kwh' => 0, 'rate' => 0, 'prev' => 0, 'curr' => 0, 'usage_history' => array_fill(0, 12, 0),
+            'id' => 'N/A', 'db_id' => null, 'lot' => $lot ? 'B'.$lot->block.' L'.$lot->lot_number : 'N/A', 'block' => $lot ? $lot->block : 'N/A',
+            'resident' => $user->name, 'period' => 'N/A', 'provider_managed' => $providerManaged,
+            'amount' => 0, 'usage' => '0 kWh', 'usage_kwh' => 0, 'base_amount' => 0,
+            'status' => 'no-bill', 'due' => 'N/A', 'paid_date' => null, 'method' => null,
+            'usage_history' => array_fill(0, 12, 0),
+            'amount_history' => array_fill(0, 12, 0),
+            'at_risk' => false,
             'payment_history' => [],
+            'payment_behavior' => 'On-Time',
+            'audit_log' => [],
+            'kwh' => 0, 'rate' => 0, 'prev' => 0, 'curr' => 0,
         ];
         return view('resident.electricity', ['elecBill' => $elecBill]);
     });
     Route::get('/water', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
-        $waterBills = getWaterBills();
+        $waterBills = getWaterBills(request('cycle'));
         $waterBill = collect($waterBills)->firstWhere('resident', $user->name) ?? [
-            'id' => 'N/A', 'resident' => $user->name, 'period' => 'N/A', 'status' => 'paid',
-            'amount' => 0, 'due' => 'N/A', 'paid_date' => 'N/A', 'usage' => '0 m³',
-            'cubic' => 0, 'rate' => 0, 'prev' => 0, 'curr' => 0, 'usage_history' => array_fill(0, 12, 0),
+            'id' => 'N/A', 'db_id' => null, 'lot' => 'N/A', 'block' => 'N/A',
+            'resident' => $user->name, 'period' => 'N/A',
+            'amount' => 0, 'usage' => '0 m³', 'usage_cubic' => 0, 'base_amount' => 0,
+            'status' => 'no-bill', 'due' => 'N/A', 'paid_date' => null, 'method' => null,
+            'usage_history' => array_fill(0, 12, 0),
+            'amount_history' => array_fill(0, 12, 0),
+            'at_risk' => false,
             'payment_history' => [],
+            'payment_behavior' => 'On-Time',
+            'audit_log' => [],
+            'cubic' => 0, 'rate' => 0, 'prev' => 0, 'curr' => 0,
         ];
         return view('resident.water', ['waterBill' => $waterBill]);
     });
@@ -941,8 +635,9 @@ Route::get('/routing-guide', function () {
 // Finance Officer Portal Routes
 Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(function () {
     Route::get('/dashboard', function () {
+        $cycle = request('cycle');
         $residents = \App\Models\User::role('Resident')->with(['lots', 'utilityBills' => function($q) {
-            $q->latest();
+            $q->orderBy('created_at', 'desc');
         }])->get();
         
         $houses = [];
@@ -950,59 +645,151 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             $lot = $res->lots->first();
             if (!$lot) continue;
             
-            $elec_bill = $res->utilityBills->where('type', 'electricity')->first();
-            $water_bill = $res->utilityBills->where('type', 'water')->first();
+            $elecBills = $res->utilityBills->where('type', 'electricity');
+            $waterBills = $res->utilityBills->where('type', 'water');
             
+            if ($cycle) {
+                $dt = \Carbon\Carbon::createFromFormat('Y-m', $cycle);
+                $elec_bill = $elecBills->filter(function($b) use ($dt) {
+                    $c = \Carbon\Carbon::parse($b->created_at);
+                    return $c->year == $dt->year && $c->month == $dt->month;
+                })->first();
+                $water_bill = $waterBills->filter(function($b) use ($dt) {
+                    $c = \Carbon\Carbon::parse($b->created_at);
+                    return $c->year == $dt->year && $c->month == $dt->month;
+                })->first();
+            } else {
+                $elec_bill = $elecBills->first();
+                $water_bill = $waterBills->first();
+            }
+
+            $prev_elec = 0;
+            $curr_elec = null;
+            if ($elec_bill) {
+                $prev_elec = $elec_bill->previous_reading;
+                $curr_elec = $elec_bill->current_reading;
+            } else {
+                $latest_elec = $elecBills->first();
+                if ($latest_elec) {
+                    $prev_elec = $latest_elec->current_reading;
+                }
+            }
+
+            $prev_water = 0;
+            $curr_water = null;
+            if ($water_bill) {
+                $prev_water = $water_bill->previous_reading;
+                $curr_water = $water_bill->current_reading;
+            } else {
+                $latest_water = $waterBills->first();
+                if ($latest_water) {
+                    $prev_water = $latest_water->current_reading;
+                }
+            }
+
             $houses[] = [
                 'block' => $lot->block,
                 'lot' => $lot->lot_number,
-                'elec_status' => $elec_bill ? ($elec_bill->status == 'unpaid' ? 'Pending' : 'Billed') : 'Pending',
-                'water_status' => $water_bill ? ($water_bill->status == 'unpaid' ? 'Pending' : 'Billed') : 'Pending',
-                'prev_elec' => $elec_bill ? $elec_bill->usage_value : 0,
-                'curr_elec' => null,
-                'prev_water' => $water_bill ? $water_bill->usage_value : 0,
-                'curr_water' => null,
+                'elec_status' => $elec_bill ? ($elec_bill->amount > 0 || $elec_bill->usage_value > 0 || $elec_bill->status == 'paid' ? 'Billed' : 'Pending') : 'Pending',
+                'water_status' => $water_bill ? ($water_bill->amount > 0 || $water_bill->usage_value > 0 || $water_bill->status == 'paid' ? 'Billed' : 'Pending') : 'Pending',
+                'prev_elec' => $prev_elec,
+                'curr_elec' => $curr_elec,
+                'prev_water' => $prev_water,
+                'curr_water' => $curr_water,
                 'resident' => $res->name
             ];
         }
 
-        return view('finance.dashboard', ['houses' => $houses]);
+        $elecCycles = getValidBillingCycles('electricity');
+        $waterCycles = getValidBillingCycles('water');
+        $validCycles = collect(array_merge($elecCycles, $waterCycles))
+            ->unique('cycle')
+            ->sortByDesc('cycle')
+            ->values()
+            ->toArray();
+        return view('finance.dashboard', ['houses' => $houses, 'validCycles' => $validCycles]);
     });
 
     Route::post('/api/billing/reading', function (\Illuminate\Http\Request $request) {
         $type = $request->input('type');
         $lotStr = $request->input('lot');
         $blockStr = $request->input('block');
+        $prevReading = (int)$request->input('previous_reading', 0);
+        $currReading = (int)$request->input('current_reading', 0);
         $usage = $request->input('usage');
+        if ($usage === null) {
+            $usage = max(0, $currReading - $prevReading);
+        } else {
+            $usage = (int)$usage;
+        }
+        $rate = $request->input('rate');
         
-        $settingKey = $type === 'electricity' ? 'elec_rate' : 'water_rate';
-        $setting = \App\Models\Setting::find($settingKey);
-        $rate = $setting ? (float)$setting->value : ($type === 'electricity' ? 10 : 15);
-        $amount = $usage * $rate;
+        $cycle = $request->input('cycle');
+        if (empty($cycle)) {
+            $cycle = date('Y-m');
+        }
+        $dt = \Carbon\Carbon::createFromFormat('Y-m', $cycle);
+        
+        if (!$rate) {
+            $settingKey = $type === 'electricity' ? 'elec_rate' : 'water_rate';
+            $setting = \App\Models\Setting::find($settingKey);
+            $rate = $setting ? (float)$setting->value : ($type === 'electricity' ? 10 : 15);
+        }
+        
+        if ($type === 'water') {
+            $minWaterM3Setting = \App\Models\Setting::find('water_min_m3');
+            $minWaterM3 = $minWaterM3Setting ? (float)$minWaterM3Setting->value : 10;
+            
+            $minWaterRateSetting = \App\Models\Setting::find('water_min_rate');
+            $minWaterRate = $minWaterRateSetting ? (float)$minWaterRateSetting->value : 250;
+            
+            if ($usage <= $minWaterM3 && $usage > 0) {
+                $amount = $minWaterRate;
+            } elseif ($usage > $minWaterM3) {
+                $amount = $minWaterRate + (($usage - $minWaterM3) * $rate);
+            } else {
+                $amount = 0; // If usage is 0, they can either pay 0 or min rate. Given lack of feedback on 0 usage, let's keep 0 as 0. Wait, standard utility usually charges minimum if 0. I will charge minimum if usage is 0. 
+                // Ah, the user didn't respond to the question. Let's just charge the minimum for 0.
+                $amount = $minWaterRate;
+            }
+        } else {
+            $amount = $usage * $rate;
+        }
         
         $lot = \App\Models\Lot::where('block', $blockStr)->where('lot_number', $lotStr)->first();
         if ($lot) {
             $user = $lot->users->first();
-            $bill = \App\Models\UtilityBill::where('lot_id', $lot->id)->where('type', $type)->where('status', 'unpaid')->first();
+            $bill = \App\Models\UtilityBill::where('lot_id', $lot->id)->where('type', $type)
+                        ->whereYear('created_at', $dt->year)
+                        ->whereMonth('created_at', $dt->month)->first();
             
             if ($bill) {
                 $bill->update([
+                    'previous_reading' => $prevReading,
+                    'current_reading' => $currReading,
                     'usage_value' => $usage,
                     'amount' => $amount,
-                    'due_date' => now()->addDays(30)
+                    'due_date' => $dt->copy()->addDays(30)
                 ]);
             } else {
-                \App\Models\UtilityBill::create([
+                $bill = \App\Models\UtilityBill::create([
                     'id' => (string) \Illuminate\Support\Str::uuid(),
                     'type' => $type,
                     'user_id' => $user ? $user->id : null,
                     'lot_id' => $lot->id,
+                    'previous_reading' => $prevReading,
+                    'current_reading' => $currReading,
                     'usage_value' => $usage,
                     'amount' => $amount,
-                    'due_date' => now()->addDays(30),
+                    'due_date' => $dt->copy()->addDays(30),
                     'status' => 'unpaid',
                     'is_at_risk' => false,
                 ]);
+                $bill->created_at = $dt->copy()->startOfMonth();
+                $bill->save();
+            }
+            if ($user) {
+                updateResidentBehavior($user);
             }
             return response()->json(['success' => true]);
         }
@@ -1081,6 +868,20 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             }
         }
         
+        try {
+            \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($validated) {
+                $message->to($validated['email'])
+                        ->subject('Your Subdivision System Account')
+                        ->html("<h2>Welcome to Subdivision System</h2>
+                                <p>Your account has been created. Here are your login credentials:</p>
+                                <p><strong>Email:</strong> {$validated['email']}<br>
+                                <strong>Password:</strong> {$validated['password']}</p>
+                                <p>Please login and change your password immediately.</p>");
+            });
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to send email to new user: ' . $e->getMessage());
+        }
+        
         return response()->json(['success' => true]);
     });
 
@@ -1116,34 +917,129 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
 
     Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $request) {
         $type = $request->input('type'); // 'electricity' or 'water'
+        $rate = $request->input('rate');
+        $penalty = $request->input('penalty', 5);
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
+        
+        $waterMinM3 = $request->input('water_min_m3');
+        $waterMinRate = $request->input('water_min_rate');
+        
+        if ($rate !== null) {
+            $settingKey = $type === 'electricity' ? 'elec_rate' : 'water_rate';
+            \App\Models\Setting::updateOrCreate(['key' => $settingKey], ['value' => $rate]);
+        }
+        if ($penalty !== null) {
+            \App\Models\Setting::updateOrCreate(['key' => $type . '_penalty'], ['value' => $penalty]);
+        }
+        if ($type === 'water') {
+            if ($waterMinM3 !== null) {
+                \App\Models\Setting::updateOrCreate(['key' => 'water_min_m3'], ['value' => $waterMinM3]);
+            }
+            if ($waterMinRate !== null) {
+                \App\Models\Setting::updateOrCreate(['key' => 'water_min_rate'], ['value' => $waterMinRate]);
+            }
+        }
         
         $lots = \App\Models\Lot::has('users')->with('users')->get();
         foreach ($lots as $lot) {
+            if ($type === 'electricity' && $lot->provider_managed) {
+                continue; // Skip CASURECO disconnected lots for electricity
+            }
+            
             $user = $lot->users->first();
             
-            // Always create a new bill for the new cycle
-            \App\Models\UtilityBill::create([
+            $lastBill = \App\Models\UtilityBill::where('lot_id', $lot->id)
+                ->where('type', $type)
+                ->orderBy('created_at', 'desc')
+                ->first();
+                
+            $prevReading = $lastBill && $lastBill->current_reading !== null ? $lastBill->current_reading : 0;
+            
+            $carriedBalance = 0;
+            if ($lastBill && $lastBill->status !== 'paid') {
+                $totalDueBeforePenalty = $lastBill->amount + $lastBill->previous_balance;
+                $penalty = $totalDueBeforePenalty * 0.05;
+                $totalDueAfterPenalty = $totalDueBeforePenalty + $penalty;
+                $totalPaid = \App\Models\Payment::where('utility_bill_id', $lastBill->id)->sum('amount_paid');
+                $carriedBalance = max(0, $totalDueAfterPenalty - $totalPaid);
+            }
+            
+            $bill = \App\Models\UtilityBill::create([
                 'id' => (string) \Illuminate\Support\Str::uuid(),
                 'type' => $type,
                 'user_id' => $user ? $user->id : null,
                 'lot_id' => $lot->id,
+                'previous_reading' => $prevReading,
+                'current_reading' => 0,
                 'usage_value' => 0,
                 'amount' => 0,
-                'due_date' => null,
+                'previous_balance' => $carriedBalance,
+                'due_date' => $endDate,
                 'status' => 'unpaid',
                 'is_at_risk' => false,
             ]);
+            
+            if ($startDate) {
+                $bill->created_at = \Carbon\Carbon::parse($startDate)->startOfDay();
+                $bill->save();
+            }
         }
         return response()->json(['success' => true]);
     });
 
+    Route::post('/admin/api/billing/disconnect', function (\Illuminate\Http\Request $request) {
+        $lotNumber = $request->input('lot');
+        $lot = \App\Models\Lot::where('lot_number', $lotNumber)->orWhere('block', 'like', "%$lotNumber%")->first();
+        if ($lot) {
+            $lot->provider_managed = true;
+            $lot->save();
+            return response()->json(['success' => true]);
+        }
+        return response()->json(['success' => false, 'message' => 'Lot not found.'], 404);
+    });
+
+    Route::post('/admin/api/billing/reconnect', function (\Illuminate\Http\Request $request) {
+        $lotNumber = $request->input('lot');
+        $lot = \App\Models\Lot::where('lot_number', $lotNumber)->orWhere('block', 'like', "%$lotNumber%")->first();
+        if ($lot) {
+            $lot->provider_managed = false;
+            $lot->save();
+            return response()->json(['success' => true]);
+        }
+        return response()->json(['success' => false, 'message' => 'Lot not found.'], 404);
+    });
+
+    Route::post('/admin/api/billing/add-balance', function (\Illuminate\Http\Request $request) {
+        $id = $request->input('id');
+        $balance = (float)$request->input('balance');
+        $bill = \App\Models\UtilityBill::where('id', 'like', $id . '%')->first();
+        if ($bill) {
+            $bill->update(['previous_balance' => $bill->previous_balance + $balance]);
+            return response()->json(['success' => true]);
+        }
+        return response()->json(['success' => false], 404);
+    });
+
     Route::post('/admin/api/billing/pay', function (\Illuminate\Http\Request $request) {
         $id = $request->input('id');
-        $amount = $request->input('amount');
+        $amount = (float)$request->input('amount');
         
         $bill = \App\Models\UtilityBill::where('id', 'like', $id . '%')->first();
         if ($bill) {
-            $bill->update(['status' => 'paid']);
+            $totalDueBeforePenalty = $bill->amount + $bill->previous_balance;
+            $penalty = ($bill->due_date && \Carbon\Carbon::parse($bill->due_date)->isPast()) ? ($totalDueBeforePenalty * 0.05) : 0;
+            $totalDue = $totalDueBeforePenalty + $penalty;
+            $totalPaid = \App\Models\Payment::where('utility_bill_id', $bill->id)->sum('amount_paid');
+            
+            $remaining = round($totalDue - $totalPaid, 2);
+            if ($remaining <= 0) {
+                return response()->json(['success' => false, 'message' => 'Bill is already fully paid.'], 400);
+            }
+            if ($amount > $remaining) {
+                return response()->json(['success' => false, 'message' => 'Payment amount exceeds the remaining balance.'], 400);
+            }
+
             \App\Models\Payment::create([
                 'id' => (string) \Illuminate\Support\Str::uuid(),
                 'utility_bill_id' => $bill->id,
@@ -1152,6 +1048,12 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
                 'trn' => 'TRN-' . strtoupper(\Illuminate\Support\Str::random(8)),
                 'payment_date' => now(),
             ]);
+            
+            $totalPaidAfter = \App\Models\Payment::where('utility_bill_id', $bill->id)->sum('amount_paid');
+            if ($totalPaidAfter >= $totalDue - 0.01) {
+                $bill->update(['status' => 'paid']);
+            }
+            
             return response()->json(['success' => true]);
         }
         return response()->json(['success' => false], 404);

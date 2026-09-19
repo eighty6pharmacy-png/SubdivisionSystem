@@ -1,0 +1,57 @@
+/* PIN Inputs for Guard */
+    .guard-pin-form {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        max-width: 480px;
+        margin: 0 auto;
+    }
+
+    .guard-pin-digits {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+        justify-content: center;
+        width: 100%;
+    }
+
+    .guard-pin-digit {
+        width: 60px;
+        height: 70px;
+        font-size: 32px;
+        font-weight: 800;
+        text-align: center;
+        border: 2px solid var(--border);
+        border-radius: 12px;
+        background: #fff;
+        color: var(--guard-primary);
+        transition: all 0.2s ease;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+
+    .guard-pin-digit:focus {
+        outline: none;
+        border-color: var(--guard-accent);
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+        transform: translateY(-2px);
+    }
+
+    .walkin-card {
+        border: 2px dashed #3b82f6;
+        background: #f0f9ff;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .walkin-card:hover {
+        background: #e0f2fe;
+        transform: translateY(-2px);
+    }
+
+@media (max-width: 900px) {
+        div[style*="display: grid; grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+    }
+    @media (max-width: 480px) {
+        .guard-pin-digit { width: 45px; height: 55px; font-size: 24px; }
+        .guard-pin-digits { gap: 8px; }
+    }

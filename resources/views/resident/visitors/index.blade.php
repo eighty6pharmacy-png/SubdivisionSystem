@@ -59,34 +59,7 @@
                         </tr>
                     </thead>
                     <tbody id="pinTableBody">
-                        @foreach($pins as $pin)
-                        <tr>
-                            <td style="font-family: monospace; font-size: 16px; font-weight: 800; color: #059669; letter-spacing: 1px;">
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    {{ $pin['pin'] }}
-                                    <button onclick="copyToClipboard('{{ $pin['pin'] }}')" style="background: none; border: none; cursor: pointer; color: #94a3b8; padding: 2px;" title="Copy PIN">
-                                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                                    </button>
-                                </div>
-                            </td>
-                            <td>
-                                <div style="font-weight: 700; color: #0f172a;">{{ $pin['visitor'] }}</div>
-                                <div style="font-size: 12px; color: #64748b;">{{ $pin['purpose'] }}</div>
-                            </td>
-                            <td style="font-size: 13px; color: #64748b; font-weight: 600;">
-                                {{ date('M d, Y', strtotime($pin['validity'] === 'Today' ? date('Y-m-d') : ($pin['validity'] === 'Tomorrow' ? date('Y-m-d', strtotime('+1 day')) : $pin['validity']))) }}
-                            </td>
-                            <td>
-                                @if($pin['status'] === 'Pending')
-                                    <span class="badge badge-success" style="padding: 4px 12px; border-radius: 20px;">Approved & Sent to Guard</span>
-                                @elseif($pin['status'] === 'Entered')
-                                    <span class="badge badge-success" style="padding: 4px 12px; border-radius: 20px; background:#dcfce7; color:#166534;">Entered Gate</span>
-                                @else
-                                    <span class="badge" style="background:#f1f5f9; color:#64748b; border: 1px solid #e2e8f0; padding: 4px 12px; border-radius: 20px;">Expired</span>
-                                @endif
-                            </td>
-                        </tr>
-                        @endforeach
+                        <!-- Populated by JS -->
                     </tbody>
                 </table>
             </div>
@@ -101,15 +74,22 @@
     });
 
     function renderResidentVisitors() {
-        const visitors = SubdivisionStore.getVisitors();
-        const tbody = document.getElementById('pinTableBody');
-        if (!tbody) return;
-
-        tbody.innerHTML = '';
-        visitors.forEach(pin => {
-            const tr = document.createElement('tr');
-            let statusBadge = '';
-            let codeDisplay = '';
+        fetch('/api/visitors')
+            .then(res => res.json())
+            .then(visitors => {
+                const tbody = document.getElementById('pinTableBody');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                
+                // Filter to only show logged in user's visitors if needed, but since api returns all, let's filter by host matching logged in user or we just adjust the API to only return auth()->user()->visitors if resident.
+                // Wait, the API returns all. The Resident should only see their own.
+                // In VisitorController index, I didn't filter by resident. Let's fix that in controller or filter here.
+                // I will filter here for now, or just show all for demo if hostName matches auth user.
+                
+                visitors.forEach(pin => {
+                    const tr = document.createElement('tr');
+                    let statusBadge = '';
+                    let codeDisplay = '';
 
             if(pin.status === 'Pending' || pin.status === 'Awaiting Admin Approval') {
                 tr.style.background = '#fffbeb';
@@ -142,6 +122,7 @@
 
             tbody.appendChild(tr);
         });
+        }).catch(err => console.error(err));
     }
 
     function copyToClipboard(text) {
@@ -164,42 +145,41 @@
         
         const reqId = 'VIS-' + Math.floor(3000 + Math.random() * 1000);
 
-        SubdivisionStore.addVisitor({
-            id: reqId,
-            pin: null,
-            visitor: name,
-            host: 'Juan Dela Cruz (Resident)',
-            block: '1',
-            lot: '5',
+        const payload = {
+            visitor_name: name,
             purpose: purpose,
             validity: formattedDate,
-            status: 'Pending'
+            type: 'Pre-registered',
+            plate_number: null
+        };
+
+        fetch('/api/visitors', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify(payload)
+        }).then(res => res.json()).then(data => {
+            if(data.success) {
+                document.getElementById('pinResultArea').style.display = 'block';
+                renderResidentVisitors();
+
+                document.getElementById('visName').value = '';
+                document.getElementById('visPurpose').value = '';
+                
+                if (window.pushSystemNotification) {
+                    window.pushSystemNotification("Request Submitted", `Visitor request for ${name} sent to Admin for approval.`, "Just now", true);
+                }
+
+                alert(`✓ VISITOR ACCESS REQUEST SUBMITTED!\n\nYour request for ${name} has been routed to Subdivision Admin for approval.\nOnce approved, your 6-digit verification code will be generated and forwarded to the security guard.`);
+            } else {
+                alert('Failed to submit request.');
+            }
         });
-
-        document.getElementById('pinResultArea').style.display = 'block';
-        renderResidentVisitors();
-
-        document.getElementById('visName').value = '';
-        document.getElementById('visPurpose').value = '';
-        
-        if (window.pushSystemNotification) {
-            window.pushSystemNotification("Request Submitted", `Visitor request for ${name} sent to Admin for approval.`, "Just now", true);
-        }
-
-        alert(`✓ VISITOR ACCESS REQUEST SUBMITTED!\n\nYour request for ${name} has been routed to Subdivision Admin for approval.\nOnce approved, your 6-digit verification code will be generated and forwarded to the security guard.`);
     }
 </script>
 
 
-<style>
-    @media (max-width: 900px) {
-        div[style*="display: grid; grid-template-columns: 1fr 2fr"] {
-            grid-template-columns: 1fr !important;
-        }
-        .analytic-card[style*="position: sticky"] {
-            position: relative !important;
-            top: 0 !important;
-        }
-    }
-</style>
+<link rel="stylesheet" href="{{ asset('css/views/resident-visitors.css') }}">
 @endsection

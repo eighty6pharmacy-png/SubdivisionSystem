@@ -81,13 +81,7 @@
 
 @section('scripts')
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<style>
-    .flatpickr-calendar {
-        transform: scale(0.85);
-        transform-origin: top left;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
-    }
-</style>
+<link rel="stylesheet" href="{{ asset('css/views/appointment.css') }}">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {

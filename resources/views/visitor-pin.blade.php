@@ -2,6 +2,10 @@
 
 @section('title', 'Visitor PIN Verification | Althesa Residences')
 
+@section('head')
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+@endsection
+
 @section('content')
 <section style="min-height: 80vh; display: flex; align-items: center; justify-content: center; background: #f8fafc; position: relative; overflow: hidden;">
     <!-- Background Pattern -->
@@ -23,18 +27,8 @@
             <label style="color: #64748b; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; font-weight: 800; margin-bottom: 20px; display: block;">Enter Access Code</label>
             
             <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 24px;" id="pinBoxes">
-                <input type="text" maxlength="1" class="pin-digit" data-index="0" autofocus
-                    style="width: 52px; height: 64px; background: #f1f5f9; border: 2px solid #cbd5e1; color: #0f172a; font-size: 24px; font-weight: 800; text-align: center; border-radius: 12px; outline: none; transition: all 0.2s;">
-                <input type="text" maxlength="1" class="pin-digit" data-index="1"
-                    style="width: 52px; height: 64px; background: #f1f5f9; border: 2px solid #cbd5e1; color: #0f172a; font-size: 24px; font-weight: 800; text-align: center; border-radius: 12px; outline: none; transition: all 0.2s;">
-                <input type="text" maxlength="1" class="pin-digit" data-index="2"
-                    style="width: 52px; height: 64px; background: #f1f5f9; border: 2px solid #cbd5e1; color: #0f172a; font-size: 24px; font-weight: 800; text-align: center; border-radius: 12px; outline: none; transition: all 0.2s;">
-                <input type="text" maxlength="1" class="pin-digit" data-index="3"
-                    style="width: 52px; height: 64px; background: #f1f5f9; border: 2px solid #cbd5e1; color: #0f172a; font-size: 24px; font-weight: 800; text-align: center; border-radius: 12px; outline: none; transition: all 0.2s;">
-                <input type="text" maxlength="1" class="pin-digit" data-index="4"
-                    style="width: 52px; height: 64px; background: #f1f5f9; border: 2px solid #cbd5e1; color: #0f172a; font-size: 24px; font-weight: 800; text-align: center; border-radius: 12px; outline: none; transition: all 0.2s;">
-                <input type="text" maxlength="1" class="pin-digit" data-index="5"
-                    style="width: 52px; height: 64px; background: #f1f5f9; border: 2px solid #cbd5e1; color: #0f172a; font-size: 24px; font-weight: 800; text-align: center; border-radius: 12px; outline: none; transition: all 0.2s;">
+                <input type="text" id="pin-input" maxlength="6" autofocus
+                    style="width: 240px; height: 64px; background: #f1f5f9; border: 2px solid #cbd5e1; color: #0f172a; font-size: 24px; font-weight: 800; text-align: center; letter-spacing: 8px; border-radius: 12px; outline: none; transition: all 0.2s;">
             </div>
 
             <p id="pinError" style="color: #ef4444; font-size: 13px; font-weight: 600; margin-bottom: 16px; display: none;">❌ Invalid PIN. Please check with your host or the guard.</p>
@@ -55,42 +49,30 @@
 
 @section('scripts')
 <script>
-    const digits = document.querySelectorAll('.pin-digit');
+    const pinInput = document.getElementById('pin-input');
     
-    // Auto-focus next input on entry
-    digits.forEach((input, idx) => {
-        input.addEventListener('input', function(e) {
-            this.value = this.value.replace(/[^0-9]/g, '');
-            if (this.value && idx < 5) {
-                digits[idx + 1].focus();
-            }
-            // Auto-verify when all 6 digits are entered
-            if (idx === 5 && this.value) {
-                verifyPin();
-            }
-        });
-        
-        input.addEventListener('keydown', function(e) {
-            if (e.key === 'Backspace' && !this.value && idx > 0) {
-                digits[idx - 1].focus();
-            }
-        });
+    pinInput.addEventListener('input', function(e) {
+        this.value = this.value.replace(/[^0-9]/g, '');
+        if (this.value.length === 6) {
+            verifyPin();
+        }
+    });
 
-        input.addEventListener('focus', function() {
-            this.style.borderColor = '#2563eb';
-            this.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.15)';
-        });
+    pinInput.addEventListener('focus', function() {
+        this.style.borderColor = '#2563eb';
+        this.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.15)';
+    });
 
-        input.addEventListener('blur', function() {
-            this.style.borderColor = '#cbd5e1';
-            this.style.boxShadow = 'none';
-        });
+    pinInput.addEventListener('blur', function() {
+        this.style.borderColor = '#cbd5e1';
+        this.style.boxShadow = 'none';
     });
 
     function verifyPin() {
-        const pin = Array.from(digits).map(d => d.value).join('');
+        const pin = document.getElementById('pin-input').value;
         const error = document.getElementById('pinError');
         const success = document.getElementById('pinSuccess');
+        const pInput = document.getElementById('pin-input');
 
         if (pin.length < 6) {
             error.textContent = '⚠️ Please enter all 6 digits.';
@@ -99,30 +81,50 @@
             return;
         }
 
-        // Valid PINs from web.php simulation data
-        const validPins = ['111111'];
-
-        if (validPins.includes(pin)) {
-            error.style.display = 'none';
-            success.style.display = 'block';
-            digits.forEach(d => { d.style.borderColor = '#10b981'; d.disabled = true; });
-            document.getElementById('verifyBtn').disabled = true;
-            document.getElementById('verifyBtn').textContent = 'Redirecting...';
-
-            setTimeout(() => {
-                window.location.href = '/routing-guide';
-            }, 1500);
-        } else {
-            error.textContent = '❌ Invalid PIN. Please check with your host or the guard.';
-            error.style.display = 'block';
-            success.style.display = 'none';
-            digits.forEach(d => { d.style.borderColor = '#ef4444'; d.value = ''; });
-            setTimeout(() => {
-                digits.forEach(d => { d.style.borderColor = '#cbd5e1'; });
+        fetch('/api/validate-pin', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify({ pin: pin })
+        })
+        .then(res => {
+            if (!res.ok) throw new Error("Server error");
+            return res.json();
+        })
+        .then(data => {
+            if (data.success) {
                 error.style.display = 'none';
-                digits[0].focus();
-            }, 2500);
-        }
+                success.style.display = 'block';
+                pInput.style.borderColor = '#10b981';
+                pInput.disabled = true;
+                document.getElementById('verifyBtn').disabled = true;
+                document.getElementById('verifyBtn').textContent = 'Redirecting...';
+
+                // Save visitor and destination context to use on the routing map
+                localStorage.setItem('visitor_routing_context', JSON.stringify(data));
+
+                setTimeout(() => {
+                    window.location.href = '/routing-guide';
+                }, 1500);
+            } else {
+                error.textContent = '❌ ' + (data.message || 'Invalid PIN. Please check with your host or the guard.');
+                error.style.display = 'block';
+                success.style.display = 'none';
+                pInput.style.borderColor = '#ef4444';
+                pInput.value = '';
+                setTimeout(() => {
+                    pInput.style.borderColor = '#cbd5e1';
+                    error.style.display = 'none';
+                    pInput.focus();
+                }, 2500);
+            }
+        }).catch(err => {
+            error.textContent = '❌ An error occurred during validation.';
+            error.style.display = 'block';
+            console.error(err);
+        });
     }
 </script>
 @endsection

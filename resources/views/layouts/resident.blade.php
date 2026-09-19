@@ -9,14 +9,7 @@
     <link rel="stylesheet" href="{{ asset('css/admin.css') }}">
     <script src="{{ asset('js/subdivision-store.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        :root {
-            --res-primary: #059669; /* Emerald 600 */
-            --res-primary-soft: #ecfdf5;
-        }
-        .sidebar-logo p { color: var(--res-primary); font-weight: 700; }
-        .nav-item.active { background: var(--res-primary-soft); color: var(--res-primary); border-left: 4px solid var(--res-primary); }
-    </style>
+    <link rel="stylesheet" href="{{ asset('css/views/layout-resident.css') }}">
 </head>
 <body class="admin-body">
 
@@ -57,6 +50,10 @@
             <a href="/resident/visitors" class="nav-item {{ request()->is('resident/visitors') ? 'active' : '' }}">
                 <span class="nav-icon">🔑</span>
                 <span>Visitor PINs</span>
+            </a>
+            <a href="/resident/map" class="nav-item {{ request()->is('resident/map') ? 'active' : '' }}">
+                <span class="nav-icon">🗺️</span>
+                <span>Interactive Map</span>
             </a>
             
             <div class="nav-section-label">Community</div>
@@ -251,5 +248,6 @@
             }
         });
     </script>
+    @yield('scripts')
 </body>
 </html>

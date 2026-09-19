@@ -127,13 +127,7 @@
     </div>
 </div>
 
-<style>
-    .active-filter {
-        background: var(--ann-primary) !important;
-        color: white !important;
-        border-color: var(--ann-primary) !important;
-    }
-</style>
+<link rel="stylesheet" href="{{ asset('css/views/admin-announcements.css') }}">
 
 <script>
     function openModal() {

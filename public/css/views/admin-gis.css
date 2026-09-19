@@ -1,0 +1,164 @@
+/* GIS Specific Styles */
+        .gis-wrapper {
+            display: grid;
+            grid-template-columns: 280px 1fr 320px;
+            gap: 0;
+            height: calc(100vh - 120px);
+            margin: -20px;
+            background: #0f172a;
+            overflow: hidden;
+            border-radius: 0 0 24px 24px;
+            position: relative;
+        }
+
+        /* Left Panel - Layers & Search */
+        .gis-sidebar-left {
+            background: rgba(15, 23, 42, 0.9);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 24px;
+            color: #f8fafc;
+            z-index: 10;
+            backdrop-filter: blur(10px);
+        }
+
+        /* Center - Map Canvas */
+        .gis-viewport {
+            position: relative;
+            overflow: hidden;
+            background: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .map-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+    /* Leaflet Overrides */
+    path.leaflet-interactive:focus {
+        outline: none;
+    }
+    .leaflet-tooltip {
+        font-weight: 700;
+        border: none;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        border-radius: 8px;
+    }
+
+        /* Legend Styles - Moved to Right Sidebar */
+        .legend-section {
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .legend-box {
+            width: 28px;
+            height: 18px;
+            border-radius: 2px;
+            border: 1.5px solid rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8px;
+            color: white;
+            font-weight: 800;
+        }
+
+    /* Right Panel - Details */
+    .gis-sidebar-right {
+        background: #fff;
+        border-left: 1px solid #e2e8f0;
+        padding: 24px;
+        color: #0f172a;
+        z-index: 10;
+        box-shadow: -10px 0 30px rgba(0,0,0,0.02);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .info-card {
+        background: #f8fafc;
+        padding: 20px;
+        border-radius: 16px;
+        border: 1px solid #e2e8f0;
+        margin-bottom: 20px;
+    }
+
+    .status-badge {
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        display: inline-block;
+        margin-top: 8px;
+    }
+
+    .badge-occupied { background: #f8fafc; color: #000; border: 1px solid #000; }
+    .badge-vacant { background: #dbeafe; color: #1e40af; }
+    .badge-vacant-house { background: #dbeafe; color: #1e40af; }
+    .badge-vacant-lot { background: #fef3c7; color: #92400e; }
+    .badge-reserved { background: #f3e8ff; color: #6b21a8; border: 1px solid #c084fc; }
+    .badge-paid { background: #dcfce7; color: #166534; }
+    .badge-unpaid { background: #fee2e2; color: #991b1b; }
+    .badge-construction { background: #fee2e2; color: #991b1b; }
+    .badge-under-construction { background: #fee2e2; color: #991b1b; }
+
+        /* Floating Controls REMOVED - Moved to Sidebar */
+        .gis-controls {
+            display: none;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        input[type=range] {
+            width: 120px;
+            accent-color: var(--primary);
+        }
+
+        .layer-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 4px;
+            border: 1px solid transparent;
+            color: #64748b;
+        }
+
+        .layer-item:hover {
+            background: #f1f5f9;
+        }
+
+        .layer-item.active {
+            background: #fff;
+            border-color: #e2e8f0;
+            color: var(--primary);
+            font-weight: 700;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }

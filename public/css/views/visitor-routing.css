@@ -1,0 +1,82 @@
+.routing-viewport {
+        position: relative;
+        background: #f1f5f9;
+        height: calc(100vh - 80px);
+        width: 100%;
+    }
+
+    #mapContainer {
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+    }
+
+    /* ===== FLOATING INFO BAR ===== */
+    .route-info-bar {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        z-index: 1000;
+        background: rgba(255,255,255,0.95);
+        backdrop-filter: blur(12px);
+        padding: 12px 24px;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        border: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .route-info-bar .dest-name {
+        font-size: 15px;
+        font-weight: 800;
+        color: #0f172a;
+    }
+
+    .route-info-bar .dest-sub {
+        font-size: 11px;
+        color: #64748b;
+        font-weight: 600;
+    }
+
+    /* ===== FLOATING LEGEND ===== */
+    .route-legend {
+        position: absolute;
+        bottom: 24px;
+        left: 24px;
+        z-index: 1000;
+        background: rgba(255,255,255,0.95);
+        backdrop-filter: blur(12px);
+        padding: 14px 18px;
+        border-radius: 14px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        border: 1px solid #e2e8f0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .legend-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: #64748b;
+        font-weight: 600;
+    }
+
+    @media (max-width: 640px) {
+        .route-info-bar {
+            width: calc(100% - 32px);
+            padding: 10px 16px;
+            top: 12px;
+        }
+        .route-info-bar .dest-name { font-size: 13px; }
+        .route-legend {
+            bottom: 12px;
+            left: 12px;
+            padding: 10px 14px;
+            gap: 6px;
+        }
+    }

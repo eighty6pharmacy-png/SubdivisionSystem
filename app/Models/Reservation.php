@@ -20,6 +20,8 @@ class Reservation extends Model
         'reservation_date',
         'amount',
         'notes',
+        'first_name',
+        'last_name',
     ];
 
     protected function casts(): array

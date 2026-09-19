@@ -17,9 +17,9 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             PhaseOneSeeder::class,
-            PhaseTwoSeeder::class,
-            PhaseThreeSeeder::class,
-            PhaseFourSeeder::class,
+            // PhaseTwoSeeder::class,
+            // PhaseThreeSeeder::class,
+            // PhaseFourSeeder::class,
         ]);
 
         // Factory removed.

@@ -210,6 +210,7 @@
     </div>
 </div>
 
+<script src="{{ asset('js/gis-dropdowns.js') }}"></script>
 <script>
     const allBillsRaw = @json($bills);
 
@@ -343,17 +344,17 @@
     document.addEventListener('DOMContentLoaded', function() {
         const ctx = document.getElementById('reservationSalesChart')?.getContext('2d');
         if (ctx) {
+            @php
+                $chartData = getMonthlyChartData('reservation');
+            @endphp
             new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May (Now)', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                    labels: @json($chartData['labels']),
                     datasets: [{
                         label: 'Reservation Fee Collection (₱)',
-                        data: [40000, 60000, 80000, 120000, 100000, 70000, 80000, 90000, 60000, 50000, 45000, 80000],
-                        backgroundColor: [
-                            '#a855f7', '#a855f7', '#a855f7', '#a855f7', '#6366f1',
-                            '#e2e8f0', '#e2e8f0', '#e2e8f0', '#e2e8f0', '#e2e8f0', '#e2e8f0', '#e2e8f0'
-                        ],
+                        data: @json($chartData['data']),
+                        backgroundColor: @json($chartData['colors']),
                         borderRadius: 6,
                         borderSkipped: false
                     }]
@@ -394,6 +395,8 @@
         }
     });
     window.addEventListener('DOMContentLoaded', () => {
+        bindGisDropdowns('resBlock', 'resLot', { blockPrefix: 'Block ', lotPrefix: 'Lot ' });
+        
         if (new URLSearchParams(window.location.search).get('action') === 'add') {
             openReservationModal();
         }

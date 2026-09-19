@@ -291,12 +291,5 @@
     });
 </script>
 
-<style>
-    @media (max-width: 480px) {
-        .bill-header { flex-direction: column; align-items: flex-start; gap: 16px; }
-        .bill-actions { width: 100%; }
-        .btn-primary { width: 100%; justify-content: center; }
-        .filter-group { min-width: 100%; }
-    }
-</style>
+<link rel="stylesheet" href="{{ asset('css/views/admin-residents.css') }}">
 @endsection

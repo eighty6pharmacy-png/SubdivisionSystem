@@ -1,0 +1,6 @@
+:root {
+            --res-primary: #059669; /* Emerald 600 */
+            --res-primary-soft: #ecfdf5;
+        }
+        .sidebar-logo p { color: var(--res-primary); font-weight: 700; }
+        .nav-item.active { background: var(--res-primary-soft); color: var(--res-primary); border-left: 4px solid var(--res-primary); }

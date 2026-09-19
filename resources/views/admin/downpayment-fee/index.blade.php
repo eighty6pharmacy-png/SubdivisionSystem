@@ -66,7 +66,6 @@
                 <h3 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 0;">Monthly Downpayment & Amortization Revenue Trends</h3>
                 <p style="font-size: 12px; color: #64748b; margin: 4px 0 0 0;">12-month buyer installment collections & monthly amortization sales (in ₱ Thousands)</p>
             </div>
-            <span class="badge" style="background: #fffbeb; color: #b45309; font-weight: 700; padding: 6px 14px; border-radius: 12px;">+18.5% YoY Growth</span>
         </div>
         <div style="height: 200px; position: relative;">
             <canvas id="downpaymentSalesChart"></canvas>
@@ -98,7 +97,7 @@
                     <tr class="bill-row" id="row-{{ $bill['id'] }}">
                         <td>
                             <div style="font-weight: 700;">{{ $bill['buyer'] }}</div>
-                            <div style="font-size: 12px; color: #64748b;">Block {{ $bill['block'] }} Lot {{ $bill['lot'] }}</div>
+                            <div style="font-size: 12px; color: #64748b;">ID: {{ strtoupper($bill['id']) }} &bull; Block {{ $bill['block'] }} Lot {{ $bill['lot'] }}</div>
                         </td>
                         <td style="min-width: 200px;" id="progress-cell-{{ $bill['id'] }}">
                             <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; font-weight: 700; color: #64748b;">
@@ -180,7 +179,7 @@
 
                 <div style="display: flex; gap: 16px; margin-top: 40px; border-top: 1px solid var(--bill-border); padding-top: 32px;">
                     <button class="btn btn-outline" style="color: var(--bill-primary); border-color: var(--bill-primary);" onclick="alert('Creating receipt...')">Create Receipt</button>
-                    <button class="btn btn-outline" onclick="alert('Viewing full statement history...')">View History</button>
+                    <button class="btn btn-outline" onclick="viewHistory()">View History</button>
                 </div>
             </div>
         </div>
@@ -198,9 +197,15 @@
         </div>
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-            <div>
-                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Buyer Name</label>
-                <input type="text" id="calcName" class="filter-select" style="width: 100%; padding: 12px;" placeholder="Full Name">
+            <div style="display: flex; gap: 8px;">
+                <div style="flex:1;">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">First Name</label>
+                    <input type="text" id="calcFirstName" class="filter-select" style="width: 100%; padding: 12px;" placeholder="First Name" required>
+                </div>
+                <div style="flex:1;">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Last Name</label>
+                    <input type="text" id="calcLastName" class="filter-select" style="width: 100%; padding: 12px;" placeholder="Last Name" required>
+                </div>
             </div>
             <div style="display: flex; gap: 8px;">
                 <div style="flex:1;">
@@ -212,6 +217,10 @@
                     <select id="calcLot" class="filter-select" style="width: 100%; padding: 12px;"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option></select>
                 </div>
             </div>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Contract Date</label>
+            <input type="date" id="calcContractDate" class="filter-select" style="width: 100%; padding: 12px;" required>
         </div>
 
         <div style="padding: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; margin-bottom: 24px;">
@@ -245,6 +254,7 @@
     </div>
 </div>
 
+<script src="{{ asset('js/gis-dropdowns.js') }}"></script>
 <script>
     const allBillsRaw = @json($bills);
 
@@ -273,51 +283,66 @@
 
 
     
-    function submitPayment() {
+    async function submitPayment() {
         if(!currentModalId) return;
         const amount = parseFloat(document.getElementById('directPaymentAmount').value);
         if(!amount || amount <= 0) return alert('Enter valid amount');
 
-        const bill = allBillsRaw.find(b => b.id === currentModalId);
-        if(bill) {
-            bill.paid_amount += amount;
-            bill.months_paid += 1;
-            
-            // Recompute progress
-            let progress = (bill.paid_amount / bill.total_dp) * 100;
-            if(progress > 100) progress = 100;
-            if(bill.paid_amount >= bill.total_dp) {
-                bill.status = 'Fully Paid';
-                bill.paid_amount = bill.total_dp;
-            } else {
-                bill.status = 'Good Standing';
-            }
+        try {
+            const res = await fetch('/admin/downpayment-fee/pay', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ id: currentModalId, amount: amount })
+            });
 
-            // Update DOM directly for speed
-            const cell = document.getElementById('progress-cell-' + currentModalId);
-            if(cell) {
-                cell.querySelector('.paid-label').textContent = `₱${bill.paid_amount.toLocaleString()} Paid`;
-                cell.querySelector('.progress-fill').style.width = `${progress}%`;
-                cell.querySelector('.months-label').textContent = `${bill.months_paid} of ${bill.total_months} mos`;
-            }
+            if (res.ok) {
+                const bill = allBillsRaw.find(b => b.id === currentModalId);
+                if(bill) {
+                    bill.paid_amount += amount;
+                    bill.months_paid += 1;
+                    
+                    let progress = (bill.paid_amount / bill.total_dp) * 100;
+                    if(progress > 100) progress = 100;
+                    if(bill.paid_amount >= bill.total_dp) {
+                        bill.status = 'Fully Paid';
+                        bill.paid_amount = bill.total_dp;
+                    } else {
+                        bill.status = 'Good Standing';
+                    }
 
-            const statusCell = document.getElementById('status-cell-' + currentModalId);
-            if(statusCell) {
-                if(bill.status === 'Fully Paid') {
-                    statusCell.innerHTML = `<span class="badge badge-success" style="background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;">Fully Paid 🎉</span>`;
-                } else {
-                    statusCell.innerHTML = `<span class="badge badge-success">Good Standing</span>`;
+                    const cell = document.getElementById('progress-cell-' + currentModalId);
+                    if(cell) {
+                        cell.querySelector('.paid-label').textContent = `₱${bill.paid_amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} Paid`;
+                        cell.querySelector('.progress-fill').style.width = `${progress}%`;
+                        cell.querySelector('.months-label').textContent = `${bill.months_paid} of ${bill.total_months} mos`;
+                    }
+
+                    const statusCell = document.getElementById('status-cell-' + currentModalId);
+                    if(statusCell) {
+                        if(bill.status === 'Fully Paid') {
+                            statusCell.innerHTML = `<span class="badge badge-success" style="background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;">Fully Paid 🎉</span>`;
+                        } else {
+                            statusCell.innerHTML = `<span class="badge badge-success">Good Standing</span>`;
+                        }
+                    }
+                    
+                    viewDetail(currentModalId);
                 }
-            }
-            
-            // Re-render modal to show new balance
-            viewDetail(currentModalId);
-        }
 
-        document.getElementById('directPaymentAmount').value = '';
-        
-        if (window.pushSystemNotification) {
-            window.pushSystemNotification("Payment Logged", `₱${amount.toLocaleString()} posted to ${bill.buyer}'s contract.`, "System");
+                document.getElementById('directPaymentAmount').value = '';
+                
+                if (window.pushSystemNotification) {
+                    window.pushSystemNotification("Payment Logged", `₱${amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} posted to ${bill.buyer}'s contract.`, "System");
+                }
+            } else {
+                alert('Failed to save payment');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Error connecting to server');
         }
     }
 
@@ -384,7 +409,9 @@
             btn.style.opacity = '0.7';
         }
 
-        const name = document.getElementById('calcName').value || 'New Buyer';
+        const firstName = document.getElementById('calcFirstName').value || 'New';
+        const lastName = document.getElementById('calcLastName').value || 'Buyer';
+        const contractDate = document.getElementById('calcContractDate').value || new Date().toISOString().split('T')[0];
         const blk = document.getElementById('calcBlk').value;
         const lot = document.getElementById('calcLot').value;
         
@@ -405,11 +432,15 @@
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 },
                 body: JSON.stringify({
-                    name: name,
+                    first_name: firstName,
+                    last_name: lastName,
+                    contract_date: contractDate,
                     block: blk,
                     lot: lot,
                     dpAmount: dpAmount,
-                    nextDate: nextDate.toISOString()
+                    nextDate: nextDate.toISOString(),
+                    monthly_amortization: amortization,
+                    months_to_pay: months
                 })
             });
 
@@ -437,17 +468,17 @@
     document.addEventListener('DOMContentLoaded', function() {
         const ctx = document.getElementById('downpaymentSalesChart')?.getContext('2d');
         if (ctx) {
+            @php
+                $chartData = getMonthlyChartData('downpayment');
+            @endphp
             new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May (Now)', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                    labels: @json($chartData['labels']),
                     datasets: [{
                         label: 'Downpayment & Amortization Collection (₱)',
-                        data: [110000, 130000, 155000, 175000, 190000, 150000, 160000, 170000, 140000, 135000, 125000, 165000],
-                        backgroundColor: [
-                            '#f59e0b', '#f59e0b', '#f59e0b', '#f59e0b', '#ca8a04',
-                            '#e2e8f0', '#e2e8f0', '#e2e8f0', '#e2e8f0', '#e2e8f0', '#e2e8f0', '#e2e8f0'
-                        ],
+                        data: @json($chartData['data']),
+                        backgroundColor: @json($chartData['colors']),
                         borderRadius: 6,
                         borderSkipped: false
                     }]
@@ -487,7 +518,57 @@
             });
         }
     });
+    function viewHistory() {
+        const bill = allBillsRaw.find(b => b.id === currentModalId);
+        if (!bill) return;
+
+        let tbody = document.querySelector('#historyModal tbody');
+        if (!tbody) {
+            const historyHtml = `
+            <div id="historyModal" class="bill-modal" style="display: flex; align-items: center; justify-content: center; z-index: 4000;">
+                <div class="bill-modal-content" style="max-width: 600px; padding: 24px; border-radius: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                        <h3 style="font-size: 18px; font-weight: 800;">Payment History</h3>
+                        <button onclick="document.getElementById('historyModal').remove()" style="background:none;border:none;font-size:24px;cursor:pointer;">&times;</button>
+                    </div>
+                    <div style="max-height: 400px; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                            <thead>
+                                <tr style="border-bottom: 2px solid #e2e8f0; color: #64748b;">
+                                    <th style="padding: 12px; text-align: left;">Date</th>
+                                    <th style="padding: 12px; text-align: left;">TRN</th>
+                                    <th style="padding: 12px; text-align: right;">Amount</th>
+                                    <th style="padding: 12px; text-align: center;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>`;
+            document.body.insertAdjacentHTML('beforeend', historyHtml);
+            tbody = document.querySelector('#historyModal tbody');
+        } else {
+            document.getElementById('historyModal').style.display = 'flex';
+        }
+
+        if (bill.history && bill.history.length > 0) {
+            tbody.innerHTML = bill.history.map(h => `
+                <tr style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding: 12px; font-weight: 600;">${h.date}</td>
+                    <td style="padding: 12px; color: #64748b; font-family: monospace;">${h.trn}</td>
+                    <td style="padding: 12px; text-align: right; font-weight: 700; color: #0f172a;">₱${h.amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td style="padding: 12px; text-align: center;"><span class="trend-chip trend-early" style="font-size:11px;">Paid</span></td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = `<tr><td colspan="4" style="padding: 24px; text-align: center; color: #64748b;">No payments recorded yet.</td></tr>`;
+        }
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
+        bindGisDropdowns('calcBlk', 'calcLot');
+        
         if (new URLSearchParams(window.location.search).get('action') === 'add') {
             openContractModal();
         }

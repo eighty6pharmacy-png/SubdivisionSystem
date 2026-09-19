@@ -272,6 +272,7 @@
     </div>
 </div>
 
+<script src="{{ asset('js/gis-dropdowns.js') }}"></script>
 <script>
     function generateRandomEditPass() {
         const pass = 'AL' + Math.random().toString(36).slice(-5).toUpperCase() + '!';
@@ -298,8 +299,7 @@
         const resFields = document.getElementById('editResidentFields');
         if (role === 'Resident') {
             resFields.style.display = 'grid';
-            document.getElementById('editResBlock').value = block;
-            document.getElementById('editResLot').value = lot;
+            bindGisDropdowns('editResBlock', 'editResLot', { currentBlock: block, currentLot: lot });
         } else {
             resFields.style.display = 'none';
         }
@@ -392,6 +392,8 @@
     }
 
     window.addEventListener('DOMContentLoaded', () => {
+        bindGisDropdowns('resBlock', 'resLot');
+        
         const params = new URLSearchParams(window.location.search);
         if (params.get('action') === 'add') {
             openAddUserModal();
@@ -526,10 +528,5 @@
     }
 </script>
 
-<style>
-    .user-row { transition: background 0.2s ease; }
-    .user-row:hover { background: #f8fafc; }
-    .badge-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-    .badge-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-</style>
+<link rel="stylesheet" href="{{ asset('css/views/admin-users.css') }}">
 @endsection

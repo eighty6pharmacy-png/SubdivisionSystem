@@ -18,6 +18,9 @@ class Downpayment extends Model
         'due_date',
         'status',
         'balance',
+        'monthly_amortization',
+        'months_to_pay',
+        'contract_date',
     ];
 
     protected function casts(): array

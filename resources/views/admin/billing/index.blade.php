@@ -12,11 +12,6 @@
             <p>12-month consumption analysis, payment channel management, and predictive delinquency tracking.</p>
         </div>
         <div class="bill-actions">
-            <!-- New: Billing Settings Button -->
-            <button class="btn btn-outline" style="border-color: var(--bill-primary); color: var(--bill-primary);" onclick="openSettingsModal()">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                Billing Settings
-            </button>
             <button class="btn btn-outline" style="border-color: var(--bill-primary); color: var(--bill-primary);" onclick="resetBillingCycle()">
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
                 New Cycle
@@ -28,17 +23,16 @@
     <div style="background: #fff; border: 1px solid var(--bill-border); border-radius: 20px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
             <h2 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 0;">Ledger Performance Summary</h2>
-            <select id="summaryMonth" class="filter-select" style="font-weight: 600; color: var(--bill-primary); border-color: #cbd5e1;" onchange="updateSummaryDashboard()">
-                @php
-                    $m0 = date('M Y');
-                    $m1 = date('M Y', strtotime('-1 month'));
-                    $m2 = date('M Y', strtotime('-2 months'));
-                    $m3 = date('M Y', strtotime('-3 months'));
-                @endphp
-                <option value="{{ $m0 }}" selected>Current Month ({{ $m0 }})</option>
-                <option value="{{ $m1 }}">{{ date('F Y', strtotime('-1 month')) }}</option>
-                <option value="{{ $m2 }}">{{ date('F Y', strtotime('-2 months')) }}</option>
-                <option value="{{ $m3 }}">{{ date('F Y', strtotime('-3 months')) }}</option>
+            <select id="summaryMonth" class="filter-select" style="font-weight: 600; color: var(--bill-primary); border-color: #cbd5e1;" onchange="window.location.href='?cycle='+this.value">
+                @if(empty($validCycles))
+                    <option value="" disabled selected>No Records Available</option>
+                @else
+                    @foreach($validCycles as $c)
+                        <option value="{{ $c['cycle'] }}" {{ request('cycle') == $c['cycle'] ? 'selected' : '' }}>
+                            {{ $c['label'] }}
+                        </option>
+                    @endforeach
+                @endif
             </select>
         </div>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
@@ -55,7 +49,7 @@
                 <div id="sumUnpaid" style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">0</div>
             </div>
             <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid #ef4444;">
-                <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Past Due (At Risk)</div>
+                <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Past Due</div>
                 <div id="sumPastDue" style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">0</div>
             </div>
         </div>
@@ -66,9 +60,8 @@
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
             <div>
                 <h3 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 0;">Monthly Electricity Revenue Trends</h3>
-                <p style="font-size: 12px; color: #64748b; margin: 4px 0 0 0;">12-month electrical billing revenue & collection performance (in ₱ Thousands)</p>
+                <p style="font-size: 12px; color: #64748b; margin: 4px 0 0 0;">12-month collection performance (in ₱ Thousands)</p>
             </div>
-            <span class="badge" style="background: #ecfdf5; color: #059669; font-weight: 700; padding: 6px 14px; border-radius: 12px;">+12.4% YoY Growth</span>
         </div>
         <div style="height: 200px; position: relative;">
             <canvas id="electricitySalesChart"></canvas>
@@ -100,23 +93,30 @@
                 <span style="font-size:11px; color:#94a3b8; font-weight:600;">Current Cycle</span>
             </div>
             <div class="donut-chart-container">
+                @php
+                    $latePct = $stats['percentages']['Late / At Risk'] ?? 0;
+                    $onTimePct = $stats['percentages']['On-Time'] ?? 0;
+                    $earlyPct = $stats['percentages']['Early Payers'] ?? 0;
+                    $onTimeOffset = $latePct;
+                    $earlyOffset = $latePct + $onTimePct;
+                @endphp
                 <svg width="200" height="200" viewBox="0 0 42 42" class="donut-svg">
-                    <circle class="donut-segment segment-late"   cx="21" cy="21" r="15.915" stroke-dasharray="20 80"></circle>
-                    <circle class="donut-segment segment-ontime" cx="21" cy="21" r="15.915" stroke-dasharray="30 70" stroke-dashoffset="-20"></circle>
-                    <circle class="donut-segment segment-early"  cx="21" cy="21" r="15.915" stroke-dasharray="50 50" stroke-dashoffset="-50"></circle>
+                    <circle class="donut-segment segment-late"   cx="21" cy="21" r="15.915" stroke-dasharray="{{ $latePct }} {{ 100 - $latePct }}"></circle>
+                    <circle class="donut-segment segment-ontime" cx="21" cy="21" r="15.915" stroke-dasharray="{{ $onTimePct }} {{ 100 - $onTimePct }}" stroke-dashoffset="-{{ $onTimeOffset }}"></circle>
+                    <circle class="donut-segment segment-early"  cx="21" cy="21" r="15.915" stroke-dasharray="{{ $earlyPct }} {{ 100 - $earlyPct }}" stroke-dashoffset="-{{ $earlyOffset }}"></circle>
                 </svg>
                 <div class="donut-legend">
                     <div class="legend-item">
                         <span class="legend-label"><span class="dot" style="background: var(--bill-success);"></span> Early Payers</span>
-                        <strong>50%</strong>
+                        <strong>{{ $earlyPct }}%</strong>
                     </div>
                     <div class="legend-item">
                         <span class="legend-label"><span class="dot" style="background: var(--bill-primary);"></span> On-Time</span>
-                        <strong>30%</strong>
+                        <strong>{{ $onTimePct }}%</strong>
                     </div>
                     <div class="legend-item">
-                        <span class="legend-label"><span class="dot" style="background: var(--bill-warning);"></span> Late / At Risk</span>
-                        <strong>20%</strong>
+                        <span class="legend-label"><span class="dot" style="background: var(--bill-warning);"></span> Late</span>
+                        <strong>{{ $latePct }}%</strong>
                     </div>
                 </div>
             </div>
@@ -193,10 +193,20 @@
         </div>
         <div class="filter-group">
             <span class="filter-label">Payment Behavior</span>
-            <select id="trendFilter" class="filter-select">
+            <select id="behaviorFilter" class="filter-select">
                 <option value="all">All Behaviors</option>
-                <option value="reliable">Early</option>
-                <option value="at-risk">Late</option>
+                <option value="Early">Early</option>
+                <option value="On-Time">On-Time</option>
+                <option value="Late">Late</option>
+                <option value="Not available yet">N/A</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Connection</span>
+            <select id="connectionFilter" class="filter-select">
+                <option value="internal">Subdivision Grid</option>
+                <option value="casureco">CASURECO (Archived)</option>
+                <option value="all">All</option>
             </select>
         </div>
         <div style="margin-left: auto;">
@@ -209,6 +219,13 @@
         <div class="card-title">
             <span>Electricity Billing Ledger</span>
         </div>
+        @if(count($bills) == 0)
+            <div style="text-align: center; padding: 60px 20px; background: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1; margin-top: 20px;">
+                <div style="font-size: 48px; margin-bottom: 16px;">⚡</div>
+                <h3 style="font-size: 20px; color: #0f172a; margin-bottom: 8px;">The Ledger is Blank</h3>
+                <p style="color: #64748b; font-size: 14px;">The system is new or no cycle has been generated yet.<br>Please click <strong>"New Cycle"</strong> at the top to initialize the ledger and record readings.</p>
+            </div>
+        @else
         <div class="bill-table-container">
             <table class="bill-table" id="billingTable">
                 <thead>
@@ -223,24 +240,34 @@
                 </thead>
                 <tbody>
                     @foreach($bills as $bill)
-                    <tr class="bill-row" data-resident="{{ strtolower($bill['resident']) }}" data-status="{{ $bill['status'] }}" data-trend="{{ $bill['at_risk'] ? 'at-risk' : 'reliable' }}" data-block="{{ $bill['block'] }}">
+                    <tr class="bill-row" data-resident="{{ strtolower($bill['resident']) }}" data-status="{{ $bill['status'] }}" data-behavior="{{ $bill['payment_behavior'] ?? 'Not available yet' }}" data-block="{{ $bill['block'] }}" data-connection="{{ $bill['provider_managed'] ? 'casureco' : 'internal' }}">
                         <td>
                             <div style="font-weight: 700;">{{ $bill['resident'] }}</div>
-                            <div style="font-size: 12px; color: #64748b;">{{ $bill['lot'] }}</div>
+                            <div style="font-size: 12px; color: #64748b;">
+                                {{ $bill['lot'] }}
+                                @if($bill['provider_managed'])
+                                    <span style="background: #e2e8f0; color: #475569; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 800; margin-left: 4px;">CASURECO</span>
+                                @endif
+                            </div>
                         </td>
                         <!-- Dynamic Amounts for JS recalculation -->
                         <td class="dynamic-amount-cell" 
                             data-usage-kwh="{{ $bill['usage_kwh'] }}" 
+                            data-previous-balance="{{ $bill['previous_balance'] }}"
                             data-at-risk="{{ $bill['at_risk'] ? 'true' : 'false' }}" 
                             data-status="{{ $bill['status'] }}"
                             style="font-weight: 700;">
-                            ₱{{ number_format($bill['base_amount'], 2) }}
+                            ₱{{ number_format($bill['amount'], 2) }}
                         </td>
                         <td>
-                            @if(!$bill['at_risk'])
+                            @if(($bill['payment_behavior'] ?? 'Not available yet') === 'Early')
                                 <span class="trend-chip trend-early">Early</span>
-                            @else
+                            @elseif(($bill['payment_behavior'] ?? 'Not available yet') === 'On-Time')
+                                <span class="trend-chip trend-early" style="background: var(--bill-primary);">On-Time</span>
+                            @elseif(($bill['payment_behavior'] ?? 'Not available yet') === 'Late')
                                 <span class="trend-chip trend-late">Late</span>
+                            @else
+                                <span class="trend-chip" style="background: #e2e8f0; color: #475569;">N/A</span>
                             @endif
                         </td>
                         <td>
@@ -272,6 +299,7 @@
                 </tbody>
             </table>
         </div>
+        @endif
     </div>
 </div>
 
@@ -282,10 +310,6 @@
             <div>
                 <span id="modalLot" style="font-size: 12px; font-weight: 700; color: var(--bill-primary); text-transform: uppercase; letter-spacing: 0.1em;">BLOCK 1 LOT 5</span>
                 <h2 id="modalResident" style="font-size: 32px; font-weight: 800; color: #0f172a; margin-top: 8px;">Juan Dela Cruz</h2>
-                <div style="margin-top: 12px; display: flex; gap: 12px; align-items: center;">
-                    <span id="modalTrend" class="trend-chip trend-early">Early</span>
-                    <span id="modalPaymentBadge" class="badge">Paid</span>
-                </div>
             </div>
             <button class="ann-btn-icon" onclick="closeModal()" style="padding: 12px; background: #f1f5f9;">
                 <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
@@ -294,14 +318,59 @@
         <div class="modal-body">
             <div id="modalMainContent">
                 <h3 style="font-size: 14px; font-weight: 700; text-transform: uppercase; margin-bottom: 20px; color: #64748b;">Current Statement Details</h3>
-                <div class="modal-summary-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;">
-                    <div style="background: var(--bill-bg-soft); padding: 20px; border-radius: 16px;">
-                        <span style="font-size: 12px; color: #64748b;">Current Usage</span>
-                        <div id="modalUsage" style="font-size: 24px; font-weight: 700; color: #0f172a; margin-top: 4px;">150 kWh</div>
+                <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 24px; margin-bottom: 32px; align-items: start;">
+                    <!-- Meter Data -->
+                    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                        <h4 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 16px; margin-top: 0; letter-spacing: 0.05em;">Meter Data</h4>
+                        
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #f1f5f9;">
+                            <span style="font-size: 13px; color: #475569; font-weight: 600;">Previous Reading</span>
+                            <span id="modalPrevReading" style="font-size: 14px; font-weight: 800; color: #0f172a;">0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+                            <span style="font-size: 13px; color: #475569; font-weight: 600;">Current Reading</span>
+                            <span id="modalCurrReading" style="font-size: 14px; font-weight: 800; color: #0f172a;">0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+                            <span style="font-size: 13px; color: #475569; font-weight: 600;">Base Rate</span>
+                            <span id="modalBaseRate" style="font-size: 14px; font-weight: 800; color: #0f172a;">₱0.00</span>
+                        </div>
+                        
+                        <div style="background: #f8fafc; border-radius: 12px; padding: 16px; text-align: center; border: 1px dashed #cbd5e1;">
+                            <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Total Consumption</span>
+                            <div id="modalUsage" style="font-size: 28px; font-weight: 800; color: var(--bill-primary); margin-top: 4px;">150 kWh</div>
+                        </div>
                     </div>
-                    <div style="background: var(--bill-bg-soft); padding: 20px; border-radius: 16px;">
-                        <span style="font-size: 12px; color: #64748b;">Total Amount Due</span>
-                        <div id="modalAmount" style="font-size: 24px; font-weight: 700; color: var(--bill-primary); margin-top: 4px;">₱1,250.50</div>
+                
+                    <!-- Financial Breakdown -->
+                    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                        <h4 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 16px; margin-top: 0; letter-spacing: 0.05em;">Financial Breakdown</h4>
+                        
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                            <span style="font-size: 14px; color: #475569;">Previous Balance</span>
+                            <span id="modalPrevBalance" style="font-size: 15px; font-weight: 700; color: #0f172a;">₱0.00</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                            <span style="font-size: 14px; color: #475569;">Penalty (5% Late Fee)</span>
+                            <span id="modalPenalty" style="font-size: 15px; font-weight: 700; color: #f59e0b;">₱62.52</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                            <span id="modalAmountBeforeLabel" style="font-size: 14px; color: #475569;">Amount Before</span>
+                            <span id="modalAmountBefore" style="font-size: 15px; font-weight: 700; color: #0f172a;">₱1,250.50</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                            <span id="modalAmountAfterLabel" style="font-size: 14px; color: #475569;">Amount After</span>
+                            <span id="modalAmountAfter" style="font-size: 15px; font-weight: 700; color: #0f172a;">₱1,313.02</span>
+                        </div>
+                        
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px dashed #e2e8f0;">
+                            <span style="font-size: 14px; color: #475569;">Total Paid</span>
+                            <span id="modalTotalPaid" style="font-size: 15px; font-weight: 800; color: #10b981;">₱0.00</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 14px; font-weight: 700; color: #64748b;">Date Issued</span>
+                            <span id="modalDateIssued" style="font-size: 14px; font-weight: 700; color: #0f172a;">N/A</span>
+                        </div>
                     </div>
                 </div>
 
@@ -340,36 +409,11 @@
                         View Payment History
                     </button>
                     <button class="btn btn-outline" onclick="window.print()">Print Statement</button>
-                    <button class="btn btn-outline" id="disconnectBtn" style="color: var(--bill-danger); border-color: #fee2e2;" onclick="issueDisconnectWarning()">Disconnect Warning</button>
-                </div>
-                
-                <div style="margin-top: 40px; padding: 20px; border: 1px solid var(--bill-border); border-radius: 20px;">
-                    <h4 style="font-size: 12px; font-weight: 700; margin-bottom: 12px;">System Audit & Comm Trail</h4>
-                    <div id="modalAuditLog" style="display:flex; flex-direction: column; gap: 12px;">
-                        <!-- Audit Log Injected via JS -->
-                    </div>
+                    <button id="modalDisconnectBtn" class="btn btn-outline" style="color: #ef4444; border-color: #ef4444; margin-top: 8px;" onclick="disconnectCasureco()">Disconnect (CASURECO)</button>
+                    <button id="modalReconnectBtn" class="btn btn-outline" style="color: #10b981; border-color: #10b981; margin-top: 8px; display: none;" onclick="reconnectGrid()">Reconnect to Grid</button>
                 </div>
             </div>
         </div>
-    </div>
-</div>
-
-<!-- Dynamic Billing Settings Modal -->
-<div id="settingsModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2000;">
-    <div class="bill-modal-content" style="max-width: 400px; padding: 24px;">
-        <div class="modal-header" style="margin-bottom: 24px; display: flex; justify-content: space-between;">
-            <h2 style="font-size: 20px; font-weight: 800;">Billing Rates Configuration</h2>
-            <button class="ann-btn-icon" onclick="closeSettingsModal()" style="padding: 8px;">
-                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-        </div>
-        
-        <div style="margin-bottom: 20px;">
-            <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Base Rate per kWh (₱)</label>
-            <input type="number" id="inputKwhRate" class="filter-select" style="width: 100%; font-size: 16px; padding: 12px;" value="10">
-        </div>
-
-        <button class="btn btn-primary" style="width: 100%; justify-content: center;" onclick="applySettings()">Update & Recalculate Ledger</button>
     </div>
 </div>
 
@@ -412,13 +456,75 @@
         </div>
     </div>
 </div>
+<!-- Generic Input Modal -->
+<div id="genericInputModal" class="modal-overlay" style="display: none; align-items: center; justify-content: center; z-index: 10000; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px);">
+    <div class="modal-content" style="background: #fff; max-width: 400px; width: 90%; border-radius: 20px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); overflow: hidden; transform: scale(0.95); transition: transform 0.2s ease-out;">
+        <div style="padding: 24px; border-bottom: 1px solid #e2e8f0;">
+            <h3 id="genericInputTitle" style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 0;">Title</h3>
+            <p id="genericInputDesc" style="font-size: 13px; color: #64748b; margin-top: 8px; margin-bottom: 0;">Description</p>
+        </div>
+        <div style="padding: 24px;" id="genericInputContainer">
+            <div style="position: relative;">
+                <span style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 20px; font-weight: 700;">₱</span>
+                <input type="number" id="genericInputValue" class="form-input" style="width: 100%; font-size: 24px; padding: 12px 12px 12px 40px; font-weight: 700; border-radius: 12px; border: 2px solid #e2e8f0;" step="0.01" />
+            </div>
+        </div>
+        <div style="padding: 16px 24px; background: #f8fafc; display: flex; gap: 12px; justify-content: flex-end; border-top: 1px solid #e2e8f0;">
+            <button class="btn btn-outline" onclick="closeGenericInputModal()">Cancel</button>
+            <button id="genericInputConfirm" class="btn btn-primary">Confirm</button>
+        </div>
+    </div>
+</div>
 
 <script>
+    function promptAsync(title, desc, defaultValue, hideInput = false, confirmText = "Confirm", confirmClass = "btn-primary") {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('genericInputModal');
+            document.getElementById('genericInputTitle').textContent = title;
+            document.getElementById('genericInputDesc').textContent = desc;
+            const inputContainer = document.getElementById('genericInputContainer');
+            const input = document.getElementById('genericInputValue');
+            
+            if (hideInput) {
+                inputContainer.style.display = 'none';
+                input.value = '';
+            } else {
+                inputContainer.style.display = 'block';
+                input.value = defaultValue || '';
+            }
+            
+            const confirmBtn = document.getElementById('genericInputConfirm');
+            confirmBtn.textContent = confirmText;
+            confirmBtn.className = `btn ${confirmClass}`;
+            
+            const cleanup = () => {
+                modal.firstElementChild.style.transform = 'scale(0.95)';
+                setTimeout(() => { modal.style.display = 'none'; }, 200);
+                confirmBtn.replaceWith(confirmBtn.cloneNode(true));
+            };
+
+            window.closeGenericInputModal = () => {
+                cleanup();
+                resolve(null);
+            };
+
+            confirmBtn.addEventListener('click', () => {
+                const val = hideInput ? true : input.value;
+                cleanup();
+                resolve(val);
+            });
+
+            modal.style.display = 'flex';
+            setTimeout(() => { modal.firstElementChild.style.transform = 'scale(1)'; }, 10);
+            if (!hideInput) input.focus();
+        });
+    }
     const statsData = @json($stats);
     let isPaidTodayFilter = false;
 
     // Global Billing Settings
     let currentKwhRate = {{ \App\Models\Setting::where('key', 'elec_rate')->value('value') ?? 10 }};
+    let currentPenaltyRate = {{ \App\Models\Setting::where('key', 'electricity_penalty')->value('value') ?? 5 }};
 
     // Load Data safely
     const allBillsRaw = @json($bills);
@@ -461,8 +567,15 @@
     function recalculateLedger() {
         const amountCells = document.querySelectorAll('.dynamic-amount-cell');
         amountCells.forEach(cell => {
-            const usage = parseInt(cell.dataset.usageKwh);
-            let total = usage * currentKwhRate;
+            const usage = parseInt(cell.dataset.usageKwh) || 0;
+            const previousBalance = parseFloat(cell.dataset.previousBalance) || 0;
+            const isAtRisk = cell.dataset.atRisk === 'true';
+            
+            let amountBefore = (usage * currentKwhRate) + previousBalance;
+            let total = amountBefore;
+            if (isAtRisk) {
+                total += amountBefore * (currentPenaltyRate / 100);
+            }
 
             // Save the raw active total back into the cell dataset for the summary dashboard to read
             cell.dataset.rawTotal = total;
@@ -480,82 +593,46 @@
         const sumPastDueEl = document.getElementById('sumPastDue');
         const rows = document.querySelectorAll('.bill-row');
 
-        const currentMonth = document.getElementById('summaryMonth').options[0].value;
-        const prevMonth = document.getElementById('summaryMonth').options[1].value;
+        let totalCollected = 0;
+        let countPaid = 0;
+        let countUnpaid = 0;
+        let countPastDue = 0;
 
-        if (monthSel !== currentMonth) {
-            // Historic State View: Modify the table actively
-            const mFactor = monthSel === prevMonth ? 0.9 : 0.85;
-            let totalHistoric = 0;
-            let countHistoric = 0;
+        rows.forEach(row => {
+            const status = row.dataset.status;
+            const isAtRisk = row.dataset.trend === 'at-risk' || row.dataset.trend === 'late'; // or checking atRiskBool 
+            const cell = row.querySelector('.dynamic-amount-cell') || row.cells[1];
+            const amt = parseFloat(cell.dataset.rawTotal || cell.textContent.replace(/[^\d.-]/g, '')) || 0;
 
-            rows.forEach(row => {
-                const cell = row.querySelector('.dynamic-amount-cell') || row.cells[1];
-                let amt = parseFloat(cell.dataset.rawTotal || cell.textContent.replace(/[^\d.-]/g, '')) || 0;
+            if (status === 'paid') {
+                countPaid++;
+                totalCollected += amt;
+            } else {
+                countUnpaid++;
+                if (row.querySelector('.trend-late') || row.dataset.trend === 'at-risk') {
+                    countPastDue++;
+                }
+            }
+        });
+
+        sumColEl.textContent = `₱${totalCollected.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        sumPaidEl.textContent = countPaid;
+        sumUnpaidEl.textContent = countUnpaid;
+        sumPastDueEl.textContent = countPastDue;
+        
+        // Real-time graph update
+        if (window.salesChart && window.salesChart.data && window.salesChart.data.datasets.length > 0) {
+            const ds = window.salesChart.data.datasets[0];
+            if (ds && ds.data) {
+                // Find the matching month in labels if possible, or just update the last one
+                const currentMonthLabel = new Date(monthSel + '-01').toLocaleString('default', { month: 'short' });
+                const labelIdx = window.salesChart.data.labels.findIndex(l => l.includes(currentMonthLabel));
                 
-                // Simulate slightly different past amounts
-                amt = amt * mFactor;
-                totalHistoric += amt;
-                countHistoric++;
-
-                if (!row.dataset.originalStatus) {
-                    row.dataset.originalStatus = row.dataset.status;
-                    row.dataset.originalStatusHtml = row.cells[4].innerHTML;
-                    row.dataset.originalActionHtml = row.cells[5].innerHTML;
-                }
-
-                // Lock table to 'paid' historic view
-                cell.innerHTML = `₱${amt.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-                row.dataset.status = 'paid';
-                row.cells[4].innerHTML = `<span class="badge badge-success">Paid</span><div style="font-size: 10px; color: #10b981; margin-top: 4px;">Historic Record</div>`;
-                row.cells[5].innerHTML = `<div style="display: flex; gap: 8px;"><button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;">Receipt</button></div>`;
-            });
-
-            sumColEl.textContent = `₱${totalHistoric.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            sumPaidEl.textContent = countHistoric;
-            sumUnpaidEl.textContent = '0'; 
-            sumPastDueEl.textContent = '0';
-        } else {
-            // Return to live current state
-            let totalCollected = 0;
-            let countPaid = 0;
-            let countUnpaid = 0;
-            let countPastDue = 0;
-
-            rows.forEach(row => {
-                if (row.dataset.originalStatus) {
-                    row.dataset.status = row.dataset.originalStatus;
-                    row.cells[4].innerHTML = row.dataset.originalStatusHtml;
-                    row.cells[5].innerHTML = row.dataset.originalActionHtml;
-                    delete row.dataset.originalStatus;
-                }
-
-                const status = row.dataset.status;
-                const isAtRisk = row.dataset.trend === 'at-risk';
-                const cell = row.querySelector('.dynamic-amount-cell') || row.cells[1];
-                const amt = parseFloat(cell.dataset.rawTotal || cell.textContent.replace(/[^\d.-]/g, '')) || 0;
-
-                if (status === 'paid') {
-                    countPaid++;
-                    totalCollected += amt;
+                if (labelIdx !== -1) {
+                    ds.data[labelIdx] = totalCollected;
                 } else {
-                    countUnpaid++;
-                    if (isAtRisk) countPastDue++;
+                    ds.data[ds.data.length - 1] = totalCollected;
                 }
-            });
-
-            // Initial load mock collected check
-            if (countPaid > 0 && totalCollected < 5000) totalCollected = 4550; // Mock base
-
-            sumColEl.textContent = `₱${totalCollected.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            sumPaidEl.textContent = countPaid;
-            sumUnpaidEl.textContent = countUnpaid;
-            sumPastDueEl.textContent = countPastDue;
-            
-            // Real-time graph update
-            if (window.salesChart) {
-                const ds = window.salesChart.data.datasets[0];
-                ds.data[ds.data.length - 1] = totalCollected;
                 window.salesChart.update();
             }
         }
@@ -566,20 +643,17 @@
     function updatePredictiveDonut() {
         const rows = document.querySelectorAll('.bill-row');
         let early = 0, ontime = 0, late = 0;
-        let total = rows.length;
+        let valid = 0;
 
         rows.forEach(row => {
-            const status = row.dataset.status;
-            const trend = row.dataset.trend;
-            
-            if (trend === 'at-risk') {
-                late++;
-            } else if (status === 'paid') {
-                early++;
-            } else {
-                ontime++;
-            }
+            const behavior = row.dataset.behavior;
+            if (behavior === 'Early') early++;
+            if (behavior === 'On-Time') ontime++;
+            if (behavior === 'Late') late++;
+            if (['Early','On-Time','Late'].includes(behavior)) valid++;
         });
+        
+        let total = valid;
 
         const pEarly = total > 0 ? Math.round((early / total) * 100) : 0;
         const pOntime = total > 0 ? Math.round((ontime / total) * 100) : 0;
@@ -587,18 +661,30 @@
 
         const donutSvg = document.querySelector('.donut-svg');
         if (donutSvg) {
-            donutSvg.innerHTML = `
-                <circle class="donut-segment segment-late" cx="21" cy="21" r="15.915" stroke-dasharray="${pLate} ${100-pLate}"></circle>
-                <circle class="donut-segment segment-ontime" cx="21" cy="21" r="15.915" stroke-dasharray="${pOntime} ${100-pOntime}" stroke-dashoffset="-${pLate}"></circle>
-                <circle class="donut-segment segment-early" cx="21" cy="21" r="15.915" stroke-dasharray="${pEarly} ${100-pEarly}" stroke-dashoffset="-${pLate + pOntime}"></circle>
-            `;
+            if (total === 0) {
+                donutSvg.innerHTML = `
+                    <circle class="donut-segment" cx="21" cy="21" r="15.915" stroke-dasharray="100 0" stroke="#e2e8f0"></circle>
+                `;
+            } else {
+                donutSvg.innerHTML = `
+                    <circle class="donut-segment segment-late" cx="21" cy="21" r="15.915" stroke-dasharray="${pLate} ${100-pLate}"></circle>
+                    <circle class="donut-segment segment-ontime" cx="21" cy="21" r="15.915" stroke-dasharray="${pOntime} ${100-pOntime}" stroke-dashoffset="-${pLate}"></circle>
+                    <circle class="donut-segment segment-early" cx="21" cy="21" r="15.915" stroke-dasharray="${pEarly} ${100-pEarly}" stroke-dashoffset="-${pLate + pOntime}"></circle>
+                `;
+            }
             
             const legend = document.querySelector('.donut-legend');
-            legend.innerHTML = `
-                <div class="legend-item"><span class="legend-label"><span class="dot" style="background: var(--bill-success);"></span> Early Payers</span><strong>${pEarly}%</strong></div>
-                <div class="legend-item"><span class="legend-label"><span class="dot" style="background: var(--bill-primary);"></span> On-Time</span><strong>${pOntime}%</strong></div>
-                <div class="legend-item"><span class="legend-label"><span class="dot" style="background: var(--bill-warning);"></span> Late (At Risk)</span><strong>${pLate}%</strong></div>
-            `;
+            if (total === 0) {
+                legend.innerHTML = `
+                    <div class="legend-item" style="justify-content: center; color: #64748b;">No behavioral data yet.</div>
+                `;
+            } else {
+                legend.innerHTML = `
+                    <div class="legend-item"><span class="legend-label"><span class="dot" style="background: var(--bill-success);"></span> Early Payers</span><strong>${pEarly}%</strong></div>
+                    <div class="legend-item"><span class="legend-label"><span class="dot" style="background: var(--bill-primary);"></span> On-Time</span><strong>${pOntime}%</strong></div>
+                    <div class="legend-item"><span class="legend-label"><span class="dot" style="background: var(--bill-warning);"></span> Late</span><strong>${pLate}%</strong></div>
+                `;
+            }
         }
     }
 
@@ -665,12 +751,86 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        applyFilters(); // Initialize connection filter
         recalculateLedger();
         setTimeout(systemNotificationScan, 1000); // Wait 1 sec before populating notifications
     });
 
+    async function disconnectCasureco() {
+        const lotNumber = document.getElementById('modalLot').textContent;
+        const resident = document.getElementById('modalResident').textContent;
+        
+        const confirmed = await promptAsync(
+            "Confirm Disconnection",
+            `Are you sure you want to transition ${resident}'s lot (${lotNumber}) to CASURECO? This will prevent future internal electricity bills from being generated for them.`,
+            null, true, "Disconnect Lot", "btn-danger"
+        );
+        
+        if (!confirmed) return;
+
+        try {
+            const res = await fetch('/admin/api/billing/disconnect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ resident: resident, lot: lotNumber })
+            });
+            const data = await res.json();
+            if(data.success) {
+                alert(`Successfully disconnected ${resident}. They are now managed by CASURECO.`);
+                window.location.reload();
+            }
+        } catch(e) {
+            console.error(e);
+            alert('Failed to disconnect lot.');
+        }
+    }
+
+    async function reconnectGrid() {
+        const lotNumber = document.getElementById('modalLot').textContent;
+        const resident = document.getElementById('modalResident').textContent;
+        
+        const confirmed = await promptAsync(
+            "Confirm Reconnection",
+            `Are you sure you want to reconnect ${resident}'s lot (${lotNumber}) back to the Internal Subdivision Grid? They will start receiving internal electricity bills again.`,
+            null, true, "Reconnect Grid", "btn-success"
+        );
+        
+        if (!confirmed) return;
+
+        try {
+            const res = await fetch('/admin/api/billing/reconnect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ resident: resident, lot: lotNumber })
+            });
+            const data = await res.json();
+            if(data.success) {
+                alert(`Successfully reconnected ${resident}. They are now managed by the Internal Grid.`);
+                window.location.reload();
+            }
+        } catch(e) {
+            console.error(e);
+            alert('Failed to reconnect lot.');
+        }
+    }
+
     function viewDetail(id) {
-        const bill = allBillsRaw.find(b => b.id === id);
+        let bill = allBillsRaw.find(b => String(b.id).trim() === String(id).trim());
+        if (!bill) {
+            bill = allBillsRaw.find(b => b.db_id && String(b.db_id).trim() === String(id).trim());
+        }
+        if (!bill) {
+            bill = allBillsRaw.find(b => String(b.id).includes(String(id)) || String(id).includes(String(b.id)));
+        }
+        if (!bill && allBillsRaw.length > 0) {
+            bill = allBillsRaw[0];
+        }
         if (!bill) return;
 
         const resident = bill.resident;
@@ -683,42 +843,64 @@
 
         const atRiskBool = isAtRisk;
 
-        // Calculate custom amounts dynamically based on settings
-        let totalAmount = usageKwh * currentKwhRate;
+        let previousBalance = bill.previous_balance || 0;
+        let amountBefore = (usageKwh * currentKwhRate) + previousBalance;
+        let penaltyAmount = amountBefore * (currentPenaltyRate / 100);
+        let amountAfter = amountBefore + penaltyAmount;
+        let totalPaid = bill.total_paid || 0;
+        let totalDueBefore = Math.max(0, amountBefore - totalPaid);
+        let totalDueAfter = Math.max(0, amountAfter - totalPaid);
 
         document.getElementById('modalResident').textContent = resident;
         document.getElementById('modalLot').textContent = lot;
-        document.getElementById('modalUsage').textContent = `${usageKwh} kWh (₱${currentKwhRate}/kWh)`;
         
-        let amountHtml = `₱${totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-
-        document.getElementById('modalAmount').innerHTML = amountHtml;
+        document.getElementById('modalPrevReading').textContent = bill.prev_reading || 0;
+        document.getElementById('modalCurrReading').textContent = bill.curr_reading || 0;
+        document.getElementById('modalBaseRate').textContent = `₱${currentKwhRate}/kWh`;
+        document.getElementById('modalUsage').textContent = `${usageKwh} kWh`;
+        
+        document.getElementById('modalAmountBeforeLabel').textContent = `Amount Before ${bill.due}`;
+        document.getElementById('modalAmountAfterLabel').textContent = `Amount After ${bill.due}`;
+        document.getElementById('modalAmountBefore').textContent = `₱${amountBefore.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        document.getElementById('modalAmountAfter').textContent = `₱${totalDueAfter.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        document.getElementById('modalPenalty').textContent = `₱${penaltyAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        document.getElementById('modalPrevBalance').textContent = `₱${previousBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        document.getElementById('modalTotalPaid').textContent = `₱${totalPaid.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        document.getElementById('modalDateIssued').textContent = bill.issued_date || 'N/A';
+        
         
         const trendEl = document.getElementById('modalTrend');
-        trendEl.textContent = !atRiskBool ? 'Early' : 'Late';
-        trendEl.className = 'trend-chip ' + (!atRiskBool ? 'trend-early' : 'trend-late');
+        if (trendEl) {
+            trendEl.textContent = !atRiskBool ? 'Early' : 'Late';
+            trendEl.className = 'trend-chip ' + (!atRiskBool ? 'trend-early' : 'trend-late');
+        }
+
+        // Toggle Disconnect/Reconnect buttons based on provider_managed
+        const disconnectBtn = document.getElementById('modalDisconnectBtn');
+        const reconnectBtn = document.getElementById('modalReconnectBtn');
+        if (disconnectBtn && reconnectBtn) {
+            if (bill.provider_managed) {
+                disconnectBtn.style.display = 'none';
+                reconnectBtn.style.display = 'inline-flex';
+            } else {
+                disconnectBtn.style.display = 'inline-flex';
+                reconnectBtn.style.display = 'none';
+            }
+        }
 
         // Payment Action Button
         const actionContainer = document.getElementById('modalPaymentAction');
         if (status === 'unpaid') {
+            const amountToPay = atRiskBool ? totalDueAfter : totalDueBefore;
             actionContainer.innerHTML = `
-                <button class="btn btn-success" style="width: 100%; justify-content: center; padding: 14px; font-weight: 700;" onclick="recordOfficePaymentFromModal('${id}', '${resident}', ${totalAmount})">🏢 Record Office Payment</button>`;
+                <div style="display: flex; gap: 12px; width: 100%; flex-wrap: wrap;">
+                    <button class="btn btn-outline" style="flex: 1 1 200px; justify-content: center; padding: 14px; font-weight: 700; border-color: var(--bill-primary); color: var(--bill-primary);" onclick="addPreviousBalanceFromModal('${id}', '${resident}')">➕ Add Unpaid Balance</button>
+                    <button class="btn btn-success" style="flex: 1 1 200px; justify-content: center; padding: 14px; font-weight: 700;" onclick="recordOfficePaymentFromModal('${id}', '${resident}', ${amountToPay})">🏢 Record Office Payment</button>
+                </div>
+            `;
         } else {
             actionContainer.innerHTML = '';
         }
-
-        // Populate Audit Log
-        const auditContainer = document.getElementById('modalAuditLog');
-        auditContainer.innerHTML = '';
-        auditLog.forEach(log => {
-            const isWarning = log.action.includes('Warning');
-            auditContainer.innerHTML += `
-                <div style="font-size: 12px;">
-                    <div style="font-weight: 600; color: ${isWarning ? 'var(--bill-danger)' : 'var(--text-dark)'}">${log.action}</div>
-                    <div style="color: #64748b; font-size: 11px;">${log.user} • ${log.date}</div>
-                </div>
-            `;
-        });
 
         // Populate History Table
         const historyBody = document.getElementById('modalHistoryTableBody');
@@ -760,6 +942,24 @@
     }
 
     async function recordOfficePaymentFromModal(id, resident, totalAmount) {
+        const inputAmount = await promptAsync(
+            "Record Office Payment", 
+            `Enter payment amount received from ${resident}:`, 
+            totalAmount
+        );
+        if (inputAmount === null || inputAmount === "") return;
+        const amountNum = parseFloat(inputAmount);
+        if (isNaN(amountNum) || amountNum <= 0) {
+            alert("Invalid amount.");
+            return;
+        }
+
+        const actionContainer = document.getElementById('modalPaymentAction');
+        if (actionContainer) {
+            const buttons = actionContainer.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = true);
+        }
+
         try {
             const res = await fetch('/admin/api/billing/pay', {
                 method: 'POST',
@@ -767,80 +967,104 @@
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 },
-                body: JSON.stringify({ id: id, amount: totalAmount })
+                body: JSON.stringify({ id: id, amount: amountNum })
             });
             const data = await res.json();
-            if(data.success) {
+            if (data.success) {
                 // Update Modal UI Instantly
                 document.getElementById('modalPaymentBadge').className = 'badge badge-success';
                 document.getElementById('modalPaymentBadge').textContent = 'Paid';
                 document.getElementById('modalPaymentAction').innerHTML = '';
                 
-                // Add a simulated entry to the Audit Log UI
-                const auditContainer = document.getElementById('modalAuditLog');
-                auditContainer.innerHTML = `
-                    <div style="font-size: 12px; background: #f0fdf4; padding: 8px; border-radius: 6px;">
-                        <span style="font-weight: 700; color: #16a34a;">Office Payment</span> 
-                        <span style="color: #64748b; margin-left: 8px;">Just now &bull; Admin</span>
-                    </div>
-                ` + auditContainer.innerHTML;
-                
-                alert(`Payment of ₱${totalAmount.toLocaleString()} recorded for ${resident}.`);
+                alert(`Payment of ₱${amountNum.toLocaleString()} recorded for ${resident}.`);
                 setTimeout(() => window.location.reload(), 1000);
             } else {
-                alert('Payment recording failed.');
+                alert(data.message || 'Payment recording failed.');
+                if(actionContainer) {
+                    const buttons = actionContainer.querySelectorAll('button');
+                    buttons.forEach(btn => btn.disabled = false);
+                }
             }
         } catch(e) {
             console.error(e);
             alert('Failed to record payment.');
+            if(actionContainer) {
+                const buttons = actionContainer.querySelectorAll('button');
+                buttons.forEach(btn => btn.disabled = false);
+            }
         }
     }
 
-    function issueDisconnectWarning() {
-        const btn = document.getElementById('disconnectBtn');
-        const residentName = document.getElementById('modalResidentName')?.textContent || 'Resident';
-        const billId = document.getElementById('modalBillId')?.textContent || 'EB-002';
-        const amount = document.getElementById('modalBillAmount')?.textContent || '2,100.00';
-
-        if (confirm("Issue a formal 48-hour disconnection warning for this resident?")) {
-            btn.textContent = '⚠️ WARNING ISSUED';
-            btn.style.background = '#fee2e2';
-            btn.style.color = '#991b1b';
-
-            fetch('/api/send-billing-warning-email', {
+    async function addPreviousBalanceFromModal(id, resident) {
+        const inputBalance = await promptAsync(
+            "Add Unpaid Balance", 
+            `Enter Previous Unpaid Balance to add for ${resident}:`, 
+            0
+        );
+        if (inputBalance === null || inputBalance === "") return;
+        const balanceNum = parseFloat(inputBalance);
+        if (isNaN(balanceNum) || balanceNum <= 0) {
+            alert("Invalid balance amount.");
+            return;
+        }
+        
+        try {
+            const res = await fetch('/admin/api/billing/add-balance', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
-                body: JSON.stringify({
-                    email: 'eighty6pharmacy@gmail.com',
-                    resident_name: residentName,
-                    bill_id: billId,
-                    amount: amount
-                })
-            }).catch(err => console.error("Billing warning email error:", err));
-
-            alert("Disconnection warning has been logged and sent via live email to eighty6pharmacy@gmail.com!");
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ id: id, balance: balanceNum })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert(`Balance of ₱${balanceNum} added successfully.`);
+                let bill = allBillsRaw.find(b => String(b.id).trim() === String(id).trim() || String(b.db_id).trim() === String(id).trim());
+                if (bill) {
+                    bill.previous_balance = (parseFloat(bill.previous_balance) || 0) + balanceNum;
+                    const row = document.querySelector(`.bill-row .dynamic-amount-cell[data-id="${id}"]`) || document.querySelector(`.bill-row[data-resident="${bill.resident.toLowerCase()}"] .dynamic-amount-cell`);
+                    if (row) {
+                        row.dataset.previousBalance = bill.previous_balance;
+                        recalculateLedger();
+                    }
+                    viewDetail(id);
+                } else {
+                    location.reload();
+                }
+            } else {
+                alert('Failed to add balance.');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Error adding balance.');
         }
     }
+
+
 
     function applyFilters() {
         const search = document.getElementById('billingSearch').value.toLowerCase();
         const status = document.getElementById('statusFilter').value;
-        const trend = document.getElementById('trendFilter').value;
+        const trend = document.getElementById('behaviorFilter').value;
         const block = document.getElementById('blockFilter').value;
+        const connFilter = document.getElementById('connectionFilter') ? document.getElementById('connectionFilter').value : 'all';
         const rows = document.querySelectorAll('.bill-row');
 
         rows.forEach(row => {
             const res = row.dataset.resident;
             const s = row.dataset.status;
-            const t = row.dataset.trend;
+            const t = row.dataset.behavior || row.dataset.trend;
             const b = row.dataset.block;
+            const c = row.dataset.connection || 'internal';
 
             const matchesSearch = res.includes(search);
             const matchesStatus = status === 'all' || s === status;
             const matchesTrend = trend === 'all' || t === trend;
             const matchesBlock = block === 'all' || b === block;
+            const matchesConn = connFilter === 'all' || c === connFilter;
 
-            row.style.display = (matchesSearch && matchesStatus && matchesTrend && matchesBlock) ? '' : 'none';
+            row.style.display = (matchesSearch && matchesStatus && matchesTrend && matchesBlock && matchesConn) ? '' : 'none';
         });
     }
 
@@ -848,28 +1072,17 @@
         const ctx = document.getElementById('electricitySalesChart')?.getContext('2d');
         if (ctx) {
             @php
-                $graphLabels = [];
-                $graphData = [];
-                $graphColors = [];
-                
-                for ($i = 11; $i >= 1; $i--) {
-                    $graphLabels[] = date('M', strtotime("-{$i} months"));
-                    $graphData[] = rand(45000, 70000); 
-                    $graphColors[] = '#38bdf8';
-                }
-                $graphLabels[] = date('M') . ' (Now)';
-                $graphData[] = 0; 
-                $graphColors[] = '#0284c7'; 
+                $chartData = getMonthlyChartData('electricity');
             @endphp
 
             window.salesChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: @json($graphLabels),
+                    labels: @json($chartData['labels']),
                     datasets: [{
                         label: 'Electricity Collection (₱)',
-                        data: @json($graphData),
-                        backgroundColor: @json($graphColors),
+                        data: @json($chartData['data']),
+                        backgroundColor: @json($chartData['colors']),
                         borderRadius: 6,
                         borderSkipped: false
                     }]

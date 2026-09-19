@@ -80,7 +80,7 @@
         </nav>
         
         <div class="sidebar-footer">
-            <a href="#" class="nav-item" onclick="if(confirm('Are you sure you want to log out?')) { document.getElementById('logout-form').submit(); } return false;">
+            <a href="#" class="nav-item" onclick="openLogoutModal(); return false;">
                 <span class="nav-icon">🚪</span>
                 <span>Logout</span>
             </a>
@@ -190,6 +190,34 @@
                 window.location.reload();
             }
         });
+    </script>
+    <!-- Logout Confirmation Modal -->
+    <div id="logoutConfirmModal" class="modal-overlay" style="display: none; align-items: center; justify-content: center; z-index: 99999; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px);">
+        <div class="modal-content" style="background: #fff; max-width: 400px; width: 90%; border-radius: 20px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); overflow: hidden; transform: scale(0.95); transition: transform 0.2s ease-out;">
+            <div style="padding: 24px; text-align: center;">
+                <div style="width: 64px; height: 64px; background: #fee2e2; color: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+                    <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                </div>
+                <h3 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0 0 8px;">Log out?</h3>
+                <p style="font-size: 14px; color: #64748b; margin: 0;">Are you sure you want to log out of your account? You will need to log in again to access the system.</p>
+            </div>
+            <div style="padding: 16px 24px; background: #f8fafc; display: flex; gap: 12px; border-top: 1px solid #e2e8f0;">
+                <button class="btn btn-outline" style="flex: 1; justify-content: center; padding: 12px; font-weight: 600;" onclick="closeLogoutModal()">Cancel</button>
+                <button class="btn btn-primary" style="flex: 1; justify-content: center; padding: 12px; font-weight: 600; background: #ef4444; border-color: #ef4444;" onclick="document.getElementById('logout-form').submit();">Yes, Log out</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        function openLogoutModal() {
+            const modal = document.getElementById('logoutConfirmModal');
+            modal.style.display = 'flex';
+            setTimeout(() => { modal.firstElementChild.style.transform = 'scale(1)'; }, 10);
+        }
+        function closeLogoutModal() {
+            const modal = document.getElementById('logoutConfirmModal');
+            modal.firstElementChild.style.transform = 'scale(0.95)';
+            setTimeout(() => { modal.style.display = 'none'; }, 200);
+        }
     </script>
 </body>
 </html>
