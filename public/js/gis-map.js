@@ -17,6 +17,7 @@ async function initGISMap(mapElementId, options = {}) {
         interactiveRouting: false, // New feature for residents
         startNode: null, // Entrance node ID or House ID
         endNode: null, // House node ID (Block-Lot)
+        adminView: false, // Flag to enable admin color logic
     }, options);
 
     const map = L.map(mapElementId, {
@@ -40,11 +41,29 @@ async function initGISMap(mapElementId, options = {}) {
             fillColor: '#cbd5e1',
             fillOpacity: 1
         },
-        house: {
-            color: '#94a3b8',
-            weight: 1,
-            fillColor: '#e7e8eb', // default house color
-            fillOpacity: 1
+        house: (feature) => {
+            const b = feature.properties.block_num;
+            const l = feature.properties.lot_number;
+            const key = `B${b} L${l}`;
+            const dbLot = window.globalDbLots ? window.globalDbLots[key] : null;
+
+            let fillColor = '#e7e8eb'; // default
+            let color = '#94a3b8';
+
+            if (dbLot && config.adminView) {
+                if (dbLot.status === 'Occupied') { fillColor = '#ffffff'; color = '#000000'; }
+                else if (dbLot.status === 'Vacant House') { fillColor = '#3b82f6'; color = '#2563eb'; }
+                else if (dbLot.status === 'Vacant Lot') { fillColor = '#f59e0b'; color = '#d97706'; }
+                else if (dbLot.status === 'Reserved') { fillColor = '#8b5cf6'; color = '#7c3aed'; }
+                else if (dbLot.status === 'Under Construction') { fillColor = '#ef4444'; color = '#dc2626'; }
+            }
+
+            return {
+                color: color,
+                weight: 1,
+                fillColor: fillColor,
+                fillOpacity: 1
+            };
         },
         amenity: (feature) => {
             const name = feature.properties.name || feature.properties.NAME || 'Unknown';
@@ -71,15 +90,23 @@ async function initGISMap(mapElementId, options = {}) {
         }
     };
 
-    // Load GeoJSONs
-    const [amenities, roads, houses, network, entrance, houseNodes] = await Promise.all([
+    // Load GeoJSONs and Database Lots
+    const [amenities, roads, houses, network, entrance, houseNodes, lotsData] = await Promise.all([
         fetch('/gis-data/amenities.geojson').then(r => r.json()),
         fetch('/gis-data/buffered_road_design.geojson').then(r => r.json()),
         fetch('/gis-data/houses.geojson').then(r => r.json()),
         fetch('/gis-data/roads.geojson').then(r => r.json()),
-        fetch('/gis-data/entrance_point.geojson').then(r => r.json()),
-        fetch('/gis-data/house_nodes.geojson').then(r => r.json()),
+        fetch('/gis-data/entrance_point.geojson').then(r => r.json()).catch(e => ({})),
+        fetch('/gis-data/house_nodes.geojson').then(r => r.json()).catch(e => ({})),
+        fetch('/api/lots').then(r => r.ok ? r.json() : []).catch(e => [])
     ]);
+
+    window.globalDbLots = {};
+    if (lotsData && Array.isArray(lotsData)) {
+        lotsData.forEach(lot => {
+            window.globalDbLots[`B${lot.block} L${lot.lot_number}`] = lot;
+        });
+    }
 
     // Add layers to map
     const amenityLayer = L.geoJSON(amenities, { style: styles.amenity }).addTo(map);

@@ -76,14 +76,6 @@
                 </div>
             </div>
 
-            <div
-                style="background: #fff; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 16px;">
-                <label
-                    style="font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; font-weight: 800; margin-bottom: 8px; display: block;">Search
-                    Property</label>
-                <input type="text" placeholder="e.g. Block 1, Lot 5"
-                    style="width: 100%; border: 1px solid #e2e8f0; padding: 10px; border-radius: 8px; font-size: 13px;">
-            </div>
 
             <div style="background: #fff; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
                 <label
@@ -149,10 +141,10 @@
                 <div id="detailOccupancyBadge" class="status-badge">Occupied</div>
                 
                 <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0; display: flex; gap: 8px;">
-                    <button class="btn btn-outline" style="flex: 1; padding: 8px; font-size: 11px; border-color: var(--primary); color: var(--primary); justify-content: center;">
+                    <button id="btnEditResident" class="btn btn-outline" style="flex: 1; padding: 8px; font-size: 11px; border-color: var(--primary); color: var(--primary); justify-content: center;">
                         <span style="margin-right: 4px;">✎</span> Edit Resident
                     </button>
-                    <button class="btn btn-outline" style="flex: 1; padding: 8px; font-size: 11px; border-color: #64748b; color: #64748b; justify-content: center;">
+                    <button id="btnViewProfile" class="btn btn-outline" style="flex: 1; padding: 8px; font-size: 11px; border-color: #64748b; color: #64748b; justify-content: center;">
                         View Profile
                     </button>
                 </div>
@@ -162,7 +154,7 @@
             <div id="panelOccupancyOnly">
                 <div class="info-card" style="background: white; border-style: dashed;">
                     <label style="font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; font-weight: 800; margin-bottom: 12px; display: block;">Property Status</label>
-                    <button class="btn btn-primary" style="width: 100%; padding: 10px; font-size: 11px; justify-content: center; background: #334155; border: none;">
+                    <button id="btnUpdateOccupancy" class="btn btn-primary" style="width: 100%; padding: 10px; font-size: 11px; justify-content: center; background: #334155; border: none;">
                         <span style="margin-right: 4px;">🔄</span> Update Occupancy Status
                     </button>
                 </div>
@@ -197,6 +189,31 @@
     </aside>
     </div>
 
+    <!-- Occupancy Update Modal -->
+    <div id="occupancyUpdateModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 3000;">
+        <div class="bill-modal-content" style="max-width: 400px; padding: 24px; border-radius: 20px;">
+            <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 16px; color: #0f172a;">Update Occupancy Status</h3>
+            <input type="hidden" id="occUpdateBlock">
+            <input type="hidden" id="occUpdateLot">
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">New Status</label>
+                <select id="occUpdateStatus" class="filter-select" style="width: 100%; padding: 12px;">
+                    <option value="Available">Available</option>
+                    <option value="Occupied">Occupied</option>
+                    <option value="Vacant House">Vacant House</option>
+                    <option value="Vacant Lot">Vacant Lot</option>
+                    <option value="Reserved">Reserved</option>
+                    <option value="Under Construction">Under Construction</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 12px; margin-top: 24px;">
+                <button class="btn btn-outline" style="flex:1;" onclick="document.getElementById('occupancyUpdateModal').style.display='none'">Cancel</button>
+                <button class="btn btn-primary" style="flex:1;" onclick="updateOccupancyStatus()">Save Update</button>
+            </div>
+        </div>
+    </div>
+
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
     <script>
@@ -205,29 +222,32 @@
         let houseLayer;
         let housesGeoJson;
 
-        const defaultMockData = {};
+        let dbLots = {};
 
         function getLotStyle(feature) {
             const b = feature.properties.block_num;
             const l = feature.properties.lot_number;
             const key = `B${b} L${l}`;
-            const mock = defaultMockData[key] || { status: 'Vacant Lot', billing: 'Unpaid', water: 'Unpaid' };
+            const dbLot = dbLots[key] || { owner: 'Unassigned', status: 'Vacant Lot', electricity_status: 'unpaid', water_status: 'unpaid', isNotConnected: true };
 
             let fillColor = '#e7e8eb';
             let color = '#94a3b8';
 
             if (currentLayer === 'occupancy') {
-                if (mock.status === 'Occupied') fillColor = '#ffffff', color = '#000000';
-                else if (mock.status === 'Vacant House') fillColor = '#3b82f6', color = '#2563eb';
-                else if (mock.status === 'Vacant Lot') fillColor = '#f59e0b', color = '#d97706';
-                else if (mock.status === 'Reserved') fillColor = '#8b5cf6', color = '#7c3aed';
-                else if (mock.status === 'Under Construction') fillColor = '#ef4444', color = '#dc2626';
+                if (dbLot.status === 'Occupied') { fillColor = '#ffffff'; color = '#000000'; }
+                else if (dbLot.status === 'Vacant House') { fillColor = '#3b82f6'; color = '#2563eb'; }
+                else if (dbLot.status === 'Vacant Lot') { fillColor = '#f59e0b'; color = '#d97706'; }
+                else if (dbLot.status === 'Reserved') { fillColor = '#8b5cf6'; color = '#7c3aed'; }
+                else if (dbLot.status === 'Under Construction') { fillColor = '#ef4444'; color = '#dc2626'; }
+                else { fillColor = '#e7e8eb'; color = '#94a3b8'; }
             } else if (currentLayer === 'electricity') {
-                if (mock.billing === 'Paid') fillColor = '#10b981', color = '#059669';
-                else fillColor = '#ef4444', color = '#dc2626';
+                if (dbLot.isNotConnected) { fillColor = '#94a3b8'; color = '#64748b'; }
+                else if (dbLot.electricity_status === 'paid') { fillColor = '#10b981'; color = '#059669'; }
+                else { fillColor = '#ef4444'; color = '#dc2626'; }
             } else if (currentLayer === 'water') {
-                if (mock.water === 'Paid') fillColor = '#0ea5e9', color = '#0369a1';
-                else fillColor = '#f97316', color = '#c2410c';
+                if (dbLot.isNotConnected) { fillColor = '#94a3b8'; color = '#64748b'; }
+                else if (dbLot.water_status === 'paid') { fillColor = '#0ea5e9'; color = '#0369a1'; }
+                else { fillColor = '#f97316'; color = '#c2410c'; }
             }
 
             return {
@@ -249,11 +269,18 @@
                 }
             }).setView([13.6268, 123.1906], 18);
 
-            const [amenities, roads, houses] = await Promise.all([
+            const [amenities, roads, houses, lotsData] = await Promise.all([
                 fetch('/gis-data/amenities.geojson').then(r => r.json()),
                 fetch('/gis-data/buffered_road_design.geojson').then(r => r.json()),
-                fetch('/gis-data/houses.geojson').then(r => r.json()),
+                fetch('/gis-data/houses.geojson').then(r => r.json()).catch(e => ({})),
+                fetch('/api/lots').then(r => r.ok ? r.json() : []).catch(e => [])
             ]);
+
+            if (lotsData && Array.isArray(lotsData)) {
+                lotsData.forEach(lot => {
+                    dbLots[`B${lot.block} L${lot.lot_number}`] = lot;
+                });
+            }
 
             housesGeoJson = houses;
 
@@ -285,11 +312,11 @@
                         const b = feature.properties.block_num;
                         const l = feature.properties.lot_number;
                         const key = `B${b} L${l}`;
-                        const mock = defaultMockData[key] || { res: 'None', status: 'Vacant Lot', billing: 'Unpaid', water: 'Unpaid' };
+                        const dbLot = dbLots[key] || { owner: 'Unassigned', status: 'Vacant Lot', electricity_status: 'unpaid', water_status: 'unpaid', id: null, user_id: null };
 
-                        layer.bindTooltip(`Block ${b}, Lot ${l}`);
+                        layer.bindTooltip(`Block ${b}, Lot ${l} - ${dbLot.owner}`);
                         layer.on('click', () => {
-                            selectLot(key, mock.res, mock.status, mock.billing, mock.water);
+                            selectLot(key, dbLot.owner, dbLot.status, dbLot.electricity_status, dbLot.water_status, dbLot.id, dbLot.user_id);
                         });
                     }
                 }
@@ -328,7 +355,7 @@
             }
         }
 
-        function selectLot(id, res, status, billing, water) {
+        function selectLot(id, res, status, billing, water, dbLotId, userId) {
             document.getElementById('lotDetailsDefault').style.display = 'none';
             document.getElementById('lotDetailsPanel').style.display = 'block';
 
@@ -352,6 +379,29 @@
             if (currentLayer === 'electricity' || currentLayer === 'water') {
                 document.getElementById('panelBillingElecOnly').style.display = currentLayer === 'electricity' ? 'block' : 'none';
                 document.getElementById('panelBillingWaterOnly').style.display = currentLayer === 'water' ? 'block' : 'none';
+            }
+
+            const btnEdit = document.getElementById('btnEditResident');
+            const btnProfile = document.getElementById('btnViewProfile');
+            const btnUpdate = document.getElementById('btnUpdateOccupancy');
+            
+            if (userId) {
+                if (btnEdit) btnEdit.onclick = () => window.location.href = `/admin/users?edit=${userId}`;
+                if (btnProfile) btnProfile.onclick = () => window.location.href = `/admin/users?view=${userId}`;
+            } else {
+                if (btnEdit) btnEdit.onclick = () => alert('No resident assigned to this lot.');
+                if (btnProfile) btnProfile.onclick = () => alert('No resident assigned to this lot.');
+            }
+            if (btnUpdate) {
+                btnUpdate.onclick = () => {
+                    const parts = id.replace('B','').replace('L','').split(' ');
+                    const block = parts[0];
+                    const lot = parts[1];
+                    document.getElementById('occUpdateBlock').value = block;
+                    document.getElementById('occUpdateLot').value = lot;
+                    document.getElementById('occUpdateStatus').value = status === 'Unassigned' ? 'Vacant Lot' : status;
+                    document.getElementById('occupancyUpdateModal').style.display = 'flex';
+                };
             }
         }
 
@@ -397,6 +447,32 @@
             const zoomVal = document.getElementById('zoomVal');
             if (rotVal) rotVal.innerText = rZ + '°';
             if (zoomVal) zoomVal.innerText = z.toFixed(1) + 'z';
+        }
+
+        async function updateOccupancyStatus() {
+            const block = document.getElementById('occUpdateBlock').value;
+            const lot = document.getElementById('occUpdateLot').value;
+            const status = document.getElementById('occUpdateStatus').value;
+            
+            try {
+                const res = await fetch('/admin/gis/update-occupancy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    },
+                    body: JSON.stringify({ block: block, lot: lot, status: status })
+                });
+                
+                if (res.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to update occupancy status.');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('An error occurred.');
+            }
         }
 
         // Initialize defaults properly

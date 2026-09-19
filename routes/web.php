@@ -279,6 +279,9 @@ Route::put('/api/appointments/{id}/status', function (\Illuminate\Http\Request $
     return response()->json(['success' => true]);
 });
 
+// GIS API Route
+Route::get('/api/lots', [\App\Http\Controllers\GisController::class, 'getLotsData']);
+
 // Admin Routes
 Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     Route::get('/dashboard', function () {
@@ -352,6 +355,18 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'notes' => ($request->input('name') ?? 'New Buyer') . ' | ' . ($request->input('contact') ?? 'N/A')
         ]);
         return response()->json(['success' => true, 'id' => substr($res->id, 0, 8)]);
+    });
+
+    Route::post('/reservation-fee/cancel', function (\Illuminate\Http\Request $request) {
+        $res = \App\Models\Reservation::where('id', 'LIKE', $request->input('id') . '%')->first();
+        if ($res) {
+            $res->update(['status' => 'Cancelled']);
+            if ($res->lot) {
+                $res->lot->update(['status' => 'Available']);
+            }
+            return response()->json(['success' => true]);
+        }
+        return response()->json(['success' => false], 404);
     });
 
     Route::post('/downpayment-fee', function (\Illuminate\Http\Request $request) {
@@ -486,6 +501,16 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         return view('admin.visitors.index');
     });
     Route::get('/gis', function () { return view('admin.gis.index'); });
+    Route::post('/gis/update-occupancy', function (\Illuminate\Http\Request $request) {
+        $lot = \App\Models\Lot::where('block', $request->input('block'))
+                              ->where('lot_number', $request->input('lot'))
+                              ->first();
+        if ($lot) {
+            $lot->update(['status' => $request->input('status')]);
+            return response()->json(['success' => true]);
+        }
+        return response()->json(['success' => false], 404);
+    });
 });
 
 Route::post('/api/settings', function (\Illuminate\Http\Request $request) {
@@ -810,20 +835,24 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             'photos' => 'nullable|array',
         ]);
         
-        $imagePath = null;
-        if (!empty($validated['photos']) && count($validated['photos']) > 0) {
-            $base64Image = $validated['photos'][0];
-            if (preg_match('/^data:image\/(\w+);base64,/', $base64Image, $type)) {
-                $base64Image = substr($base64Image, strpos($base64Image, ',') + 1);
-                $type = strtolower($type[1]);
-                if (in_array($type, ['jpg', 'jpeg', 'gif', 'png', 'webp'])) {
-                    $base64Image = str_replace(' ', '+', $base64Image);
-                    $imageName = 'incident_' . time() . '_' . \Illuminate\Support\Str::random(10) . '.' . $type;
-                    \Illuminate\Support\Facades\Storage::disk('public')->put('incidents/' . $imageName, base64_decode($base64Image));
-                    $imagePath = '/storage/incidents/' . $imageName;
+        $imagePaths = [];
+        if (!empty($validated['photos']) && is_array($validated['photos'])) {
+            foreach ($validated['photos'] as $base64Image) {
+                if (count($imagePaths) >= 3) break; // Limit to 3 on backend too
+                if (preg_match('/^data:image\/(\w+);base64,/', $base64Image, $type)) {
+                    $base64Image = substr($base64Image, strpos($base64Image, ',') + 1);
+                    $type = strtolower($type[1]);
+                    if (in_array($type, ['jpg', 'jpeg', 'gif', 'png', 'webp'])) {
+                        $base64Image = str_replace(' ', '+', $base64Image);
+                        $imageName = 'incident_' . time() . '_' . \Illuminate\Support\Str::random(10) . '.' . $type;
+                        \Illuminate\Support\Facades\Storage::disk('public')->put('incidents/' . $imageName, base64_decode($base64Image));
+                        $imagePaths[] = '/storage/incidents/' . $imageName;
+                    }
                 }
             }
         }
+        
+        $finalImageUrl = count($imagePaths) > 0 ? json_encode($imagePaths) : null;
         
         \App\Models\Incident::create([
             'subject' => $validated['subject'],
@@ -831,7 +860,7 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             'description' => $validated['description'],
             'user_id' => \Illuminate\Support\Facades\Auth::id(),
             'status' => 'pending',
-            'image_url' => $imagePath
+            'image_url' => $finalImageUrl
         ]);
         
         return response()->json(['success' => true]);
@@ -1062,6 +1091,10 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
     Route::delete('/admin/users/{id}', function ($id) {
         $user = \App\Models\User::find($id);
         if ($user) {
+            foreach($user->lots as $lot) {
+                $lot->update(['status' => 'Available']);
+            }
+            $user->lots()->detach();
             $user->delete();
             return response()->json(['success' => true]);
         }

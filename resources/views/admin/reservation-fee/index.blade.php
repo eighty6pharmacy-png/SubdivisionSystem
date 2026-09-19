@@ -63,7 +63,6 @@
                 <h3 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 0;">Monthly Reservation Fee Revenue Trends</h3>
                 <p style="font-size: 12px; color: #64748b; margin: 4px 0 0 0;">12-month initial lot reservation deposits & total client bookings (in ₱ Thousands)</p>
             </div>
-            <span class="badge" style="background: #f3e8ff; color: #7e22ce; font-weight: 700; padding: 6px 14px; border-radius: 12px;">6 Active Reservations</span>
         </div>
         <div style="height: 200px; position: relative;">
             <canvas id="reservationSalesChart"></canvas>
@@ -157,11 +156,6 @@
                         <span style="font-size: 12px; color: #64748b;">Date Recorded</span>
                         <div id="modalDate" style="font-size: 24px; font-weight: 700; color: var(--bill-primary); margin-top: 4px;"></div>
                     </div>
-                </div>
-
-                <div style="padding: 24px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; margin-bottom: 32px;">
-                    <h4 style="font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Sales Agent Notes</h4>
-                    <p id="modalPredictiveText" style="font-size: 13px; color: #334155; line-height: 1.5;"></p>
                 </div>
 
                 <div style="display: flex; gap: 16px; margin-top: 40px; border-top: 1px solid var(--bill-border); padding-top: 32px;">
@@ -299,8 +293,6 @@
         const dateObj = new Date(bill.date);
         document.getElementById('modalDate').textContent = dateObj.toLocaleDateString('en-US', {month: 'long', day: 'numeric', year: 'numeric'});
         
-        document.getElementById('modalPredictiveText').textContent = bill.notes || 'No notes provided by agent.';
-        
         const trendEl = document.getElementById('modalTrend');
         trendEl.textContent = bill.status;
         trendEl.className = 'trend-chip ' + (bill.status === 'Converted' ? 'trend-early' : (bill.status === 'Cancelled' ? 'trend-late' : 'trend-early'));
@@ -322,15 +314,28 @@
         closeModal();
         if (window.pushSystemNotification) pushSystemNotification("Paid", "Reservation successfully marked as Paid.", "System");
     }
-
-    function cancelReservation() {
+    async function cancelReservation() {
         if(!currentModalId) return;
-        const bill = allBillsRaw.find(b => b.id === currentModalId);
-        if(bill) bill.status = 'Cancelled';
+        if(!confirm('Are you sure you want to cancel this reservation?')) return;
         
-        updateRowStatus(currentModalId, '<span class="badge badge-danger">Cancelled</span>');
-        closeModal();
-        if (window.pushSystemNotification) pushSystemNotification("Cancelled", "Reservation has been cancelled.", "System");
+        try {
+            const res = await fetch('/admin/reservation-fee/cancel', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ id: currentModalId })
+            });
+            if (res.ok) {
+                window.location.reload();
+            } else {
+                alert('Failed to cancel reservation.');
+            }
+        } catch (e) {
+            console.error('Error cancelling reservation:', e);
+            alert('An error occurred.');
+        }
     }
 
     function updateRowStatus(id, badgeHtml) {

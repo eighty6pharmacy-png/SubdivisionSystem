@@ -346,10 +346,19 @@
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 },
                 body: JSON.stringify(payload)
             });
+            
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => null);
+                const errorMsg = errorData && errorData.message ? errorData.message : 'Failed to update user.';
+                alert(`Error: ${errorMsg}`);
+                return;
+            }
+            
             const data = await res.json();
             if(data.success) {
                 // Find row and update UI
@@ -472,10 +481,19 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 },
                 body: JSON.stringify(payload)
             });
+            
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => null);
+                const errorMsg = errorData && errorData.message ? errorData.message : 'Failed to create account.';
+                alert(`Error: ${errorMsg}`);
+                return;
+            }
+            
             const data = await res.json();
             if(data.success) {
                 alert(`Account created successfully!\n\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nPlease provide this password to the user.`);

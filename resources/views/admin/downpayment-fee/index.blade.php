@@ -218,10 +218,6 @@
                 </div>
             </div>
         </div>
-        <div style="margin-bottom: 16px;">
-            <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Contract Date</label>
-            <input type="date" id="calcContractDate" class="filter-select" style="width: 100%; padding: 12px;" required>
-        </div>
 
         <div style="padding: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; margin-bottom: 24px;">
             <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px;">
@@ -411,7 +407,7 @@
 
         const firstName = document.getElementById('calcFirstName').value || 'New';
         const lastName = document.getElementById('calcLastName').value || 'Buyer';
-        const contractDate = document.getElementById('calcContractDate').value || new Date().toISOString().split('T')[0];
+        const contractDate = new Date().toISOString().split('T')[0];
         const blk = document.getElementById('calcBlk').value;
         const lot = document.getElementById('calcLot').value;
         

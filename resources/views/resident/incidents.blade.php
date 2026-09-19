@@ -199,15 +199,26 @@
     // Inject DB data
     const dbIncidents = @json($incidents);
     // Map DB fields to what JS expects
-    const mappedIncidents = dbIncidents.map(inc => ({
-        id: inc.id.toString(),
-        sub: inc.subject,
-        type: inc.type,
-        date: inc.created_at,
-        desc: inc.description,
-        status: inc.status.toLowerCase(),
-        photos: inc.image_url ? [inc.image_url] : []
-    }));
+    const mappedIncidents = dbIncidents.map(inc => {
+        let parsedPhotos = [];
+        if (inc.image_url) {
+            try {
+                parsedPhotos = JSON.parse(inc.image_url);
+            } catch(e) {
+                parsedPhotos = [inc.image_url];
+            }
+        }
+
+        return {
+            id: inc.id.toString(),
+            sub: inc.subject,
+            type: inc.type,
+            date: inc.created_at,
+            desc: inc.description,
+            status: inc.status.toLowerCase(),
+            photos: parsedPhotos
+        };
+    });
 
     document.addEventListener('DOMContentLoaded', () => {
         renderResidentIncidents();
@@ -285,26 +296,60 @@
     }
 
     let uploadedPhotosBase64 = [];
+    const MAX_PHOTOS = 3;
+    const MAX_SIZE_MB = 5;
 
     function handleFilesUpload(input) {
+        if (!input.files || input.files.length === 0) return;
+        
+        for (let i = 0; i < input.files.length; i++) {
+            if (uploadedPhotosBase64.length >= MAX_PHOTOS) {
+                alert(`You can only upload a maximum of ${MAX_PHOTOS} photos.`);
+                break;
+            }
+            
+            const file = input.files[i];
+            if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+                alert(`File ${file.name} exceeds the ${MAX_SIZE_MB}MB limit.`);
+                continue;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                uploadedPhotosBase64.push(e.target.result);
+                renderPreview();
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        input.value = ''; // Reset input to allow selecting the same file again if needed
+    }
+
+    function renderPreview() {
         const preview = document.getElementById('uploadPreview');
         const text = document.getElementById('uploadText');
         
-        if (input.files && input.files.length > 0) {
+        if (uploadedPhotosBase64.length > 0) {
             text.style.display = 'none';
             preview.style.display = 'flex';
+            
+            preview.innerHTML = uploadedPhotosBase64.map((base64, index) => `
+                <div style="position: relative; display: inline-block; margin: 4px;">
+                    <img src="${base64}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 2px solid #e2e8f0;">
+                    <button type="button" onclick="removePhoto(event, ${index})" style="position: absolute; top: -6px; right: -6px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">✕</button>
+                </div>
+            `).join('');
+        } else {
+            text.style.display = 'block';
+            preview.style.display = 'none';
             preview.innerHTML = '';
-            uploadedPhotosBase64 = [];
-
-            Array.from(input.files).forEach(file => {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    uploadedPhotosBase64.push(e.target.result);
-                    preview.innerHTML += `<img src="${e.target.result}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 2px solid #e2e8f0;">`;
-                };
-                reader.readAsDataURL(file);
-            });
         }
+    }
+
+    function removePhoto(event, index) {
+        event.stopPropagation();
+        uploadedPhotosBase64.splice(index, 1);
+        renderPreview();
     }
 
     let isSubmittingReport = false;
