@@ -249,19 +249,28 @@ if (!function_exists('getElectricalBills')) {
                         $bill = $resident->utilityBills->first();
                     }
                     
-                    $payments = [];
-                    if ($bill) {
-                        $payments = $bill->payments->map(function ($p) {
-                            return [
-                                'month' => \Carbon\Carbon::parse($p->payment_date)->format('M Y'),
-                                'amount' => $p->amount_paid,
-                                'status' => 'Paid',
-                                'date' => \Carbon\Carbon::parse($p->payment_date)->format('y-m-d'),
-                                'trn' => $p->trn,
-                            ];
-                        })->toArray();
+                    $allPayments = collect();
+                    foreach ($resident->utilityBills as $ub) {
+                        if ($ub->type === 'electricity') {
+                            foreach ($ub->payments as $p) {
+                                $allPayments->push([
+                                    'month' => \Carbon\Carbon::parse($p->payment_date)->format('M Y'),
+                                    'amount' => $p->amount_paid,
+                                    'status' => 'Paid',
+                                    'date' => \Carbon\Carbon::parse($p->payment_date)->format('M d, Y h:i A'),
+                                    'trn' => $p->trn,
+                                    'method' => $p->method,
+                                    'timestamp' => \Carbon\Carbon::parse($p->payment_date)->timestamp,
+                                ]);
+                            }
+                        }
                     }
                     
+                    $payments = $allPayments->sortByDesc('timestamp')->values()->toArray();
+                    
+                    $billIndex = $bill ? $resident->utilityBills->search(fn($b) => $b->id === $bill->id) : false;
+                    $previousBill = $billIndex !== false ? $resident->utilityBills->get($billIndex + 1) : null;
+
                     return [
                         'id' => $bill ? substr($bill->id, 0, 8) : 'NEW-' . $resident->id,
                         'db_id' => $bill ? $bill->id : null,
@@ -272,7 +281,9 @@ if (!function_exists('getElectricalBills')) {
                         'amount' => $bill ? ($bill->amount + $bill->previous_balance + (($bill->is_at_risk && $bill->status !== 'Paid') ? (($bill->amount + $bill->previous_balance) * 0.05) : 0)) : 0,
                         'usage' => ($bill ? $bill->usage_value : 0) . ' kWh',
                         'prev_reading' => $bill ? $bill->previous_reading : 0,
+                        'prev_reading_date' => $previousBill ? \Carbon\Carbon::parse($previousBill->created_at)->format('M d, Y') : 'N/A',
                         'curr_reading' => $bill ? $bill->current_reading : 0,
+                        'curr_reading_date' => ($bill && $bill->created_at) ? \Carbon\Carbon::parse($bill->created_at)->format('M d, Y') : 'N/A',
                         'previous_balance' => $bill ? (float)$bill->previous_balance : 0,
                         'total_paid' => $bill ? (float)$bill->payments->sum('amount_paid') : 0,
                         'usage_kwh' => $bill ? $bill->usage_value : 0,
@@ -282,7 +293,7 @@ if (!function_exists('getElectricalBills')) {
                         'due' => ($bill && $bill->due_date) ? \Carbon\Carbon::parse($bill->due_date)->format('Y-m-d') : 'N/A',
                         'issued_date' => ($bill && $bill->created_at) ? \Carbon\Carbon::parse($bill->created_at)->format('Y-m-d') : 'N/A',
                         'paid_date' => count($payments) > 0 ? $payments[0]['date'] : null,
-                        'method' => count($payments) > 0 ? 'Office' : null,
+                        'method' => count($payments) > 0 ? ($payments[0]['method'] ?? 'Office') : null,
                         'usage_history' => ($lot && $includeHistory) ? getLotMonthlyChartData($lot->id, 'electricity') : [],
                         'amount_history' => ($lot && $includeHistory) ? getLotMonthlyAmountChartData($lot->id, 'electricity') : [],
                         'at_risk' => $bill ? ($bill->is_at_risk && $bill->status !== 'Paid') : false,
@@ -322,18 +333,24 @@ if (!function_exists('getWaterBills')) {
                         $bill = $resident->utilityBills->first();
                     }
                     
-                    $payments = [];
-                    if ($bill) {
-                        $payments = $bill->payments->map(function ($p) {
-                            return [
-                                'month' => \Carbon\Carbon::parse($p->payment_date)->format('M Y'),
-                                'amount' => $p->amount_paid,
-                                'status' => 'Paid',
-                                'date' => \Carbon\Carbon::parse($p->payment_date)->format('y-m-d'),
-                                'trn' => $p->trn,
-                            ];
-                        })->toArray();
+                    $allPayments = collect();
+                    foreach ($resident->utilityBills as $ub) {
+                        if ($ub->type === 'water') {
+                            foreach ($ub->payments as $p) {
+                                $allPayments->push([
+                                    'month' => \Carbon\Carbon::parse($p->payment_date)->format('M Y'),
+                                    'amount' => $p->amount_paid,
+                                    'status' => 'Paid',
+                                    'date' => \Carbon\Carbon::parse($p->payment_date)->format('M d, Y h:i A'),
+                                    'trn' => $p->trn,
+                                    'method' => $p->method,
+                                    'timestamp' => \Carbon\Carbon::parse($p->payment_date)->timestamp,
+                                ]);
+                            }
+                        }
                     }
+                    
+                    $payments = $allPayments->sortByDesc('timestamp')->values()->toArray();
                     
                     $minWaterM3Setting = \App\Models\Setting::find('water_min_m3');
                     $minWaterM3 = $minWaterM3Setting ? (float)$minWaterM3Setting->value : 10;
@@ -344,6 +361,9 @@ if (!function_exists('getWaterBills')) {
                     $currentRateSetting = \App\Models\Setting::find('water_rate');
                     $currentRate = $currentRateSetting ? (float)$currentRateSetting->value : 30;
                     
+                    $billIndex = $bill ? $resident->utilityBills->search(fn($b) => $b->id === $bill->id) : false;
+                    $previousBill = $billIndex !== false ? $resident->utilityBills->get($billIndex + 1) : null;
+
                     return [
                         'id' => $bill ? substr($bill->id, 0, 8) : 'NEW-' . $resident->id,
                         'db_id' => $bill ? $bill->id : null,
@@ -354,7 +374,9 @@ if (!function_exists('getWaterBills')) {
                         'usage' => ($bill ? $bill->usage_value : 0) . ' m³',
                         'usage_m3' => $bill ? $bill->usage_value : 0,
                         'prev_reading' => $bill ? $bill->previous_reading : 0,
+                        'prev_reading_date' => $previousBill ? \Carbon\Carbon::parse($previousBill->created_at)->format('M d, Y') : 'N/A',
                         'curr_reading' => $bill ? $bill->current_reading : 0,
+                        'curr_reading_date' => ($bill && $bill->created_at) ? \Carbon\Carbon::parse($bill->created_at)->format('M d, Y') : 'N/A',
                         'previous_balance' => $bill ? (float)$bill->previous_balance : 0,
                         'total_paid' => $bill ? (float)$bill->payments->sum('amount_paid') : 0,
                         'usage_cbm' => $bill ? $bill->usage_value : 0,
@@ -366,7 +388,7 @@ if (!function_exists('getWaterBills')) {
                         'due' => ($bill && $bill->due_date) ? \Carbon\Carbon::parse($bill->due_date)->format('Y-m-d') : 'N/A',
                         'issued_date' => ($bill && $bill->created_at) ? \Carbon\Carbon::parse($bill->created_at)->format('Y-m-d') : 'N/A',
                         'paid_date' => count($payments) > 0 ? $payments[0]['date'] : null,
-                        'method' => count($payments) > 0 ? 'Office' : null,
+                        'method' => count($payments) > 0 ? ($payments[0]['method'] ?? 'Office') : null,
                         'usage_history' => ($lot && $includeHistory) ? getLotMonthlyChartData($lot->id, 'water') : [],
                         'amount_history' => ($lot && $includeHistory) ? getLotMonthlyAmountChartData($lot->id, 'water') : [],
                         'at_risk' => $bill ? ($bill->is_at_risk && $bill->status !== 'Paid') : false,

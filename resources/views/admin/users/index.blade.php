@@ -109,6 +109,7 @@
                         </td>
                         <td>
                             <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openViewModal('{{ $user['id'] }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ addslashes($user['contact_number'] ?? 'N/A') }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}', '{{ date('M d, Y', strtotime($user['joined'])) }}', '{{ $user['status'] }}')">View</button>
                                 <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openEditModal('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ $user['contact_number'] ?? '' }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}')">Edit</button>
                                 @if($user['status'] === 'Active')
                                     <button class="btn btn-outline archive-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="archiveUser('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', this)">Archive</button>
@@ -272,11 +273,98 @@
     </div>
 </div>
 
+<!-- View User Modal -->
+<div id="viewUserModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2000; background: rgba(15,23,42,0.6); backdrop-filter: blur(8px);">
+    <div class="bill-modal-content" style="max-width: 450px; width: 90%; padding: 32px; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
+        <div class="modal-header" style="padding: 0; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="display: flex; gap: 16px; align-items: center;">
+                <div id="viewUserInitials" style="width: 56px; height: 56px; border-radius: 16px; background: #e0e7ff; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #4338ca; font-size: 20px;">
+                    J
+                </div>
+                <div>
+                    <h2 id="viewUserName" style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0;">Name</h2>
+                    <p id="viewUserRole" style="font-size: 13px; font-weight: 700; color: var(--bill-primary); margin-top: 2px;">Role</p>
+                </div>
+            </div>
+            <button class="ann-btn-icon" onclick="closeViewModal()" style="background: none; border: none; cursor: pointer; color: #64748b;">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div>
+                        <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Account ID</div>
+                        <div id="viewUserId" style="font-size: 13px; font-weight: 700; color: #334155; margin-top: 4px; font-family: monospace;">USR-0000</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Status</div>
+                        <div id="viewUserStatus" style="font-size: 13px; font-weight: 700; color: #10b981; margin-top: 4px;">Active</div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="background: #fff; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Email Address</div>
+                    <div id="viewUserEmail" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">email</div>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Contact Number</div>
+                    <div id="viewUserContact" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">N/A</div>
+                </div>
+                <div id="viewUserPropertyContainer" style="margin-bottom: 12px; display: none;">
+                    <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Property Details</div>
+                    <div id="viewUserProperty" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">Block X, Lot Y</div>
+                </div>
+                <div>
+                    <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Member Since</div>
+                    <div id="viewUserJoined" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">Date</div>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn btn-outline" style="width: 100%; justify-content: center; padding: 12px; margin-top: 24px; border-radius: 12px; font-weight: 700;" onclick="closeViewModal()">Close Profile</button>
+    </div>
+</div>
+
 <script src="{{ asset('js/gis-dropdowns.js') }}"></script>
 <script>
     function generateRandomEditPass() {
         const pass = 'AL' + Math.random().toString(36).slice(-5).toUpperCase() + '!';
         document.getElementById('editUserPassword').value = pass;
+    }
+
+    function openViewModal(id, name, email, role, contact, block, lot, joined, status) {
+        if (new URLSearchParams(window.location.search).get('view') !== id) {
+            window.history.pushState(null, '', '?view=' + id);
+        }
+        document.getElementById('viewUserInitials').innerText = name.charAt(0).toUpperCase();
+        document.getElementById('viewUserName').innerText = name;
+        document.getElementById('viewUserRole').innerText = role;
+        document.getElementById('viewUserId').innerText = id;
+        document.getElementById('viewUserStatus').innerText = status;
+        document.getElementById('viewUserStatus').style.color = status === 'Active' ? '#10b981' : '#ef4444';
+        
+        document.getElementById('viewUserEmail').innerText = email;
+        document.getElementById('viewUserContact').innerText = contact || 'N/A';
+        document.getElementById('viewUserJoined').innerText = joined;
+
+        const propContainer = document.getElementById('viewUserPropertyContainer');
+        if (role === 'Resident' && block && lot) {
+            document.getElementById('viewUserProperty').innerText = `Block ${block}, Lot ${lot}`;
+            propContainer.style.display = 'block';
+        } else {
+            propContainer.style.display = 'none';
+        }
+
+        document.getElementById('viewUserModal').style.display = 'flex';
+    }
+
+    function closeViewModal() {
+        window.history.replaceState(null, '', window.location.pathname);
+        document.getElementById('viewUserModal').style.display = 'none';
     }
 
     function openEditModal(id, dbid, name, email, role, contact, block, lot) {
@@ -409,6 +497,9 @@
         } else if (params.get('edit')) {
             const editBtn = document.querySelector(`button[onclick*="openEditModal('${params.get('edit')}'"]`);
             if (editBtn) editBtn.click();
+        } else if (params.get('view')) {
+            const viewBtn = document.querySelector(`button[onclick*="openViewModal('${params.get('view')}'"]`);
+            if (viewBtn) viewBtn.click();
         }
     });
 

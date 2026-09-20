@@ -197,7 +197,7 @@
         </div>
         <div style="margin-bottom: 24px;">
             <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Amount Paid (₱)</label>
-            <input type="number" id="resAmount" class="filter-select" style="width: 100%; font-size: 16px; padding: 12px;" value="20000">
+            <input type="text" id="resAmount" class="filter-select" style="width: 100%; font-size: 16px; padding: 12px;" value="20,000" oninput="formatNumberInput(this)">
         </div>
 
         <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 14px;" onclick="submitReservation()">Save Reservation Record</button>
@@ -209,6 +209,13 @@
     const allBillsRaw = @json($bills);
 
     let currentModalId = null;
+
+    function formatNumberInput(input) {
+        let value = input.value.replace(/,/g, '');
+        if (!isNaN(value) && value !== '') {
+            input.value = Number(value).toLocaleString('en-US');
+        }
+    }
 
     function openReservationModal() {
         if (new URLSearchParams(window.location.search).get('action') !== 'add') {
@@ -237,11 +244,22 @@
             btn.style.opacity = '0.7';
         }
 
-        const name = document.getElementById('resName').value || 'New Buyer';
-        const contact = document.getElementById('resContact').value || 'N/A';
+        const name = document.getElementById('resName').value.trim();
+        const contact = document.getElementById('resContact').value.trim();
         const block = document.getElementById('resBlock').value;
         const lot = document.getElementById('resLot').value;
-        const amount = parseFloat(document.getElementById('resAmount').value) || 20000;
+        const amountStr = document.getElementById('resAmount').value.replace(/,/g, '');
+        const amount = parseFloat(amountStr);
+
+        if (!name || !contact || isNaN(amount) || amount <= 0) {
+            alert('Please fill in all required fields (Name, Contact, Amount) with valid data.');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Save Reservation Record';
+                btn.style.opacity = '1';
+            }
+            return;
+        }
 
         try {
             const res = await fetch('/admin/reservation-fee', {

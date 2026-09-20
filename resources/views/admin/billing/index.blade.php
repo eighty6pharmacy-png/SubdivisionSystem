@@ -12,6 +12,10 @@
             <p>12-month consumption analysis, payment channel management, and predictive delinquency tracking.</p>
         </div>
         <div class="bill-actions">
+            <a href="{{ route('admin.billing.export-soa') }}" class="btn btn-outline" style="border-color: #10b981; color: #10b981; text-decoration: none;">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg> <!-- using a simple icon for now, ideally a download icon -->
+                Export SOA (Excel)
+            </a>
             <button class="btn btn-outline" style="border-color: var(--bill-primary); color: var(--bill-primary);" onclick="resetBillingCycle()">
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
                 New Cycle
@@ -291,7 +295,7 @@
                         </td>
                         <td>
                             <div style="display: flex; gap: 8px;">
-                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('{{ $bill['id'] }}')">View</button>
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('{{ $bill['db_id'] ?? $bill['id'] }}')">View</button>
                             </div>
                         </td>
                     </tr>
@@ -862,7 +866,7 @@
         document.getElementById('modalAmountBeforeLabel').textContent = `Amount Before ${bill.due}`;
         document.getElementById('modalAmountAfterLabel').textContent = `Amount After ${bill.due}`;
         document.getElementById('modalAmountBefore').textContent = `₱${amountBefore.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-        document.getElementById('modalAmountAfter').textContent = `₱${totalDueAfter.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        document.getElementById('modalAmountAfter').textContent = `₱${amountAfter.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('modalPenalty').textContent = `₱${penaltyAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('modalPrevBalance').textContent = `₱${previousBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('modalTotalPaid').textContent = `₱${totalPaid.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;

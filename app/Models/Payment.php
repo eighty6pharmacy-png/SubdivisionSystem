@@ -23,7 +23,7 @@ class Payment extends Model
     protected function casts(): array
     {
         return [
-            'payment_date' => 'date',
+            'payment_date' => 'datetime',
         ];
     }
 

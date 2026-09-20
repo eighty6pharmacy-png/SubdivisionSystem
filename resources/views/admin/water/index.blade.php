@@ -278,7 +278,7 @@
                         <td>
                             <div style="display: flex; gap: 8px;">
                                 <!-- Ensure we pass usage, date logic, and audit log -->
-                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('{{ $bill['id'] }}')">View</button>
+                                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewDetail('{{ $bill['db_id'] ?? $bill['id'] }}')">View</button>
                             </div>
                         </td>
                     </tr>
@@ -775,7 +775,7 @@
         document.getElementById('modalAmountBeforeLabel').textContent = `Amount Before ${bill.due}`;
         document.getElementById('modalAmountAfterLabel').textContent = `Amount After ${bill.due}`;
         document.getElementById('modalAmountBefore').textContent = `₱${amountBefore.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-        document.getElementById('modalAmountAfter').textContent = `₱${totalDueAfter.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        document.getElementById('modalAmountAfter').textContent = `₱${amountAfter.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('modalPenalty').textContent = `₱${arrearsPenalty.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('modalPrevBalance').textContent = `₱${previousBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('modalTotalPaid').textContent = `₱${totalPaid.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;

@@ -104,7 +104,7 @@
                     enteredCount++;
                     statusBadge = `<span class="badge" style="background: #e0e7ff; color: #4f46e5; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 11px;">ENTERED GATE</span>`;
                     codeDisplay = `<span style="color:#4f46e5; font-family:monospace; font-size:16px; font-weight:800; letter-spacing:2px;">${v.pin || 'USED'}</span>`;
-                    actionHtml = `<span style="font-size: 12px; color: #4f46e5; font-weight: 700;">Entered Gate ✓</span>`;
+                    actionHtml = `<span style="font-size: 12px; color: #4f46e5; font-weight: 700;">Entered Gate ✓</span><br><span style="font-size:10px; color:#64748b; font-weight:700;">${v.arrival_time || ''}</span>`;
                 } else {
                     statusBadge = `<span class="badge" style="background: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 11px;">REJECTED / EXPIRED</span>`;
                     codeDisplay = `<span style="color:#94a3b8; font-size:13px;">-</span>`;
@@ -120,6 +120,9 @@
                     <td>
                         <div style="font-weight: 700; color: #0f172a;">${v.visitor}</div>
                         <div style="font-size: 12px; color: #64748b;">${v.purpose}</div>
+                        <div style="font-size: 11px; color: #94a3b8; margin-top: 4px; font-weight: 500;">
+                            ${v.type === 'Walk-in' ? 'Address: ' + (v.visitor_address || 'N/A') : 'Plate: ' + (v.plate_number || 'N/A')}
+                        </div>
                     </td>
                     <td style="font-size: 13px; color: #64748b; font-weight: 600;">${v.validity || 'Today'}</td>
                     <td>${statusBadge}</td>

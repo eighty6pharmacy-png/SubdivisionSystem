@@ -17,6 +17,10 @@ class GisController extends Controller
             $user = $isNotConnected ? null : $lot->users->first();
             $owner = $user ? $user->name : 'Unassigned';
             $userId = $user ? $user->id : null;
+            $userEmail = $user ? $user->email : '';
+            $userContact = $user ? $user->contact_number : '';
+            $userRole = $user ? ($user->roles->first()->name ?? 'Resident') : '';
+            $userJoined = $user ? $user->created_at->format('M d, Y') : '';
             $electricityBill = $lot->utilityBills->where('type', 'electricity')->sortByDesc('created_at')->first();
             $waterBill = $lot->utilityBills->where('type', 'water')->sortByDesc('created_at')->first();
             
@@ -28,6 +32,10 @@ class GisController extends Controller
                 'isNotConnected' => $isNotConnected,
                 'owner' => $owner,
                 'user_id' => $userId,
+                'user_email' => $userEmail,
+                'user_contact' => $userContact,
+                'user_role' => $userRole,
+                'user_joined' => $userJoined,
                 'electricity_status' => $electricityBill ? $electricityBill->status : 'unpaid',
                 'water_status' => $waterBill ? $waterBill->status : 'unpaid',
             ];

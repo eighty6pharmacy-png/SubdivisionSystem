@@ -25,6 +25,8 @@ class UtilityBill extends Model
         'due_date',
         'status',
         'is_at_risk',
+        'paymongo_checkout_id',
+        'paymongo_checkout_url',
     ];
 
     protected function casts(): array

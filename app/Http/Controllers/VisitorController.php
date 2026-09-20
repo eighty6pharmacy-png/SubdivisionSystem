@@ -47,13 +47,16 @@ class VisitorController extends Controller
                 'arrival_time' => $vis->arrival_time,
                 'type' => $vis->type,
                 'plate_number' => $vis->plate_number,
+                'visitor_address' => $vis->visitor_address,
+                'date' => $vis->updated_at->format('Y-m-d'),
+                'date_formatted' => $vis->updated_at->format('M d, Y'),
             ];
         })->toArray();
 
         return response()->json($visitors);
     }
 
-    // For Resident requesting a code
+    // For Resident requesting a code or Guard logging Walk-in
     public function store(Request $request)
     {
         $request->validate([
@@ -61,16 +64,21 @@ class VisitorController extends Controller
             'purpose' => 'required|string',
             'validity' => 'required|string',
             'type' => 'required|string',
+            'visitor_address' => 'nullable|string',
         ]);
 
+        $isWalkIn = $request->type === 'Walk-in';
+
         $visitor = Visitor::create([
-            'host_id' => auth()->id(),
+            'host_id' => $isWalkIn ? null : auth()->id(),
             'visitor_name' => $request->visitor_name,
             'purpose' => $request->purpose,
             'validity' => $request->validity,
             'type' => $request->type,
             'plate_number' => $request->plate_number,
-            'status' => 'Pending',
+            'visitor_address' => $request->visitor_address,
+            'status' => $isWalkIn ? 'Entered' : 'Pending',
+            'arrival_time' => $isWalkIn ? \Carbon\Carbon::now()->setTimezone(config('app.timezone', 'Asia/Manila'))->format('h:i A') : null,
         ]);
 
         return response()->json(['success' => true, 'id' => substr($visitor->id, 0, 8)]);
@@ -148,6 +156,7 @@ class VisitorController extends Controller
         return response()->json([
             'success' => true,
             'visitor_id' => substr($visitor->id, 0, 8),
+            'db_id' => $visitor->id,
             'visitor_name' => $visitor->visitor_name,
             'destination' => $dest,
             'status' => $visitor->status,
@@ -157,11 +166,17 @@ class VisitorController extends Controller
     // For Guard marking visitor as Entered
     public function markEntered(Request $request, $id)
     {
-        $visitor = Visitor::where('id', 'like', $id . '%')->firstOrFail();
-        $visitor->update([
+        $visitor = Visitor::where('id', $id)->firstOrFail();
+        $updateData = [
             'status' => 'Entered',
-            'arrival_time' => now()->format('h:i A')
-        ]);
+            'arrival_time' => \Carbon\Carbon::now()->setTimezone(config('app.timezone', 'Asia/Manila'))->format('h:i A')
+        ];
+        
+        if ($request->has('plate_number') && $request->plate_number !== 'N/A') {
+            $updateData['plate_number'] = $request->plate_number;
+        }
+
+        $visitor->update($updateData);
         return response()->json(['success' => true]);
     }
 

@@ -92,7 +92,7 @@
                 <tbody id="dpTableBody">
                     @foreach($bills as $bill)
                     @php
-                        $progress = ($bill['paid_amount'] / $bill['total_dp']) * 100;
+                        $progress = $bill['total_dp'] > 0 ? ($bill['paid_amount'] / $bill['total_dp']) * 100 : 0;
                     @endphp
                     <tr class="bill-row" id="row-{{ $bill['id'] }}">
                         <td>
@@ -170,8 +170,12 @@
                     <h4 style="font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 16px; text-transform: uppercase;">Log Installment Payment</h4>
                     <div style="display: flex; gap: 12px; align-items: flex-end;">
                         <div style="flex: 1;">
+                            <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Payment Date</label>
+                            <input type="date" id="directPaymentDate" class="filter-select" style="width: 100%; font-size: 16px; padding: 12px;" value="{{ date('Y-m-d') }}">
+                        </div>
+                        <div style="flex: 1;">
                             <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Amount Paid (₱)</label>
-                            <input type="number" id="directPaymentAmount" class="filter-select" style="width: 100%; font-size: 16px; padding: 12px;" placeholder="e.g. 15000">
+                            <input type="text" id="directPaymentAmount" class="filter-select" style="width: 100%; font-size: 16px; padding: 12px;" placeholder="e.g. 15,000" oninput="formatNumberInput(this)">
                         </div>
                         <button class="btn btn-primary" style="padding: 14px 24px;" onclick="submitPayment()">Submit Payment</button>
                     </div>
@@ -223,7 +227,7 @@
             <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px;">
                 <div>
                     <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Unit Price (TCP) ₱</label>
-                    <input type="number" id="calcTcp" class="filter-select" style="width: 100%; padding: 12px; font-weight: 700;" placeholder="2000000">
+                    <input type="text" id="calcTcp" class="filter-select" style="width: 100%; padding: 12px; font-weight: 700;" placeholder="2,000,000" oninput="formatNumberInput(this)">
                 </div>
                 <div>
                     <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">DP Percentage %</label>
@@ -256,6 +260,13 @@
 
     let currentModalId = null;
 
+    function formatNumberInput(input) {
+        let value = input.value.replace(/,/g, '');
+        if (!isNaN(value) && value !== '') {
+            input.value = Number(value).toLocaleString('en-US');
+        }
+    }
+
     function openContractModal() {
         if (new URLSearchParams(window.location.search).get('action') !== 'add') {
             window.history.pushState(null, '', '?action=add');
@@ -281,7 +292,10 @@
     
     async function submitPayment() {
         if(!currentModalId) return;
-        const amount = parseFloat(document.getElementById('directPaymentAmount').value);
+        const amountStr = document.getElementById('directPaymentAmount').value.replace(/,/g, '');
+        const amount = parseFloat(amountStr);
+        const paymentDate = document.getElementById('directPaymentDate').value || new Date().toISOString().split('T')[0];
+
         if(!amount || amount <= 0) return alert('Enter valid amount');
 
         try {
@@ -291,14 +305,17 @@
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 },
-                body: JSON.stringify({ id: currentModalId, amount: amount })
+                body: JSON.stringify({ id: currentModalId, amount: amount, payment_date: paymentDate })
             });
 
-            if (res.ok) {
+            const data = await res.json();
+
+            if (res.ok && data.success) {
                 const bill = allBillsRaw.find(b => b.id === currentModalId);
                 if(bill) {
                     bill.paid_amount += amount;
                     bill.months_paid += 1;
+                    if(data.next_due) bill.next_due = data.next_due;
                     
                     let progress = (bill.paid_amount / bill.total_dp) * 100;
                     if(progress > 100) progress = 100;
@@ -324,6 +341,22 @@
                             statusCell.innerHTML = `<span class="badge badge-success">Good Standing</span>`;
                         }
                     }
+
+                    const row = document.getElementById('row-' + currentModalId);
+                    if(row && data.next_due) {
+                        const dateObj = new Date(data.next_due);
+                        const dueCell = row.cells[3]; // Next due is 4th column (index 3)
+                        if(dueCell) dueCell.innerHTML = `<div style="font-size: 13px;">${dateObj.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'})}</div>`;
+                    }
+
+                    if(!bill.history) bill.history = [];
+                    bill.history.unshift({
+                        trn: data.trn || 'NEW-PAYMENT',
+                        month: new Date(paymentDate).toLocaleString('default', { month: 'short', year: 'numeric' }),
+                        amount: amount,
+                        status: 'Paid',
+                        date: paymentDate
+                    });
                     
                     viewDetail(currentModalId);
                 }
@@ -370,6 +403,9 @@
             trendEl.style.border = '1px solid #bbf7d0';
         }
 
+        document.getElementById('directPaymentAmount').value = bill.monthly_amortization ? bill.monthly_amortization.toLocaleString('en-US') : '';
+        document.getElementById('directPaymentDate').value = new Date().toISOString().split('T')[0];
+
         document.getElementById('billModal').style.display = 'flex';
         document.body.style.overflow = 'hidden';
     }
@@ -382,7 +418,8 @@
     const outAmort = document.getElementById('calcAmortization');
 
     function calculateAmortization() {
-        const tcp = parseFloat(inpTcp.value) || 0;
+        const tcpStr = inpTcp.value.replace(/,/g, '');
+        const tcp = parseFloat(tcpStr) || 0;
         const percent = parseFloat(inpPercent.value) || 0;
         const months = parseInt(inpMonths.value) || 1;
 
@@ -411,7 +448,8 @@
         const blk = document.getElementById('calcBlk').value;
         const lot = document.getElementById('calcLot').value;
         
-        const tcp = parseFloat(inpTcp.value) || 0;
+        const tcpStr = inpTcp.value.replace(/,/g, '');
+        const tcp = parseFloat(tcpStr) || 0;
         const percent = parseFloat(inpPercent.value) || 0;
         const months = parseInt(inpMonths.value) || 1;
         const dpAmount = tcp * (percent / 100);

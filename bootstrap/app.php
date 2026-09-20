@@ -12,10 +12,14 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(\App\Http\Middleware\PreventBackHistory::class);
+        $middleware->validateCsrfTokens(except: [
+            'api/webhooks/paymongo',
+        ]);
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+            'sync_paymongo' => \App\Http\Middleware\SyncPaymongoCheckouts::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -114,7 +114,12 @@
 
                 tr.innerHTML = `
                     <td style="font-family: monospace; font-size: 12px; font-weight: 700; color: #64748b;">${pin.id}</td>
-                    <td><div style="font-weight: 700; color: #0f172a;">${pin.visitor}</div></td>
+                    <td>
+                        <div style="font-weight: 700; color: #0f172a;">${pin.visitor}</div>
+                        <div style="font-size: 11px; color: #94a3b8; margin-top: 4px; font-weight: 500;">
+                            ${pin.type === 'Walk-in' ? 'Address: ' + (pin.visitor_address || 'N/A') : 'Plate: ' + (pin.plate_number || 'N/A')}
+                        </div>
+                    </td>
                     <td>
                         <div style="background: var(--guard-primary-soft); color: var(--guard-primary); padding: 4px 10px; border-radius: 6px; display: inline-block; font-weight: 700; font-size: 12px;">Blk ${pin.block} Lot ${pin.lot}</div>
                         <div style="font-size: 11px; color: #64748b; margin-top: 4px;">${pin.host}</div>
@@ -187,6 +192,7 @@
                 
                 let record = {
                     id: data.visitor_id,
+                    db_id: data.db_id,
                     visitor: data.visitor_name,
                     block: block,
                     lot: lot,
@@ -194,7 +200,7 @@
                 };
 
                 // Automatically mark as entered
-                fetch('/api/visitors/' + data.visitor_id + '/enter', {
+                fetch('/api/visitors/' + data.db_id + '/enter', {
                     method: 'PUT',
                     headers: { 
                         'Content-Type': 'application/json',
@@ -203,6 +209,7 @@
                     body: JSON.stringify({ plate_number: 'N/A' })
                 }).then(() => {
                     renderSuccess(record, 'Visitor');
+                    loadDailyLog(); // Refresh table immediately
                 });
             } else {
                 errBox.style.display = 'block';
@@ -261,7 +268,7 @@
                     <label style="font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; display: block; margin-bottom: 8px;">Vehicle Plate Number (Optional)</label>
                     <div style="display: flex; gap: 10px;">
                         <input type="text" id="plateNo" class="filter-select" style="flex: 1; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px;" placeholder="e.g. ABC 1234">
-                        <button class="btn btn-secondary" onclick="updatePlate('${record.id}')" style="padding: 12px 20px; font-weight: 700; border-radius: 8px;">Save</button>
+                        <button class="btn btn-secondary" onclick="updatePlate('${record.db_id || record.id}')" style="padding: 12px 20px; font-weight: 700; border-radius: 8px;">Save</button>
                     </div>
                 </div>
 
@@ -275,7 +282,7 @@
             initGISMap('guardMapContainer', {
                 interactive: true,
                 showRouting: true,
-                endNode: record.block !== 'N/A' && record.lot !== 'N/A' ? \`B\${record.block} L\${record.lot}\` : null
+                endNode: record.block !== 'N/A' && record.lot !== 'N/A' ? `B${record.block} L${record.lot}` : null
             });
         }, 100);
     }
@@ -327,6 +334,7 @@
                 visitor_name: data.name,
                 purpose: data.purpose,
                 plate_number: data.plate_number,
+                visitor_address: data.visitor_address,
                 type: 'Walk-in',
                 validity: 'Today'
             })

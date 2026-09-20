@@ -157,6 +157,9 @@
                     <button id="btnUpdateOccupancy" class="btn btn-primary" style="width: 100%; padding: 10px; font-size: 11px; justify-content: center; background: #334155; border: none;">
                         <span style="margin-right: 4px;">🔄</span> Update Occupancy Status
                     </button>
+                    <div id="occupancyLockedMsg" style="display: none; padding: 10px; font-size: 11px; text-align: center; color: #64748b; background: #f8fafc; border-radius: 8px;">
+                        <span style="margin-right: 4px;">🔒</span> Occupancy locked (Resident assigned)
+                    </div>
                 </div>
             </div>
 
@@ -168,9 +171,6 @@
                         <span style="font-weight: 700; font-size: 13px;">Elec. Bill</span>
                         <div id="detailBillingBadge" class="status-badge badge-paid">Paid</div>
                     </div>
-                    <button class="btn btn-outline" style="width: 100%; padding: 8px; font-size: 11px; border-color: #10b981; color: #059669; justify-content: center; background: #fff;">
-                        <span style="margin-right: 4px;">✔</span> Manual Elec. Override
-                    </button>
                 </div>
 
                 <div class="info-card" id="panelBillingWaterOnly" style="background: #f0f9ff; border-color: #bae6fd;">
@@ -179,14 +179,66 @@
                         <span style="font-weight: 700; font-size: 13px;">Water Bill</span>
                         <div id="detailWaterBadge" class="status-badge badge-paid">Paid</div>
                     </div>
-                    <button class="btn btn-outline" style="width: 100%; padding: 8px; font-size: 11px; border-color: #0ea5e9; color: #0369a1; justify-content: center; background: #fff;">
-                        <span style="margin-right: 4px;">✔</span> Manual Water Override
-                    </button>
                 </div>
-                <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 14px; border-radius: 12px; font-weight: 700; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);">Open Full Billing Ledger</button>
             </div>
         </div>
     </aside>
+    </div>
+
+    <!-- View User Modal -->
+    <div id="viewUserModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 3000; background: rgba(15,23,42,0.6); backdrop-filter: blur(8px);">
+        <div class="bill-modal-content" style="max-width: 450px; width: 90%; padding: 32px; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
+            <div class="modal-header" style="padding: 0; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start;">
+                <div style="display: flex; gap: 16px; align-items: center;">
+                    <div id="viewUserInitials" style="width: 56px; height: 56px; border-radius: 16px; background: #e0e7ff; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #4338ca; font-size: 20px;">
+                        J
+                    </div>
+                    <div>
+                        <h2 id="viewUserName" style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0;">Name</h2>
+                        <p id="viewUserRole" style="font-size: 13px; font-weight: 700; color: var(--primary); margin-top: 2px;">Role</p>
+                    </div>
+                </div>
+                <button class="btn btn-outline" onclick="document.getElementById('viewUserModal').style.display='none'" style="border: none; padding: 4px; color: #64748b;">
+                    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+                <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div>
+                            <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Account ID</div>
+                            <div id="viewUserId" style="font-size: 13px; font-weight: 700; color: #334155; margin-top: 4px; font-family: monospace;">USR-0000</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Status</div>
+                            <div id="viewUserStatus" style="font-size: 13px; font-weight: 700; color: #10b981; margin-top: 4px;">Active</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background: #fff; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Email Address</div>
+                        <div id="viewUserEmail" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">email</div>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Contact Number</div>
+                        <div id="viewUserContact" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">N/A</div>
+                    </div>
+                    <div id="viewUserPropertyContainer" style="margin-bottom: 12px; display: none;">
+                        <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Property Details</div>
+                        <div id="viewUserProperty" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">Block X, Lot Y</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Member Since</div>
+                        <div id="viewUserJoined" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">Date</div>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn btn-outline" style="width: 100%; justify-content: center; padding: 12px; margin-top: 24px; border-radius: 12px; font-weight: 700;" onclick="document.getElementById('viewUserModal').style.display='none'">Close Profile</button>
+        </div>
     </div>
 
     <!-- Occupancy Update Modal -->
@@ -312,11 +364,11 @@
                         const b = feature.properties.block_num;
                         const l = feature.properties.lot_number;
                         const key = `B${b} L${l}`;
-                        const dbLot = dbLots[key] || { owner: 'Unassigned', status: 'Vacant Lot', electricity_status: 'unpaid', water_status: 'unpaid', id: null, user_id: null };
+                        const dbLot = dbLots[key] || { owner: 'Unassigned', status: 'Vacant Lot', electricity_status: 'unpaid', water_status: 'unpaid', id: null, user_id: null, block: b, lot_number: l };
 
                         layer.bindTooltip(`Block ${b}, Lot ${l} - ${dbLot.owner}`);
                         layer.on('click', () => {
-                            selectLot(key, dbLot.owner, dbLot.status, dbLot.electricity_status, dbLot.water_status, dbLot.id, dbLot.user_id);
+                            selectLot(key, dbLot);
                         });
                     }
                 }
@@ -355,24 +407,24 @@
             }
         }
 
-        function selectLot(id, res, status, billing, water, dbLotId, userId) {
+        function selectLot(id, dbLot) {
             document.getElementById('lotDetailsDefault').style.display = 'none';
             document.getElementById('lotDetailsPanel').style.display = 'block';
 
             document.getElementById('detailLotId').innerText = id;
-            document.getElementById('detailResident').innerText = res;
+            document.getElementById('detailResident').innerText = dbLot.owner;
             
             const occBadge = document.getElementById('detailOccupancyBadge');
-            occBadge.innerText = status;
-            occBadge.className = 'status-badge ' + 'badge-' + status.toLowerCase().replace(/ /g, '-');
+            occBadge.innerText = dbLot.status;
+            occBadge.className = 'status-badge ' + 'badge-' + dbLot.status.toLowerCase().replace(/ /g, '-');
 
             const billBadge = document.getElementById('detailBillingBadge');
-            billBadge.innerText = billing;
-            billBadge.className = 'status-badge ' + 'badge-' + billing.toLowerCase().replace(/ /g, '-');
+            billBadge.innerText = dbLot.electricity_status;
+            billBadge.className = 'status-badge ' + 'badge-' + dbLot.electricity_status.toLowerCase().replace(/ /g, '-');
 
             const waterBadge = document.getElementById('detailWaterBadge');
-            waterBadge.innerText = water;
-            waterBadge.className = 'status-badge ' + 'badge-' + water.toLowerCase().replace(/ /g, '-');
+            waterBadge.innerText = dbLot.water_status;
+            waterBadge.className = 'status-badge ' + 'badge-' + dbLot.water_status.toLowerCase().replace(/ /g, '-');
 
             document.getElementById('panelOccupancyOnly').style.display = currentLayer === 'occupancy' ? 'block' : 'none';
             document.getElementById('panelBillingOnly').style.display = (currentLayer === 'electricity' || currentLayer === 'water') ? 'block' : 'none';
@@ -384,11 +436,37 @@
             const btnEdit = document.getElementById('btnEditResident');
             const btnProfile = document.getElementById('btnViewProfile');
             const btnUpdate = document.getElementById('btnUpdateOccupancy');
+            const lockedMsg = document.getElementById('occupancyLockedMsg');
             
-            if (userId) {
-                if (btnEdit) btnEdit.onclick = () => window.location.href = `/admin/users?edit=${userId}`;
-                if (btnProfile) btnProfile.onclick = () => window.location.href = `/admin/users?view=${userId}`;
+            if (dbLot.user_id) {
+                if (btnUpdate) btnUpdate.style.display = 'none';
+                if (lockedMsg) lockedMsg.style.display = 'block';
+                const formattedUserId = 'USR-' + String(dbLot.user_id).padStart(4, '0');
+                if (btnEdit) btnEdit.onclick = () => window.location.href = `/admin/users?edit=${formattedUserId}`;
+                if (btnProfile) btnProfile.onclick = () => {
+                    document.getElementById('viewUserInitials').innerText = dbLot.owner.charAt(0).toUpperCase();
+                    document.getElementById('viewUserName').innerText = dbLot.owner;
+                    document.getElementById('viewUserRole').innerText = dbLot.user_role || 'Resident';
+                    document.getElementById('viewUserId').innerText = formattedUserId;
+                    document.getElementById('viewUserStatus').innerText = 'Active';
+                    document.getElementById('viewUserStatus').style.color = '#10b981';
+                    
+                    document.getElementById('viewUserEmail').innerText = dbLot.user_email || 'N/A';
+                    document.getElementById('viewUserContact').innerText = dbLot.user_contact || 'N/A';
+                    document.getElementById('viewUserJoined').innerText = dbLot.user_joined || 'N/A';
+
+                    const propContainer = document.getElementById('viewUserPropertyContainer');
+                    if (dbLot.block && dbLot.lot_number) {
+                        document.getElementById('viewUserProperty').innerText = `Block ${dbLot.block}, Lot ${dbLot.lot_number}`;
+                        propContainer.style.display = 'block';
+                    } else {
+                        propContainer.style.display = 'none';
+                    }
+                    document.getElementById('viewUserModal').style.display = 'flex';
+                };
             } else {
+                if (btnUpdate) btnUpdate.style.display = 'flex';
+                if (lockedMsg) lockedMsg.style.display = 'none';
                 if (btnEdit) btnEdit.onclick = () => alert('No resident assigned to this lot.');
                 if (btnProfile) btnProfile.onclick = () => alert('No resident assigned to this lot.');
             }
@@ -399,7 +477,7 @@
                     const lot = parts[1];
                     document.getElementById('occUpdateBlock').value = block;
                     document.getElementById('occUpdateLot').value = lot;
-                    document.getElementById('occUpdateStatus').value = status === 'Unassigned' ? 'Vacant Lot' : status;
+                    document.getElementById('occUpdateStatus').value = dbLot.status === 'Unassigned' ? 'Vacant Lot' : dbLot.status;
                     document.getElementById('occupancyUpdateModal').style.display = 'flex';
                 };
             }

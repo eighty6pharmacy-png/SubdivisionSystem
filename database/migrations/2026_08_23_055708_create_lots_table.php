@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('block');
             $table->string('lot_number');
             $table->string('status')->default('Available');
-            $table->boolean('provider_managed')->default(true);
+            $table->boolean('provider_managed')->default(false);
             $table->timestamps();
         });
     }

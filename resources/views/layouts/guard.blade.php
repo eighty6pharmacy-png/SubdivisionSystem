@@ -115,5 +115,7 @@
             setTimeout(() => { modal.style.display = 'none'; }, 200);
         }
     </script>
+    
+    @yield('scripts')
 </body>
 </html>

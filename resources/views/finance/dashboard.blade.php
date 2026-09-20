@@ -62,6 +62,7 @@
              data-block="{{ $house['block'] }}" 
              data-elec-status="{{ strtolower($house['elec_status']) }}"
              data-water-status="{{ strtolower($house['water_status']) }}"
+             data-provider="{{ $house['provider_managed'] ? '1' : '0' }}"
              onclick="openReadingPanel(this)">
             <div class="house-header">
                 <div>
@@ -227,11 +228,13 @@
         cards.forEach(card => {
             const cardStatus = card.getAttribute(statusAttr);
             const cardBlock = card.getAttribute('data-block');
+            const cardProvider = card.getAttribute('data-provider');
             
             let showStatus = (filterStatus === 'all' || cardStatus === filterStatus);
             let showBlock = (filterBlock === 'all' || cardBlock === filterBlock);
+            let showProvider = (activeUtility === 'water') || (activeUtility === 'elec' && cardProvider === '0');
 
-            if (showStatus && showBlock) {
+            if (showStatus && showBlock && showProvider) {
                 card.style.display = 'block';
             } else {
                 card.style.display = 'none';

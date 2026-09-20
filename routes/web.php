@@ -147,10 +147,158 @@ Route::post('/reset-password', function (\Illuminate\Http\Request $request) {
 // getVisitorPins() removed, now using API endpoints and controller
 
 // Resident Routes
-Route::prefix('resident')->middleware(['auth', 'web', 'role:Resident'])->group(function () {
-    Route::get('/dashboard', function () {
-        return view('resident.dashboard');
+Route::prefix('resident')->middleware(['auth', 'web', 'role:Resident', 'sync_paymongo'])->group(function () {
+
+    Route::post('/api/billing/pay', function (\Illuminate\Http\Request $request) {
+        $billId = $request->input('bill_id');
+        $bill = \App\Models\UtilityBill::where('id', 'like', $billId . '%')->where('status', '!=', 'paid')->first();
+        
+        if (!$bill) {
+            return response()->json(['success' => false, 'message' => 'Bill not found or already paid.'], 404);
+        }
+
+        if ($bill->paymongo_checkout_url) {
+            return response()->json(['success' => true, 'checkout_url' => $bill->paymongo_checkout_url]);
+        }
+
+        $lineItems = [];
+        $usageAmount = $bill->amount;
+        if ($usageAmount > 0) {
+            $lineItems[] = [
+                'currency' => 'PHP',
+                'amount' => (int)round($usageAmount * 100),
+                'name' => ucfirst($bill->type) . ' Usage',
+                'quantity' => 1
+            ];
+        }
+
+        if ($bill->previous_balance > 0) {
+            $lineItems[] = [
+                'currency' => 'PHP',
+                'amount' => (int)round($bill->previous_balance * 100),
+                'name' => 'Previous Balance',
+                'quantity' => 1
+            ];
+        }
+        
+        $totalDueBeforePenalty = $bill->amount + $bill->previous_balance;
+        $penalty = ($bill->due_date && \Carbon\Carbon::parse($bill->due_date)->isPast()) ? ($totalDueBeforePenalty * 0.05) : 0;
+        
+        if ($penalty > 0) {
+            $lineItems[] = [
+                'currency' => 'PHP',
+                'amount' => (int)round($penalty * 100),
+                'name' => 'Late Penalty Fee',
+                'quantity' => 1
+            ];
+        }
+
+        if (empty($lineItems)) {
+            return response()->json(['success' => false, 'message' => 'Bill amount is 0.'], 400);
+        }
+
+        $response = \Illuminate\Support\Facades\Http::withHeaders([
+            'accept' => 'application/json',
+            'content-type' => 'application/json',
+            'authorization' => 'Basic ' . base64_encode(env('PAYMONGO_SECRET_KEY') . ':')
+        ])->post('https://api.paymongo.com/v1/checkout_sessions', [
+            'data' => [
+                'attributes' => [
+                    'send_email_receipt' => true,
+                    'show_description' => true,
+                    'show_line_items' => true,
+                    'line_items' => $lineItems,
+                    'payment_method_types' => ['gcash', 'paymaya', 'card', 'grab_pay', 'qrph'],
+                    'success_url' => request()->getSchemeAndHttpHost() . '/resident/' . $bill->type . '?payment=success',
+                    'description' => 'Subdivision ' . ucfirst($bill->type) . ' Bill',
+                    'reference_number' => $bill->id
+                ]
+            ]
+        ]);
+
+        if ($response->successful()) {
+            $data = $response->json();
+            $checkoutUrl = $data['data']['attributes']['checkout_url'];
+            $checkoutId = $data['data']['id'];
+            
+            $bill->update([
+                'paymongo_checkout_id' => $checkoutId,
+                'paymongo_checkout_url' => $checkoutUrl
+            ]);
+
+            return response()->json(['success' => true, 'checkout_url' => $checkoutUrl]);
+        }
+
+        \Illuminate\Support\Facades\Log::error('PayMongo Checkout Error: ' . json_encode($response->json()));
+        return response()->json(['success' => false, 'message' => 'Failed to connect to payment gateway.', 'error' => $response->json()], 500);
     });
+});
+
+Route::post('/api/webhooks/paymongo', function (\Illuminate\Http\Request $request) {
+    \Illuminate\Support\Facades\Log::info('Webhook received', $request->all());
+    
+    $signatureHeader = $request->header('Paymongo-Signature');
+    $secret = env('PAYMONGO_WEBHOOK_SECRET');
+    
+    if (!$signatureHeader || !$secret) {
+        \Illuminate\Support\Facades\Log::error('Webhook missing auth', ['header' => $signatureHeader, 'secret_exists' => !!$secret]);
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+    
+    // Parse signature header
+    $signatureParts = explode(',', $signatureHeader);
+    $t = explode('=', $signatureParts[0])[1] ?? '';
+    $te = explode('=', $signatureParts[1])[1] ?? '';
+    $li = explode('=', $signatureParts[2])[1] ?? '';
+    
+    $payload = $t . '.' . $request->getContent();
+    $signature = hash_hmac('sha256', $payload, $secret);
+    
+    if ($signature !== $te && $signature !== $li) {
+        // Log the failure for debugging, but in a real app block it.
+        // For testing, we might want to bypass strict checking if keys are mismatched during dev, 
+        // but since security is paramount here, we enforce it strictly.
+        \Illuminate\Support\Facades\Log::warning('PayMongo Signature Mismatch', ['header' => $signatureHeader, 'calculated' => $signature]);
+        return response()->json(['error' => 'Invalid signature'], 401);
+    }
+
+    $event = $request->input('data.attributes.type');
+    
+    if ($event === 'checkout_session.payment.paid') {
+        $paymentData = $request->input('data.attributes.data.attributes');
+        $billId = $paymentData['reference_number'] ?? null;
+        
+        $bill = \App\Models\UtilityBill::find($billId);
+        if ($bill && $bill->status !== 'paid') {
+            $payments = $paymentData['payments'] ?? [];
+            $paidPayment = collect($payments)->first(function ($payment) {
+                return ($payment['attributes']['status'] ?? '') === 'paid';
+            });
+            
+            if ($paidPayment || ($paymentData['status'] ?? '') === 'paid') {
+                $sourceType = $paidPayment['attributes']['source']['type'] ?? ($paymentData['source']['type'] ?? '');
+                $method = $sourceType === 'gcash' ? 'GCash' : ($sourceType ? ucfirst($sourceType) : 'PayMongo');
+                $trn = $paidPayment['attributes']['payment_intent_id'] ?? ($paymentData['payment_intent_id'] ?? ('PM-' . strtoupper(\Illuminate\Support\Str::random(8))));
+                $trn .= '-' . substr($bill->id, 0, 8);
+                
+                $amountPaid = isset($paidPayment['attributes']['amount']) ? ($paidPayment['attributes']['amount'] / 100) : (isset($paymentData['amount']) ? ($paymentData['amount'] / 100) : ($bill->amount + $bill->previous_balance));
+                $paidAt = isset($paidPayment['attributes']['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paidPayment['attributes']['paid_at'], config('app.timezone')) : (isset($paymentData['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paymentData['paid_at'], config('app.timezone')) : now());
+                
+                \App\Models\Payment::create([
+                    'id' => (string) \Illuminate\Support\Str::uuid(),
+                    'utility_bill_id' => $bill->id,
+                    'amount_paid' => $amountPaid,
+                    'method' => $method,
+                    'trn' => $trn,
+                    'payment_date' => $paidAt,
+                ]);
+                $bill->update(['status' => 'paid']);
+                \Illuminate\Support\Facades\Log::info('Webhook marked bill ' . $bill->id . ' as paid.');
+            }
+        }
+    }
+    
+    return response()->json(['success' => true]);
 });
 
 // Guard Security Portal Routes
@@ -159,7 +307,8 @@ Route::prefix('guard')->middleware(['auth', 'web', 'role:Security Guard'])->grou
         return view('guard.dashboard');
     });
     Route::get('/history', function () {
-        return view('guard.history');
+        $pins = json_decode(app(\App\Http\Controllers\VisitorController::class)->index()->getContent(), true);
+        return view('guard.history', compact('pins'));
     });
 });
 
@@ -413,18 +562,23 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             $dp->save();
             
             // Record in downpayment_histories
+            $trn = strtoupper(\Illuminate\Support\Str::random(10));
             \Illuminate\Support\Facades\DB::table('downpayment_histories')->insert([
                 'id' => (string) \Illuminate\Support\Str::uuid(),
                 'downpayment_id' => $dp->id,
                 'amount' => $payment_amount,
-                'payment_date' => now(),
-                'trn' => strtoupper(\Illuminate\Support\Str::random(10)),
+                'payment_date' => $request->input('payment_date') ? \Carbon\Carbon::parse($request->input('payment_date')) : now(),
+                'trn' => $trn,
                 'status' => 'Paid',
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
 
-            return response()->json(['success' => true]);
+            return response()->json([
+                'success' => true, 
+                'trn' => $trn,
+                'next_due' => $dp->due_date ? \Carbon\Carbon::parse($dp->due_date)->format('Y-m-d') : null
+            ]);
         }
         return response()->json(['success' => false], 404);
     });
@@ -502,14 +656,16 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     });
     Route::get('/gis', function () { return view('admin.gis.index'); });
     Route::post('/gis/update-occupancy', function (\Illuminate\Http\Request $request) {
-        $lot = \App\Models\Lot::where('block', $request->input('block'))
-                              ->where('lot_number', $request->input('lot'))
-                              ->first();
-        if ($lot) {
-            $lot->update(['status' => $request->input('status')]);
-            return response()->json(['success' => true]);
+        $lot = \App\Models\Lot::firstOrCreate(
+            ['block' => $request->input('block'), 'lot_number' => $request->input('lot')]
+        );
+
+        if ($lot->users()->exists()) {
+            return response()->json(['success' => false, 'message' => 'Lot is occupied by a resident and cannot be changed.'], 403);
         }
-        return response()->json(['success' => false], 404);
+
+        $lot->update(['status' => $request->input('status')]);
+        return response()->json(['success' => true]);
     });
 });
 
@@ -530,7 +686,7 @@ Route::post('/api/settings', function (\Illuminate\Http\Request $request) {
 });
 
 // Resident Portal Routes
-Route::prefix('resident')->middleware(['auth', 'role:Resident'])->group(function () {
+Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo'])->group(function () {
     Route::get('/dashboard', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
         $elecBills = getElectricalBills(request('cycle'));
@@ -715,13 +871,14 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             $houses[] = [
                 'block' => $lot->block,
                 'lot' => $lot->lot_number,
-                'elec_status' => $elec_bill ? ($elec_bill->amount > 0 || $elec_bill->usage_value > 0 || $elec_bill->status == 'paid' ? 'Billed' : 'Pending') : 'Pending',
-                'water_status' => $water_bill ? ($water_bill->amount > 0 || $water_bill->usage_value > 0 || $water_bill->status == 'paid' ? 'Billed' : 'Pending') : 'Pending',
+                'elec_status' => $elec_bill ? ($elec_bill->status == 'paid' ? 'Paid' : ($elec_bill->amount > 0 || $elec_bill->usage_value > 0 ? 'Billed' : 'Pending')) : 'Pending',
+                'water_status' => $water_bill ? ($water_bill->status == 'paid' ? 'Paid' : ($water_bill->amount > 0 || $water_bill->usage_value > 0 ? 'Billed' : 'Pending')) : 'Pending',
                 'prev_elec' => $prev_elec,
                 'curr_elec' => $curr_elec,
                 'prev_water' => $prev_water,
                 'curr_water' => $curr_water,
-                'resident' => $res->name
+                'resident' => $res->name,
+                'provider_managed' => $lot->provider_managed
             ];
         }
 
@@ -815,6 +972,13 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             }
             if ($user) {
                 updateResidentBehavior($user);
+                
+                if (!empty($user->contact_number) && $amount > 0) {
+                    $dueDateStr = \Carbon\Carbon::parse($bill->due_date)->format('M d, Y');
+                    $amtStr = number_format($amount, 2);
+                    $msg = "Althesa Subd: Your {$type} bill for {$dt->format('M Y')} is P{$amtStr}. Due on {$dueDateStr}. Please settle on time to avoid penalties.";
+                    \App\Helpers\SmsHelper::sendSms($user->contact_number, $msg);
+                }
             }
             return response()->json(['success' => true]);
         }
@@ -894,6 +1058,7 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
                     'lot_number' => $validated['lot']
                 ]);
                 $user->lots()->attach($lot->id);
+                $lot->update(['status' => 'Occupied']);
             }
         }
         
@@ -944,6 +1109,8 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
         return response()->json(['success' => false], 404);
     });
 
+    Route::get('/admin/api/billing/export-soa', [App\Http\Controllers\ExportController::class, 'exportSOA'])->name('admin.billing.export-soa');
+
     Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $request) {
         $type = $request->input('type'); // 'electricity' or 'water'
         $rate = $request->input('rate');
@@ -971,8 +1138,11 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
         }
         
         $lots = \App\Models\Lot::has('users')->with('users')->get();
+        $generatedCount = 0;
+        $skippedCasureco = 0;
         foreach ($lots as $lot) {
             if ($type === 'electricity' && $lot->provider_managed) {
+                $skippedCasureco++;
                 continue; // Skip CASURECO disconnected lots for electricity
             }
             
@@ -994,6 +1164,19 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
                 $carriedBalance = max(0, $totalDueAfterPenalty - $totalPaid);
             }
             
+            if ($startDate) {
+                $startDt = \Carbon\Carbon::parse($startDate)->startOfDay();
+                $existingBill = \App\Models\UtilityBill::where('lot_id', $lot->id)
+                    ->where('type', $type)
+                    ->whereYear('created_at', $startDt->year)
+                    ->whereMonth('created_at', $startDt->month)
+                    ->exists();
+                    
+                if ($existingBill) {
+                    continue; // Skip to prevent duplicate cycle for this exact month
+                }
+            }
+
             $bill = \App\Models\UtilityBill::create([
                 'id' => (string) \Illuminate\Support\Str::uuid(),
                 'type' => $type,
@@ -1008,12 +1191,18 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
                 'status' => 'unpaid',
                 'is_at_risk' => false,
             ]);
+            $generatedCount++;
             
             if ($startDate) {
                 $bill->created_at = \Carbon\Carbon::parse($startDate)->startOfDay();
                 $bill->save();
             }
         }
+        
+        if ($generatedCount === 0 && $skippedCasureco > 0) {
+            return response()->json(['success' => false, 'message' => 'No bills generated. All assigned lots are managed by CASURECO.']);
+        }
+
         return response()->json(['success' => true]);
     });
 
@@ -1257,37 +1446,27 @@ Route::post('/api/send-visitor-pin-email', function (Request $request) {
     }
 });
 
-Route::post('/api/send-billing-warning-email', function (Request $request) {
-    $email = $request->input('email', 'eighty6pharmacy@gmail.com');
+Route::post('/api/send-billing-warning-sms', function (\Illuminate\Http\Request $request) {
+    $email = $request->input('email');
     $residentName = $request->input('resident_name', 'Resident');
-    $billId = $request->input('bill_id', 'EB-002');
-    $amount = $request->input('amount', '2,100.00');
+    $billId = $request->input('bill_id', 'Unknown');
+    $amount = $request->input('amount', '0.00');
+
+    $user = \App\Models\User::where('email', $email)->orWhere('name', $residentName)->first();
+
+    if (!$user || empty($user->contact_number)) {
+        return response()->json(['success' => false, 'error' => 'Resident not found or has no contact number.'], 404);
+    }
 
     try {
-        Mail::send([], [], function ($message) use ($email, $residentName, $billId, $amount) {
-            $message->to($email)
-                ->subject('⚡ Urgent Notice: Past Due Utility Bill Warning — Althesa Subdivision')
-                ->html("
-                    <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff;'>
-                        <div style='background: #b91c1c; padding: 20px; border-radius: 12px; text-align: center;'>
-                            <h2 style='color: #ffffff; margin: 0;'>Althesa Billing Office</h2>
-                            <p style='color: #fee2e2; margin: 4px 0 0 0; font-size: 13px;'>Past Due Disconnection Warning</p>
-                        </div>
-                        <div style='padding: 20px 0;'>
-                            <p style='font-size: 16px; color: #0f172a;'>Dear <strong>{$residentName}</strong>,</p>
-                            <p style='color: #475569;'>This is an official notice regarding your past due account statement <strong>{$billId}</strong> in the amount of <strong>₱{$amount}</strong>.</p>
-                            <div style='background: #fee2e2; padding: 16px; border-radius: 12px; border-left: 4px solid #b91c1c; margin: 20px 0;'>
-                                <p style='margin: 0; color: #991b1b; font-weight: 700;'>⚠️ Action Required within 48 Hours</p>
-                                <p style='margin: 6px 0 0 0; color: #7f1d1d; font-size: 13px;'>Please settle your balance at the Subdivision Administration Office or via GCash/Online Banking to prevent service disconnection.</p>
-                            </div>
-                        </div>
-                        <div style='border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 12px; color: #94a3b8; text-align: center;'>
-                            Althesa Subdivision Treasury & Financial Office
-                        </div>
-                    </div>
-                ");
-        });
-        return response()->json(['success' => true, 'message' => 'Billing warning email sent successfully!']);
+        $msg = "⚠️ Urgent: Past Due Warning! Althesa Subd bill {$billId} for P{$amount} is overdue. Pls settle immediately to avoid disconnection.";
+        $sent = \App\Helpers\SmsHelper::sendSms($user->contact_number, $msg);
+        
+        if ($sent) {
+            return response()->json(['success' => true, 'message' => 'Billing warning SMS sent successfully!']);
+        } else {
+            return response()->json(['success' => false, 'error' => 'Failed to send SMS.'], 500);
+        }
     } catch (\Exception $e) {
         return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
     }

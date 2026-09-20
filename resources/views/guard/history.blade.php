@@ -4,6 +4,25 @@
 
 @section('content')
 <link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
+<style>
+    @media print {
+        body { background: #fff !important; }
+        .sidebar, .navbar, .topbar { display: none !important; }
+        .main-content { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+        #dateFilter, #exportPdfBtn, label { display: none !important; }
+        .analytic-card { border: none !important; box-shadow: none !important; padding: 0 !important; }
+        .bill-table th { background: #f8fafc !important; color: #000 !important; -webkit-print-color-adjust: exact; }
+        /* Add a title specifically for print */
+        body::before {
+            content: "Visitor History Log - " attr(data-print-date);
+            display: block;
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+    }
+</style>
 
 <div class="fade-in">
     <div style="margin-bottom: 32px; display: flex; justify-content: space-between; align-items: flex-end;">
@@ -14,9 +33,9 @@
         <div style="display: flex; gap: 12px;">
             <div style="display: flex; flex-direction: column; gap: 4px;">
                 <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Filter by Date</label>
-                <input type="date" class="filter-select" style="padding: 10px 16px; border-radius: 12px; border: 1px solid #e2e8f0; font-size: 13px; font-weight: 600;" value="{{ date('Y-m-d') }}">
+                <input type="date" id="dateFilter" class="filter-select" style="padding: 10px 16px; border-radius: 12px; border: 1px solid #e2e8f0; font-size: 13px; font-weight: 600;" value="{{ date('Y-m-d') }}">
             </div>
-            <button class="btn btn-outline" style="font-size: 13px; padding: 10px 20px; align-self: flex-end;">
+            <button id="exportPdfBtn" class="btn btn-outline" style="font-size: 13px; padding: 10px 20px; align-self: flex-end;">
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                 Export PDF
             </button>
@@ -53,10 +72,10 @@
 
                     @foreach($allVisitors as $v)
                     @if(isset($v['status']) && $v['status'] === 'Entered')
-                    <tr>
+                    <tr class="visitor-row" data-date="{{ $v['date'] ?? date('Y-m-d') }}">
                         <td style="font-size: 13px; font-weight: 700; color: #1e3a8a;">
                             {{ $v['arrival_time'] ?? 'N/A' }}
-                            <div style="font-size: 11px; color: #94a3b8; font-weight: 500;">{{ date('M d, Y') }}</div>
+                            <div style="font-size: 11px; color: #94a3b8; font-weight: 500;">{{ $v['date_formatted'] ?? date('M d, Y') }}</div>
                         </td>
                         <td>
                             <span style="font-size: 11px; font-weight: 800; padding: 4px 8px; border-radius: 6px; background: {{ isset($v['type']) && $v['type'] === 'Walk-in' ? '#eff6ff; color: #2563eb;' : '#f0fdf4; color: #16a34a;' }}">
@@ -72,7 +91,7 @@
                         </td>
                         <td>
                             <div style="font-size: 12px; color: #64748b; font-weight: 500;">
-                                {{ $v['visitor_address'] ?? 'N/A' }}
+                                {{ isset($v['type']) && $v['type'] === 'Walk-in' ? ($v['visitor_address'] ?? 'N/A') : 'N/A' }}
                             </div>
                         </td>
                         <td>
@@ -101,4 +120,32 @@
         </div>
     </div>
 </div>
+@endsection
+
+@section('scripts')
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const dateFilter = document.getElementById('dateFilter');
+        const rows = document.querySelectorAll('.visitor-row');
+
+        function filterRows() {
+            const selectedDate = dateFilter.value;
+            rows.forEach(row => {
+                if (row.getAttribute('data-date') === selectedDate || selectedDate === '') {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        dateFilter.addEventListener('change', filterRows);
+        filterRows(); // initial filter
+
+        document.getElementById('exportPdfBtn').addEventListener('click', function() {
+            document.body.setAttribute('data-print-date', dateFilter.value || new Date().toISOString().split('T')[0]);
+            window.print();
+        });
+    });
+</script>
 @endsection

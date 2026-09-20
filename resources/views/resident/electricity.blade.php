@@ -25,11 +25,12 @@
             <div style="font-size: 13px; color: {{ $elecBill['status'] === 'paid' ? '#10b981' : ($elecBill['status'] === 'no-bill' ? '#64748b' : '#ef4444') }}; font-weight: 600; margin-top: 4px;">
                 {{ $elecBill['status'] === 'paid' ? '✓ Paid on '.$elecBill['paid_date'] : ($elecBill['status'] === 'no-bill' ? 'ℹ No Pending Bill' : '⚠ Due: '.$elecBill['due']) }}
             </div>
-            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Consumption: <strong>{{ $elecBill['usage'] }}</strong></div>
+            
+            <div style="font-size: 12px; color: #64748b; margin-top: 8px;">Consumption: <strong>{{ $elecBill['usage'] }}</strong></div>
         </div>
         <div style="display: flex; flex-direction: column; gap: 12px; align-items: flex-end;">
             @if($elecBill['status'] === 'unpaid' || $elecBill['status'] === 'overdue')
-                <button class="btn btn-primary" style="padding: 14px 28px; font-weight: 700; background: #0057B8; cursor: default;">📱 Pay via GCash</button>
+                <button onclick="payBill('{{ $elecBill['db_id'] }}')" id="payBtn" class="btn btn-primary" style="padding: 14px 28px; font-weight: 700; background: #0057B8; cursor: pointer;">📱 Pay via GCash</button>
             @elseif($elecBill['status'] === 'paid')
                 <div style="background: #f0fdf4; padding: 12px 24px; border-radius: 12px; border: 1px solid #bbf7d0; text-align: center;">
                     <div style="font-size: 11px; color: #065f46; font-weight: 700;">BILL SETTLED</div>
@@ -61,35 +62,43 @@
                 @endif
             </div>
         @else
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;">
-            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                <span style="font-size: 12px; color: #64748b; font-weight: 600;">Previous Reading</span>
-                <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $elecBill['prev_reading'] }}</div>
+        <div style="display: flex; flex-wrap: nowrap; gap: 10px; overflow-x: auto; padding-bottom: 8px;">
+            <div style="flex: 1; min-width: 115px; background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Previous Reading</div>
+                <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $elecBill['prev_reading'] }}</div>
+                <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">{{ $elecBill['prev_reading_date'] }}</div>
             </div>
-            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                <span style="font-size: 12px; color: #64748b; font-weight: 600;">Current Reading</span>
-                <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $elecBill['curr_reading'] }}</div>
+            <div style="flex: 1; min-width: 115px; background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Current Reading</div>
+                <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $elecBill['curr_reading'] }}</div>
+                <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">{{ $elecBill['curr_reading_date'] }}</div>
             </div>
-            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                <span style="font-size: 12px; color: #64748b; font-weight: 600;">Base Rate</span>
-                <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($elecBill['rate'], 2) }}</div>
+            <div style="flex: 1; min-width: 115px; background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Base Rate</div>
+                <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($elecBill['rate'], 2) }}</div>
             </div>
-            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                <span style="font-size: 12px; color: #64748b; font-weight: 600;">Consumption</span>
-                <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $elecBill['usage'] }}</div>
+            <div style="flex: 1; min-width: 115px; background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Consumption</div>
+                <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $elecBill['usage'] }}</div>
             </div>
-            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                <span style="font-size: 12px; color: #64748b; font-weight: 600;">Current Charges</span>
-                <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($elecBill['base_amount'], 2) }}</div>
+            <div style="flex: 1; min-width: 130px; background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Amt Before Due</div>
+                @php $baseTotal = $elecBill['base_amount'] + $elecBill['previous_balance']; @endphp
+                <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($baseTotal, 2) }}</div>
             </div>
-            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                <span style="font-size: 12px; color: #64748b; font-weight: 600;">Previous Balance</span>
-                <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($elecBill['previous_balance'], 2) }}</div>
+            <div style="flex: 1; min-width: 130px; background: #fef2f2; padding: 12px 10px; border-radius: 10px; border: 1px solid #fecaca;">
+                <div style="font-size: 10px; color: #991b1b; font-weight: 700; text-transform: uppercase;">Amt After Due</div>
+                @php $afterAmt = $baseTotal + ($baseTotal * 0.05); @endphp
+                <div style="font-size: 16px; font-weight: 800; color: #ef4444; margin-top: 4px;">₱{{ number_format($afterAmt, 2) }}</div>
             </div>
-            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                <span style="font-size: 12px; color: #64748b; font-weight: 600;">Penalty (5%)</span>
-                @php $penalty = $elecBill['at_risk'] ? ($elecBill['base_amount'] + $elecBill['previous_balance']) * 0.05 : 0; @endphp
-                <div style="font-size: 20px; font-weight: 800; color: #f59e0b; margin-top: 4px;">₱{{ number_format($penalty, 2) }}</div>
+            <div style="flex: 1; min-width: 115px; background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Prev Balance</div>
+                <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($elecBill['previous_balance'], 2) }}</div>
+            </div>
+            <div style="flex: 1; min-width: 115px; background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Penalty (5%)</div>
+                @php $penalty = ($elecBill['base_amount'] + $elecBill['previous_balance']) * 0.05; @endphp
+                <div style="font-size: 16px; font-weight: 800; color: #f59e0b; margin-top: 4px;">₱{{ number_format($penalty, 2) }}</div>
             </div>
         </div>
     </div>
@@ -126,11 +135,13 @@
         </div>
         <div class="bill-table-container">
             <table class="bill-table">
-                <thead><tr><th>Reference</th><th>Period</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+                <thead><tr><th>Reference</th><th>Method</th><th>Date & Time</th><th>Period</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
                 <tbody>
                     @foreach($elecBill['payment_history'] as $h)
                     <tr>
                         <td style="font-family: monospace; font-size: 11px;">{{ $h['trn'] }}</td>
+                        <td style="font-size: 13px; color: #475569;">{{ $h['method'] ?? 'N/A' }}</td>
+                        <td style="font-size: 13px; color: #475569;">{{ $h['date'] }}</td>
                         <td>{{ $h['month'] }}</td>
                         <td style="font-weight: 700;">₱{{ number_format($h['amount'], 2) }}</td>
                         <td><span class="badge {{ $h['status'] === 'Paid' ? 'badge-success' : 'badge-danger' }}">{{ $h['status'] }}</span></td>
@@ -150,11 +161,34 @@
     @endif
 </div>
 
-@include('partials.gcash-modal')
-
 <script>
-    function onGcashPaymentComplete(ctx) {
-        location.reload();
+    async function payBill(billId) {
+        const btn = document.getElementById('payBtn');
+        btn.disabled = true;
+        btn.innerHTML = 'Securely connecting...';
+
+        try {
+            const res = await fetch('/resident/api/billing/pay', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ bill_id: billId })
+            });
+            const data = await res.json();
+            
+            if (data.success && data.checkout_url) {
+                window.location.href = data.checkout_url;
+            } else {
+                throw new Error(data.message || 'Failed to connect to PayMongo.');
+            }
+        } catch(e) {
+            console.error(e);
+            alert('⚠️ Unable to initiate secure payment. ' + e.message);
+            btn.disabled = false;
+            btn.innerHTML = '📱 Pay via GCash';
+        }
     }
 
     let elecChart = null;
