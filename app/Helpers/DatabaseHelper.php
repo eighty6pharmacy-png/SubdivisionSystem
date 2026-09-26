@@ -16,14 +16,20 @@ if (!function_exists('getIncidents')) {
                             $resName = $inc->user->name;
                         }
                     }
+                    $photosArray = [];
+                    if ($inc->image_url) {
+                        $decoded = json_decode($inc->image_url, true);
+                        $photosArray = is_array($decoded) ? $decoded : [$inc->image_url];
+                    }
+
                     return [
                         'id' => substr($inc->id, 0, 8),
                         'sub' => $inc->subject,
                         'type' => $inc->type,
                         'res' => $resName,
                         'desc' => $inc->description,
-                        'img' => $inc->image_url,
-                        'photos' => $inc->image_url ? [$inc->image_url] : [],
+                        'img' => count($photosArray) > 0 ? $photosArray[0] : null,
+                        'photos' => $photosArray,
                         'status' => $inc->status,
                         'date' => $inc->created_at ? $inc->created_at->toIso8601String() : now()->toIso8601String(),
                     ];

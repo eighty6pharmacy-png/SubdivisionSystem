@@ -16,8 +16,10 @@ class Reservation extends Model
     protected $fillable = [
         'user_id',
         'lot_id',
+        'buyer_master_list_id',
         'status',
         'reservation_date',
+        'deadline_date',
         'amount',
         'notes',
         'first_name',
@@ -44,5 +46,10 @@ class Reservation extends Model
     public function downpayments(): HasMany
     {
         return $this->hasMany(Downpayment::class);
+    }
+
+    public function buyerMasterList(): BelongsTo
+    {
+        return $this->belongsTo(BuyerMasterList::class);
     }
 }

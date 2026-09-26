@@ -36,7 +36,7 @@
 
                 <div id="legendOccupancy">
                     <div class="legend-item">
-                        <div class="legend-box" style="background: #fff; border-color: #000; color: #000;">Lot</div>
+                        <div class="legend-box" style="background: #22c55e; border-color: #16a34a; color: #fff;">Lot</div>
                         <span>Occupied</span>
                     </div>
                     <div class="legend-item">
@@ -250,7 +250,6 @@
             <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">New Status</label>
                 <select id="occUpdateStatus" class="filter-select" style="width: 100%; padding: 12px;">
-                    <option value="Available">Available</option>
                     <option value="Occupied">Occupied</option>
                     <option value="Vacant House">Vacant House</option>
                     <option value="Vacant Lot">Vacant Lot</option>
@@ -286,7 +285,7 @@
             let color = '#94a3b8';
 
             if (currentLayer === 'occupancy') {
-                if (dbLot.status === 'Occupied') { fillColor = '#ffffff'; color = '#000000'; }
+                if (!dbLot.isNotConnected || dbLot.status === 'Occupied') { fillColor = '#22c55e'; color = '#16a34a'; }
                 else if (dbLot.status === 'Vacant House') { fillColor = '#3b82f6'; color = '#2563eb'; }
                 else if (dbLot.status === 'Vacant Lot') { fillColor = '#f59e0b'; color = '#d97706'; }
                 else if (dbLot.status === 'Reserved') { fillColor = '#8b5cf6'; color = '#7c3aed'; }

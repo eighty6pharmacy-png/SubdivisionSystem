@@ -9,7 +9,9 @@ class GisController extends Controller
 {
     public function getLotsData()
     {
-        $lots = Lot::with(['users', 'utilityBills'])->get();
+        $lots = Lot::with(['users' => function($q) {
+            $q->where('status', '!=', 'Archived');
+        }, 'utilityBills'])->get();
         
         $lotData = [];
         foreach ($lots as $lot) {

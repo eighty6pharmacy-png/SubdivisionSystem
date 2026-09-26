@@ -110,10 +110,11 @@
                         <td>
                             <div style="display: flex; gap: 8px;">
                                 <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openViewModal('{{ $user['id'] }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ addslashes($user['contact_number'] ?? 'N/A') }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}', '{{ date('M d, Y', strtotime($user['joined'])) }}', '{{ $user['status'] }}')">View</button>
-                                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openEditModal('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ $user['contact_number'] ?? '' }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}')">Edit</button>
                                 @if($user['status'] === 'Active')
+                                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openEditModal('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ $user['contact_number'] ?? '' }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}')">Edit</button>
                                     <button class="btn btn-outline archive-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="archiveUser('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', this)">Archive</button>
                                 @else
+                                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; opacity: 0.5; cursor: not-allowed;" disabled>Edit</button>
                                     <button class="btn btn-outline restore-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #10b981; border-color: #a7f3d0;" onclick="restoreUser('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', this)">Restore</button>
                                 @endif
                             </div>
@@ -603,27 +604,20 @@
     }
 
     async function archiveUser(id, dbid, btnElement) {
-        if (confirm(`Are you sure you want to permanently delete user ${id}? This action cannot be undone.`)) {
+        if (confirm(`Are you sure you want to archive user ${id}? They will no longer be able to log in.`)) {
             try {
-                const res = await fetch(`/admin/users/${dbid}`, {
-                    method: 'DELETE',
+                const res = await fetch(`/admin/users/${dbid}/archive`, {
+                    method: 'PUT',
                     headers: {
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                     }
                 });
                 const data = await res.json();
                 if(data.success) {
-                    const rows = document.querySelectorAll('.user-row');
-                    rows.forEach(row => {
-                        if (row.dataset.dbid === dbid.toString()) {
-                            row.remove();
-                        }
-                    });
-                    const statTotal = document.getElementById('statTotal');
-                    if (statTotal) statTotal.innerText = Math.max(0, parseInt(statTotal.innerText) - 1);
-                    alert('User deleted permanently.');
+                    alert('User archived successfully.');
+                    window.location.reload();
                 } else {
-                    alert('Failed to delete user.');
+                    alert('Failed to archive user.');
                 }
             } catch(e) {
                 console.error(e);
@@ -632,8 +626,27 @@
         }
     }
 
-    function restoreUser(id, dbid, btnElement) {
-        alert('Restore functionality is not connected to PostgreSQL delete as we used a hard delete. Create a new user instead.');
+    async function restoreUser(id, dbid, btnElement) {
+        if (confirm(`Are you sure you want to restore user ${id}?`)) {
+            try {
+                const res = await fetch(`/admin/users/${dbid}/restore`, {
+                    method: 'PUT',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    }
+                });
+                const data = await res.json();
+                if(data.success) {
+                    alert('User restored successfully.');
+                    window.location.reload();
+                } else {
+                    alert('Failed to restore user.');
+                }
+            } catch(e) {
+                console.error(e);
+                alert('An error occurred.');
+            }
+        }
     }
 </script>
 

@@ -35,8 +35,18 @@ Route::post('/login', function (\Illuminate\Http\Request $request) {
     ]);
 
     if (\Illuminate\Support\Facades\Auth::attempt($credentials)) {
-        $request->session()->regenerate();
         $user = \Illuminate\Support\Facades\Auth::user();
+        if ($user->status === 'Archived') {
+            \Illuminate\Support\Facades\Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+            return response()->json([
+                'success' => false,
+                'message' => 'Your account has been archived. Please contact administration.',
+            ], 403);
+        }
+
+        $request->session()->regenerate();
         
         $target = '/resident/dashboard';
         if ($user->hasRole('Admin')) {
@@ -441,9 +451,16 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         return view('admin.dashboard', compact('openIncidentsCount'));
     });
 
+    // Master List System
+    Route::resource('buyer-master-list', \App\Http\Controllers\Admin\BuyerMasterListController::class);
+    Route::get('/buyer-master-list/{id}/export-msvs', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'exportMsvs'])->name('admin.buyer.export.msvs');
+    Route::get('/buyer-master-list/{id}/export-bvs', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'exportBvs'])->name('admin.buyer.export.bvs');
+    Route::get('/buyer-master-list/{id}/export-housing-loan', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'exportHousingLoan'])->name('admin.buyer.export.housing_loan');
+    Route::get('/buyer-master-list/{id}/export-buyer-conformity', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'exportBuyerConformity'])->name('admin.buyer.export.buyer_conformity');
+
     // User Management System
     Route::get('/users', function () { 
-        $users = \App\Models\User::with(['lots', 'roles'])->get()->map(function(/** @var \App\Models\User */ $u) {
+        $users = \App\Models\User::with(['lots', 'roles'])->get()->map(function(\App\Models\User $u) {
             $role = $u->roles->first()->name ?? 'Resident';
             $lot = $u->lots->first();
             return [
@@ -452,7 +469,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                 'name' => $u->name,
                 'email' => $u->email,
                 'role' => $role,
-                'status' => 'Active', // Mocking status as DB doesn't have it
+                'status' => $u->status ?? 'Active',
                 'joined' => $u->created_at->format('Y-m-d'),
                 'contact_number' => $u->contact_number,
                 'block' => $lot ? $lot->block : '',
@@ -498,8 +515,10 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         );
         $res = \App\Models\Reservation::create([
             'lot_id' => $lot->id,
+            'buyer_master_list_id' => $request->input('buyer_master_list_id'),
             'status' => 'Reserved',
             'reservation_date' => now(),
+            'deadline_date' => $request->input('deadline_date') ? \Carbon\Carbon::parse($request->input('deadline_date')) : null,
             'amount' => $request->input('amount') ?? 20000,
             'notes' => ($request->input('name') ?? 'New Buyer') . ' | ' . ($request->input('contact') ?? 'N/A')
         ]);
@@ -525,6 +544,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         );
         $res = \App\Models\Reservation::create([
             'lot_id' => $lot->id,
+            'buyer_master_list_id' => $request->input('buyer_master_list_id'),
             'status' => 'Pending',
             'reservation_date' => now(),
             'amount' => 0,
@@ -542,6 +562,17 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'months_to_pay' => $request->input('months_to_pay') ?? 24,
             'contract_date' => $request->input('contract_date') ? \Carbon\Carbon::parse($request->input('contract_date')) : now()
         ]);
+
+        // "Client First" Workflow: Sync back the newly established contract details to the Masterlist
+        $buyer = \App\Models\BuyerMasterList::find($request->input('buyer_master_list_id'));
+        if ($buyer) {
+            $buyer->block_no = $request->input('block');
+            $buyer->lot_no = $request->input('lot');
+            $buyer->contract_amount = $request->input('contract_amount');
+            $buyer->equity = $request->input('dpAmount');
+            $buyer->save();
+        }
+
         return response()->json(['success' => true, 'id' => substr($dp->id, 0, 8)]);
     });
 
@@ -594,7 +625,8 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         ];
         return view('admin.reservation-fee.index', [
             'bills' => getReservationFees(),
-            'stats' => $yearly_stats
+            'stats' => $yearly_stats,
+            'masterListBuyers' => \App\Models\BuyerMasterList::orderBy('last_name')->get()
         ]);
     });
 
@@ -609,7 +641,8 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         ];
         return view('admin.downpayment-fee.index', [
             'bills' => getDownpaymentFees(),
-            'stats' => $yearly_stats
+            'stats' => $yearly_stats,
+            'masterListBuyers' => \App\Models\BuyerMasterList::orderBy('last_name')->get()
         ]);
     });
     Route::get('/appointments', function () { 
@@ -782,12 +815,33 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
         return view('resident.incidents', ['incidents' => $reports]);
     });
     Route::post('/incidents', function (\Illuminate\Http\Request $request) {
+        $photos = $request->input('photos');
+        $imageUrls = [];
+        
+        if (is_array($photos) && count($photos) > 0) {
+            foreach ($photos as $photo) {
+                if (preg_match('/^data:image\/(\w+);base64,/', $photo, $type)) {
+                    $photoData = substr($photo, strpos($photo, ',') + 1);
+                    $type = strtolower($type[1]);
+                    if (in_array($type, ['jpg', 'jpeg', 'gif', 'png'])) {
+                        $photoDecoded = base64_decode($photoData);
+                        if ($photoDecoded !== false) {
+                            $filename = 'incidents/' . \Illuminate\Support\Str::random(10) . '.' . $type;
+                            \Illuminate\Support\Facades\Storage::disk('public')->put($filename, $photoDecoded);
+                            $imageUrls[] = '/storage/' . $filename;
+                        }
+                    }
+                }
+            }
+        }
+
         \App\Models\Incident::create([
             'subject' => $request->input('subject'),
             'type' => $request->input('type'),
             'description' => $request->input('description'),
             'status' => 'pending',
             'user_id' => \Illuminate\Support\Facades\Auth::id(),
+            'image_url' => count($imageUrls) > 0 ? json_encode($imageUrls) : null,
         ]);
         return response()->json(['success' => true]);
     });
@@ -1082,6 +1136,9 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
     Route::put('/admin/users/{id}', function (\Illuminate\Http\Request $request, $id) {
         $user = \App\Models\User::find($id);
         if ($user) {
+            if ($user->status === 'Archived') {
+                return response()->json(['success' => false, 'message' => 'Archived users cannot be edited.'], 403);
+            }
             $user->name = $request->input('name', $user->name);
             $user->email = $request->input('email', $user->email);
             if ($request->has('contact_number')) {
@@ -1277,14 +1334,25 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
         return response()->json(['success' => false], 404);
     });
 
-    Route::delete('/admin/users/{id}', function ($id) {
+    Route::put('/admin/users/{id}/archive', function ($id) {
         $user = \App\Models\User::find($id);
         if ($user) {
             foreach($user->lots as $lot) {
-                $lot->update(['status' => 'Available']);
+                $lot->update(['status' => 'Vacant House']);
             }
-            $user->lots()->detach();
-            $user->delete();
+            $user->update(['status' => 'Archived']);
+            return response()->json(['success' => true]);
+        }
+        return response()->json(['success' => false], 404);
+    });
+
+    Route::put('/admin/users/{id}/restore', function ($id) {
+        $user = \App\Models\User::find($id);
+        if ($user) {
+            foreach($user->lots as $lot) {
+                $lot->update(['status' => 'Occupied']);
+            }
+            $user->update(['status' => 'Active']);
             return response()->json(['success' => true]);
         }
         return response()->json(['success' => false], 404);

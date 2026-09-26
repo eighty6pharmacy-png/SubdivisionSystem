@@ -15,6 +15,16 @@ class PreventBackHistory
      */
     public function handle(Request $request, Closure $next): Response
     {
+        if (\Illuminate\Support\Facades\Auth::check() && \Illuminate\Support\Facades\Auth::user()->status === 'Archived') {
+            \Illuminate\Support\Facades\Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => 'Your account has been archived.'], 403);
+            }
+            return redirect('/login');
+        }
+
         $response = $next($request);
 
         if (property_exists($response, 'headers')) {
