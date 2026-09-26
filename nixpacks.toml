@@ -3,8 +3,5 @@ nixPkgs = ["...", "php82", "php82Extensions.gd", "php82Extensions.zip", "php82Ex
 
 [phases.build]
 cmds = [
-    "composer install --optimize-autoloader --no-scripts --no-interaction --ignore-platform-req=ext-gd --ignore-platform-req=ext-zip",
-    "php artisan config:cache",
-    "php artisan route:cache",
-    "php artisan view:cache"
+    "composer install --optimize-autoloader --no-scripts --no-interaction --ignore-platform-req=ext-gd --ignore-platform-req=ext-zip"
 ]
