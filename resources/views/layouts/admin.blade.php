@@ -65,6 +65,11 @@
                     <span class="nav-icon">🏡</span>
                     <span>Downpayment Fee</span>
                 </a>
+                <a href="/admin/financing"
+                    class="nav-item {{ request()->is('admin/financing*') ? 'active' : '' }}">
+                    <span class="nav-icon">🏦</span>
+                    <span>Financing & Loans</span>
+                </a>
                 <div class="nav-section-label">Property Management</div>
                 <a href="/admin/gis" class="nav-item {{ request()->is('admin/gis*') ? 'active' : '' }}">
                     <span class="nav-icon">🗺️</span>
@@ -239,6 +244,21 @@
             </div>
         </div>
     </div>
+    
+    <!-- Global Loader -->
+    <div id="global-loader" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 4px; background: rgba(59, 130, 246, 0.2); z-index: 999999;">
+        <div style="height: 100%; background: #3b82f6; width: 30%; animation: loading-bar 1.5s infinite ease-in-out;"></div>
+    </div>
+    <style>
+        @keyframes loading-bar {
+            0% { transform: translateX(-100%); width: 30%; }
+            50% { width: 50%; }
+            100% { transform: translateX(350%); width: 30%; }
+        }
+        .loading-cursor { cursor: wait !important; }
+        .fade-out-page { opacity: 0.5; pointer-events: none; transition: opacity 0.2s ease; }
+    </style>
+    
     <script>
         function openLogoutModal() {
             const modal = document.getElementById('logoutConfirmModal');
@@ -250,6 +270,22 @@
             modal.firstElementChild.style.transform = 'scale(0.95)';
             setTimeout(() => { modal.style.display = 'none'; }, 200);
         }
+
+        // Add page transition effects
+        document.addEventListener('DOMContentLoaded', () => {
+            const links = document.querySelectorAll('a.nav-item');
+            links.forEach(link => {
+                if(!link.getAttribute('onclick') && link.getAttribute('href') !== '#') {
+                    link.addEventListener('click', function(e) {
+                        if (e.ctrlKey || e.metaKey || e.shiftKey) return; 
+                        document.getElementById('global-loader').style.display = 'block';
+                        const pageContent = document.querySelector('.page-content');
+                        if (pageContent) pageContent.classList.add('fade-out-page');
+                        document.body.classList.add('loading-cursor');
+                    });
+                }
+            });
+        });
     </script>
 </body>
 

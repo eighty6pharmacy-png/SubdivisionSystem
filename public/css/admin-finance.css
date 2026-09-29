@@ -688,3 +688,10 @@ input:checked + .switch-inner::after {
     opacity: 1;
     bottom: calc(100% + 4px);
 }
+
+
+@media (max-width: 1024px) {
+    .bill-table th, .bill-table td {
+        white-space: nowrap;
+    }
+}

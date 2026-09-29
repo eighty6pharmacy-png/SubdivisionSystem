@@ -29,7 +29,7 @@
     
     <div class="filter-group" style="margin:0;">
         <div class="filter-label">Billing Cycle</div>
-        <select id="cycleFilter" onchange="window.location.href='?cycle='+this.value" style="padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; color: var(--text-dark); background: var(--surface);">
+        <select id="cycleFilter" onchange="fetchCycle(this.value)" style="padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; color: var(--text-dark); background: var(--surface);">
             @if(empty($validCycles))
                 <option value="" disabled selected>No Records</option>
             @else
@@ -166,6 +166,33 @@
     document.addEventListener('DOMContentLoaded', () => {
         applyFiltersAndSort();
     });
+
+    function fetchCycle(cycle) {
+        document.getElementById('houseGrid').style.opacity = '0.5';
+        fetch('?cycle=' + cycle)
+            .then(res => res.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                // Update URL silently
+                window.history.pushState({}, '', '?cycle=' + cycle);
+                
+                // Replace grid
+                document.getElementById('houseGrid').innerHTML = doc.getElementById('houseGrid').innerHTML;
+                document.getElementById('houseGrid').style.opacity = '1';
+                
+                // Refresh block filter options based on new data if needed
+                document.getElementById('blockFilter').innerHTML = doc.getElementById('blockFilter').innerHTML;
+                
+                // Re-apply UI state
+                switchUtility(activeUtility);
+            })
+            .catch(err => {
+                console.error(err);
+                document.getElementById('houseGrid').style.opacity = '1';
+            });
+    }
 
     function switchUtility(utility) {
         activeUtility = utility;

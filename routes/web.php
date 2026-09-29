@@ -16,6 +16,8 @@ Route::get('/home', function () {
         return redirect('/guard/dashboard');
     if ($user->hasRole('Finance Officer'))
         return redirect('/finance/dashboard');
+    if ($user->hasRole('Buyer'))
+        return redirect('/buyer/dashboard');
     return redirect('/resident/dashboard');
 });
 
@@ -59,6 +61,8 @@ Route::post('/login', function (\Illuminate\Http\Request $request) {
             $target = '/guard/dashboard';
         } else if ($user->hasRole('Finance Officer')) {
             $target = '/finance/dashboard';
+        } else if ($user->hasRole('Buyer')) {
+            $target = '/buyer/dashboard';
         }
 
         return response()->json(['success' => true, 'redirect' => $target]);
@@ -282,7 +286,51 @@ Route::post('/api/webhooks/paymongo', function (\Illuminate\Http\Request $reques
         $paymentData = $request->input('data.attributes.data.attributes');
         $billId = $paymentData['reference_number'] ?? null;
 
-        $bill = \App\Models\UtilityBill::find($billId);
+        if (str_starts_with($billId, 'DP-')) {
+            $dpId = substr($billId, 3);
+            $dp = \App\Models\Downpayment::find($dpId);
+            if ($dp) {
+                $amountPaid = isset($paymentData['payments'][0]['attributes']['amount']) ? ($paymentData['payments'][0]['attributes']['amount'] / 100) : (isset($paymentData['amount']) ? ($paymentData['amount'] / 100) : $dp->monthly_amortization);
+                
+                $dp->amount += $amountPaid;
+                $dp->balance -= $amountPaid;
+                if ($dp->balance <= 0) {
+                    $dp->status = 'Fully Paid';
+                    $dp->balance = 0;
+                } else {
+                    $dp->status = 'Good Standing';
+                }
+                $dp->due_date = \Carbon\Carbon::parse($dp->due_date)->addMonth();
+                $dp->save();
+
+                $trn = 'PM-' . strtoupper(\Illuminate\Support\Str::random(8)) . '-' . substr($dp->id, 0, 8);
+                \Illuminate\Support\Facades\DB::table('downpayment_histories')->insert([
+                    'id' => (string) \Illuminate\Support\Str::uuid(),
+                    'downpayment_id' => $dp->id,
+                    'amount' => $amountPaid,
+                    'payment_date' => now(),
+                    'trn' => $trn,
+                    'status' => 'Paid',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+                \Illuminate\Support\Facades\Log::info('Webhook marked DP ' . $dp->id . ' as paid.');
+            }
+        } elseif (str_starts_with($billId, 'FIN-')) {
+            $finId = substr($billId, 4);
+            $fin = \App\Models\FinancingRecord::find($finId);
+            if ($fin) {
+                $amountPaid = isset($paymentData['payments'][0]['attributes']['amount']) ? ($paymentData['payments'][0]['attributes']['amount'] / 100) : (isset($paymentData['amount']) ? ($paymentData['amount'] / 100) : $fin->balance);
+                $fin->amount_paid += $amountPaid;
+                $fin->balance = max(0, $fin->receivables - $fin->amount_paid);
+                if ($fin->balance <= 0 && $fin->status == 'Released') {
+                    $fin->status = 'Cleared';
+                }
+                $fin->save();
+                \Illuminate\Support\Facades\Log::info('Webhook marked FIN ' . $fin->id . ' as paid.');
+            }
+        } else {
+            $bill = \App\Models\UtilityBill::find($billId);
         if ($bill && $bill->status !== 'paid') {
             $payments = $paymentData['payments'] ?? [];
             $paidPayment = collect($payments)->first(function ($payment) {
@@ -310,6 +358,7 @@ Route::post('/api/webhooks/paymongo', function (\Illuminate\Http\Request $reques
                 \Illuminate\Support\Facades\Log::info('Webhook marked bill ' . $bill->id . ' as paid.');
             }
         }
+        } // Closing the else block added for UtilityBill
     }
 
     return response()->json(['success' => true]);
@@ -448,15 +497,139 @@ Route::get('/api/lots', [\App\Http\Controllers\GisController::class, 'getLotsDat
 // Admin Routes
 Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     Route::get('/dashboard', function () {
+        // 1. Open Incidents
         $openIncidentsCount = 0;
         if (\Illuminate\Support\Facades\Schema::hasTable('incidents')) {
             $openIncidentsCount = \App\Models\Incident::whereIn('status', ['pending', 'progress'])->count();
         }
-        return view('admin.dashboard', compact('openIncidentsCount'));
+
+        // 2. Appointments Today
+        $appointmentsTodayCount = 0;
+        if (\Illuminate\Support\Facades\Schema::hasTable('appointments')) {
+            $appointmentsTodayCount = \Illuminate\Support\Facades\DB::table('appointments')
+                ->whereDate('date', \Carbon\Carbon::today())
+                ->count();
+        }
+
+        // 3. Total Residents
+        $totalResidentsCount = 0;
+        if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
+            $totalResidentsCount = \App\Models\User::role('Resident')->count();
+        }
+
+        // 4. Revenue This Month
+        $currentMonth = \Carbon\Carbon::now()->month;
+        $currentYear = \Carbon\Carbon::now()->year;
+        
+        $utilityRevenue = \Illuminate\Support\Facades\DB::table('payments')
+            ->whereMonth('created_at', $currentMonth)
+            ->whereYear('created_at', $currentYear)
+            ->sum('amount_paid');
+            
+        $dpRevenue = \Illuminate\Support\Facades\DB::table('downpayment_histories')
+            ->whereMonth('created_at', $currentMonth)
+            ->whereYear('created_at', $currentYear)
+            ->sum('amount');
+            
+        $finRevenue = \Illuminate\Support\Facades\DB::table('financing_payment_histories')
+            ->whereMonth('created_at', $currentMonth)
+            ->whereYear('created_at', $currentYear)
+            ->sum('amount_paid');
+
+        $monthlyRevenue = $utilityRevenue + $dpRevenue + $finRevenue;
+
+        // 5. Monthly Sales Chart Data (Last 12 Months)
+        $monthlySalesData = [];
+        $monthlySalesLabels = [];
+        for ($i = 11; $i >= 0; $i--) {
+            $monthDate = \Carbon\Carbon::now()->subMonths($i);
+            $m = $monthDate->month;
+            $y = $monthDate->year;
+            $monthlySalesLabels[] = $monthDate->format('M');
+            
+            $uRev = \Illuminate\Support\Facades\DB::table('payments')->whereMonth('created_at', $m)->whereYear('created_at', $y)->sum('amount_paid');
+            $dRev = \Illuminate\Support\Facades\DB::table('downpayment_histories')->whereMonth('created_at', $m)->whereYear('created_at', $y)->sum('amount');
+            $fRev = \Illuminate\Support\Facades\DB::table('financing_payment_histories')->whereMonth('created_at', $m)->whereYear('created_at', $y)->sum('amount_paid');
+            
+            $monthlySalesData[] = $uRev + $dRev + $fRev;
+        }
+
+        // 6. Payment Status (Utility Bills)
+        $billsPaid = \Illuminate\Support\Facades\DB::table('utility_bills')->where('status', 'paid')->count();
+        $billsPending = \Illuminate\Support\Facades\DB::table('utility_bills')->where('status', 'pending')->count();
+        $billsOverdue = \Illuminate\Support\Facades\DB::table('utility_bills')->where('status', 'overdue')->count();
+        $totalBills = $billsPaid + $billsPending + $billsOverdue;
+        $collectionPercent = $totalBills > 0 ? round(($billsPaid / $totalBills) * 100) : 0;
+
+        // 7. Notifications
+        $notifications = collect();
+        if (\Illuminate\Support\Facades\Schema::hasTable('incidents')) {
+             $incidents = \App\Models\Incident::orderByDesc('created_at')->take(3)->get()->map(function($i) {
+                  return [
+                      'type' => 'incident',
+                      'title' => 'New Incident Submitted',
+                      'desc' => $i->title . ' - ' . \Illuminate\Support\Str::limit($i->description, 30),
+                      'timestamp' => $i->created_at,
+                      'time' => $i->created_at->diffForHumans(),
+                      'color' => 'var(--danger)',
+                  ];
+             });
+             $notifications = $notifications->merge($incidents);
+        }
+        if (\Illuminate\Support\Facades\Schema::hasTable('appointments')) {
+             $appointments = \Illuminate\Support\Facades\DB::table('appointments')->orderByDesc('created_at')->take(3)->get()->map(function($a) {
+                  return [
+                      'type' => 'appointment',
+                      'title' => 'New Appointment Booked',
+                      'desc' => \Illuminate\Support\Str::limit($a->type ?? 'No purpose specified', 30),
+                      'timestamp' => \Carbon\Carbon::parse($a->created_at),
+                      'time' => \Carbon\Carbon::parse($a->created_at)->diffForHumans(),
+                      'color' => 'var(--accent)',
+                  ];
+             });
+             $notifications = $notifications->merge($appointments);
+        }
+        if (\Illuminate\Support\Facades\Schema::hasTable('visitors')) {
+             $visitors = \Illuminate\Support\Facades\DB::table('visitors')->orderByDesc('created_at')->take(3)->get()->map(function($v) {
+                  return [
+                      'type' => 'visitor',
+                      'title' => 'New Visitor Request',
+                      'desc' => \Illuminate\Support\Str::limit($v->purpose ?? 'No purpose specified', 30),
+                      'timestamp' => \Carbon\Carbon::parse($v->created_at),
+                      'time' => \Carbon\Carbon::parse($v->created_at)->diffForHumans(),
+                      'color' => 'var(--success)',
+                  ];
+             });
+             $notifications = $notifications->merge($visitors);
+        }
+        $notifications = $notifications->sortByDesc('timestamp')->take(5);
+
+        // 8. Today's Appointments List
+        $todaysAppointmentsList = \Illuminate\Support\Facades\DB::table('appointments')
+            ->whereDate('date', \Carbon\Carbon::today())
+            ->orderBy('time')
+            ->get();
+
+        return view('admin.dashboard', compact(
+            'openIncidentsCount', 
+            'appointmentsTodayCount', 
+            'totalResidentsCount', 
+            'monthlyRevenue',
+            'monthlySalesLabels',
+            'monthlySalesData',
+            'billsPaid',
+            'billsPending',
+            'billsOverdue',
+            'totalBills',
+            'collectionPercent',
+            'todaysAppointmentsList',
+            'notifications'
+        ));
     });
 
     // Master List System
     Route::resource('buyer-master-list', \App\Http\Controllers\Admin\BuyerMasterListController::class);
+    Route::post('buyer-master-list/{id}/generate-account', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'generateAccount'])->name('buyer.generate-account');
     Route::get('/buyer-master-list/{id}/export-msvs', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'exportMsvs'])->name('admin.buyer.export.msvs');
     Route::get('/buyer-master-list/{id}/export-bvs', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'exportBvs'])->name('admin.buyer.export.bvs');
     Route::get('/buyer-master-list/{id}/export-housing-loan', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'exportHousingLoan'])->name('admin.buyer.export.housing_loan');
@@ -517,6 +690,18 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             ['block' => $request->input('block'), 'lot_number' => $request->input('lot')],
             ['status' => 'Reserved', 'provider_managed' => false]
         );
+        
+        $name = $request->input('name');
+        $contact = $request->input('contact');
+        
+        if ($request->input('buyer_master_list_id')) {
+            $buyer = \App\Models\BuyerMasterList::find($request->input('buyer_master_list_id'));
+            if ($buyer) {
+                $name = trim($buyer->first_name . ' ' . $buyer->last_name);
+                $contact = $buyer->contact_number;
+            }
+        }
+        
         $res = \App\Models\Reservation::create([
             'lot_id' => $lot->id,
             'buyer_master_list_id' => $request->input('buyer_master_list_id'),
@@ -524,7 +709,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'reservation_date' => now(),
             'deadline_date' => $request->input('deadline_date') ? \Carbon\Carbon::parse($request->input('deadline_date')) : null,
             'amount' => $request->input('amount') ?? 20000,
-            'notes' => ($request->input('name') ?? 'New Buyer') . ' | ' . ($request->input('contact') ?? 'N/A')
+            'notes' => ($name ?: 'New Buyer') . ' | ' . ($contact ?: 'N/A')
         ]);
         return response()->json(['success' => true, 'id' => substr($res->id, 0, 8)]);
     });
@@ -542,20 +727,42 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     });
 
     Route::post('/downpayment-fee', function (\Illuminate\Http\Request $request) {
-        $lot = \App\Models\Lot::firstOrCreate(
-            ['block' => $request->input('block'), 'lot_number' => $request->input('lot')],
-            ['status' => 'Reserved', 'provider_managed' => false]
-        );
-        $res = \App\Models\Reservation::create([
-            'lot_id' => $lot->id,
-            'buyer_master_list_id' => $request->input('buyer_master_list_id'),
-            'status' => 'Pending',
-            'reservation_date' => now(),
-            'amount' => 0,
-            'notes' => $request->input('name') ?? 'New Buyer',
-            'first_name' => $request->input('first_name'),
-            'last_name' => $request->input('last_name')
-        ]);
+        $buyerId = $request->input('buyer_master_list_id');
+        
+        // Prevent duplication
+        $existingRes = \App\Models\Reservation::where('buyer_master_list_id', $buyerId)
+            ->whereHas('downpayments')
+            ->first();
+        if ($existingRes) {
+            return response()->json(['success' => false, 'message' => 'Buyer already has an active downpayment schedule.'], 403);
+        }
+
+        // Use existing reservation without downpayment, or create a structural one
+        $res = \App\Models\Reservation::where('buyer_master_list_id', $buyerId)
+            ->whereDoesntHave('downpayments')
+            ->first();
+
+        if (!$res) {
+            $lot = \App\Models\Lot::firstOrCreate(
+                ['block' => $request->input('block'), 'lot_number' => $request->input('lot')],
+                ['status' => 'Reserved', 'provider_managed' => false]
+            );
+            $res = \App\Models\Reservation::create([
+                'lot_id' => $lot->id,
+                'buyer_master_list_id' => $buyerId,
+                'status' => 'Pending',
+                'reservation_date' => now(),
+                'amount' => 0,
+                'notes' => $request->input('name') ?? 'New Buyer',
+                'first_name' => $request->input('first_name'),
+                'last_name' => $request->input('last_name')
+            ]);
+        } else {
+            // Update the existing reservation's status to converted since they now have a downpayment
+            $res->status = 'Converted';
+            $res->save();
+        }
+
         $dp = \App\Models\Downpayment::create([
             'reservation_id' => $res->id,
             'amount' => 0,
@@ -636,10 +843,16 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             ],
             'today_paid' => 40000.00
         ];
+        
+        // Only fetch buyers who DO NOT have an active or pending reservation
+        $masterListBuyers = \App\Models\BuyerMasterList::whereDoesntHave('reservations', function ($q) {
+            $q->whereIn('status', ['Reserved', 'Pending']);
+        })->orderBy('last_name')->get();
+
         return view('admin.reservation-fee.index', [
             'bills' => getReservationFees(),
             'stats' => $yearly_stats,
-            'masterListBuyers' => \App\Models\BuyerMasterList::orderBy('last_name')->get()
+            'masterListBuyers' => $masterListBuyers
         ]);
     });
 
@@ -661,10 +874,14 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             ],
             'today_paid' => 15000.00
         ];
+        
+        // Only fetch buyers who DO NOT have any downpayments yet
+        $masterListBuyers = \App\Models\BuyerMasterList::whereDoesntHave('reservations.downpayments')->orderBy('last_name')->get();
+
         return view('admin.downpayment-fee.index', [
             'bills' => getDownpaymentFees(),
             'stats' => $yearly_stats,
-            'masterListBuyers' => \App\Models\BuyerMasterList::orderBy('last_name')->get()
+            'masterListBuyers' => $masterListBuyers
         ]);
     });
     Route::get('/appointments', function () {
@@ -699,11 +916,8 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'publish_date' => now(),
         ]);
 
-        // Send email to all residents
-        $residents = \App\Models\User::role('Resident')->get();
-        foreach ($residents as $resident) {
-            \Illuminate\Support\Facades\Mail::to($resident->email)->send(new \App\Mail\AnnouncementPosted($ann));
-        }
+        // Dispatch job to send emails to all residents in the background
+        \App\Jobs\SendAnnouncementEmails::dispatch($ann);
 
         return response()->json(['success' => true, 'message' => 'Announcement posted and emails sent.']);
     });
@@ -724,6 +938,10 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $lot->update(['status' => $request->input('status')]);
         return response()->json(['success' => true]);
     });
+
+    // Financing System
+    Route::resource('financing', \App\Http\Controllers\FinancingRecordController::class);
+    Route::post('financing/{id}/pay', [\App\Http\Controllers\FinancingRecordController::class, 'recordPayment'])->name('financing.pay');
 });
 
 Route::post('/api/settings', function (\Illuminate\Http\Request $request) {
@@ -742,12 +960,20 @@ Route::post('/api/settings', function (\Illuminate\Http\Request $request) {
     return response()->json(['success' => true]);
 });
 
+// Buyer Routes
+Route::prefix('buyer')->middleware(['auth', 'role:Buyer', 'sync_paymongo'])->group(function () {
+    Route::get('/dashboard', [\App\Http\Controllers\BuyerPortalController::class, 'index'])->name('buyer.dashboard');
+    Route::get('/payments', [\App\Http\Controllers\BuyerPortalController::class, 'payments'])->name('buyer.payments');
+    Route::post('/api/downpayment/pay', [\App\Http\Controllers\BuyerPortalController::class, 'payDownpayment']);
+    Route::post('/api/financing/pay', [\App\Http\Controllers\BuyerPortalController::class, 'payFinancing']);
+});
+
 // Resident Portal Routes
 Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo'])->group(function () {
     Route::get('/dashboard', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
-        $elecBills = getElectricalBills(request('cycle'));
-        $waterBills = getWaterBills(request('cycle'));
+        $elecBills = getElectricalBills(request('cycle'), true, $user->id);
+        $waterBills = getWaterBills(request('cycle'), true, $user->id);
         $elecBill = collect($elecBills)->firstWhere('resident', $user->name ?? 'Jepuso') ?? [
             'id' => 'N/A',
             'db_id' => null,

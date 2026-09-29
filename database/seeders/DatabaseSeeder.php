@@ -3,6 +3,8 @@
 namespace Database\Seeders;
 
 use App\Models\User;
+use Spatie\Permission\Models\Role;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -15,13 +17,20 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call([
-            PhaseOneSeeder::class,
-            // PhaseTwoSeeder::class,
-            // PhaseThreeSeeder::class,
-            // PhaseFourSeeder::class,
-        ]);
+        // Ensure Admin role exists
+        $adminRole = Role::firstOrCreate(['name' => 'Admin']);
 
-        // Factory removed.
+        // Create Admin User
+        $user = User::updateOrCreate(
+            ['email' => 'admin@althesa.com'],
+            [
+                'name' => 'System Admin',
+                'password' => Hash::make('password123'),
+                'status' => 'Active',
+                'joined_at' => now(),
+            ]
+        );
+
+        $user->assignRole($adminRole);
     }
 }

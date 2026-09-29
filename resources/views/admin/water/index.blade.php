@@ -23,7 +23,7 @@
     <div style="background: #fff; border: 1px solid var(--bill-border); border-radius: 20px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
             <h2 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 0;">Ledger Performance Summary</h2>
-            <select id="summaryMonth" class="filter-select" style="font-weight: 600; color: var(--bill-primary); border-color: #cbd5e1;" onchange="window.location.href='?cycle='+this.value">
+            <select id="summaryMonth" class="filter-select" style="font-weight: 600; color: var(--bill-primary); border-color: #cbd5e1;" onchange="fetchCycle(this.value)">
                 @if(empty($validCycles))
                     <option value="" disabled selected>No Records Available</option>
                 @else
@@ -122,7 +122,6 @@
             </div>
 
         </div>
-
         <!-- Card 2: Collection Efficiency Ratio -->
         <div class="analytic-card">
             <div class="card-title">
@@ -1021,5 +1020,30 @@
         }
     });
 
+    function fetchCycle(cycle) {
+        document.querySelector('.bill-container').style.opacity = '0.5';
+        fetch('?cycle=' + cycle)
+            .then(res => res.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                window.history.pushState({}, '', '?cycle=' + cycle);
+                
+                // Replace everything except the script tags at the bottom.
+                document.querySelector('.bill-container').innerHTML = doc.querySelector('.bill-container').innerHTML;
+                document.querySelector('.bill-container').style.opacity = '1';
+                
+                // reattach listeners
+                document.getElementById('billingSearch')?.addEventListener('input', filterTable);
+                document.getElementById('statusFilter')?.addEventListener('change', filterTable);
+                document.getElementById('blockFilter')?.addEventListener('change', filterTable);
+                document.getElementById('behaviorFilter')?.addEventListener('change', filterTable);
+                document.getElementById('connectionFilter')?.addEventListener('change', filterTable);
+            })
+            .catch(err => {
+                console.error(err);
+                document.querySelector('.bill-container').style.opacity = '1';
+            });
+    }
 </script>
 @endsection

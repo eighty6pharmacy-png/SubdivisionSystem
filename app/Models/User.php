@@ -47,6 +47,7 @@ class User extends Authenticatable
         'password',
         'status',
         'joined_at',
+        'buyer_master_list_id'
     ];
 
     /**
@@ -81,5 +82,10 @@ class User extends Authenticatable
     public function utilityBills(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(UtilityBill::class);
+    }
+
+    public function buyerMasterList()
+    {
+        return $this->belongsTo(BuyerMasterList::class, 'buyer_master_list_id');
     }
 }

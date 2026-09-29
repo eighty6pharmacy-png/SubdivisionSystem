@@ -94,6 +94,35 @@
             </div>
         </div>
 
+        <!-- Filter Bar -->
+        <div class="filter-bar" style="display: flex; gap: 16px; margin-bottom: 24px; padding: 16px; background: #fff; border-radius: 12px; border: 1px solid var(--bill-border);">
+            <div class="filter-group" style="flex: 1;">
+                <span class="filter-label" style="display: block; font-size: 12px; color: #64748b; margin-bottom: 4px;">Search</span>
+                <input type="text" id="billingSearch" class="filter-select" placeholder="Client or Lot..." style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;">
+            </div>
+            <div class="filter-group">
+                <span class="filter-label" style="display: block; font-size: 12px; color: #64748b; margin-bottom: 4px;">Status</span>
+                <select id="statusFilter" class="filter-select" style="padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                    <option value="all">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="completed">Completed</option>
+                    <option value="delinquent">Delinquent</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <span class="filter-label" style="display: block; font-size: 12px; color: #64748b; margin-bottom: 4px;">Block</span>
+                <select id="blockFilter" class="filter-select" style="padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                    <option value="all">All Blocks</option>
+                    @php
+                        $uniqueBlocks = collect($bills)->pluck('block')->filter(function($b) { return $b !== 'N/A'; })->unique()->sort();
+                    @endphp
+                    @foreach($uniqueBlocks as $b)
+                        <option value="{{ $b }}">Block {{ $b }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+
         <!-- Downpayment Ledger -->
         <div class="analytic-card">
             <div class="card-title">
@@ -662,7 +691,8 @@
                 if (res.ok) {
                     window.location.reload();
                 } else {
-                    alert('Failed to save contract to database');
+                    const errorData = await res.json().catch(() => null);
+                    alert(errorData && errorData.message ? errorData.message : 'Failed to save contract to database');
                     if (btn) {
                         btn.disabled = false;
                         btn.textContent = 'Save & Initialize Contract';
@@ -782,7 +812,7 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-    bindGisDropdowns('calcBlk', 'calcLot');
+            bindGisDropdowns('calcBlk', 'calcLot');
 
             if (new URLSearchParams(window.location.search).get('action') === 'add') {
                 openContractModal();
@@ -795,6 +825,30 @@
                     width: '100%'
                 });
             }
+
+            // Bind filter events
+            document.getElementById('billingSearch')?.addEventListener('input', filterTable);
+            document.getElementById('statusFilter')?.addEventListener('change', filterTable);
+            document.getElementById('blockFilter')?.addEventListener('change', filterTable);
         });
+
+        function filterTable() {
+            const search = document.getElementById('billingSearch').value.toLowerCase();
+            const status = document.getElementById('statusFilter').value.toLowerCase();
+            const block = document.getElementById('blockFilter').value;
+            
+            document.querySelectorAll('.bill-row').forEach(row => {
+                const text = row.innerText.toLowerCase();
+                const rowStatusElem = row.querySelector('.status-badge');
+                const rowStatus = rowStatusElem ? rowStatusElem.innerText.toLowerCase() : text;
+                const rowBlock = text; // Block is embedded in the text
+                
+                const matchesSearch = text.includes(search);
+                const matchesStatus = status === 'all' || rowStatus.includes(status);
+                const matchesBlock = block === 'all' || rowBlock.includes('block ' + block.toLowerCase());
+                
+                row.style.display = (matchesSearch && matchesStatus && matchesBlock) ? '' : 'none';
+            });
+        }
     </script>
 @endsection

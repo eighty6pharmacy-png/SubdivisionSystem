@@ -77,6 +77,17 @@ class BuyerMasterListController extends Controller
             'loan_term.max' => 'Loan term cannot exceed 100 years.'
         ]);
 
+        $existingBuyer = BuyerMasterList::where('first_name', $validated['first_name'])
+                                        ->where('last_name', $validated['last_name'])
+                                        ->first();
+
+        if ($existingBuyer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'A buyer with the same first and last name already exists in the Master List.'
+            ], 409);
+        }
+
         BuyerMasterList::create($validated);
 
         return response()->json(['success' => true, 'message' => 'Buyer added successfully to the Master List.']);
@@ -143,9 +154,39 @@ class BuyerMasterListController extends Controller
         return response()->json(['success' => true, 'message' => 'Buyer record removed safely.']);
     }
 
+    public function generateAccount($id)
+    {
+        $buyer = BuyerMasterList::findOrFail($id);
+        
+        // Ensure role exists
+        $role = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'Buyer']);
+        
+        $email = strtolower($buyer->first_name . '.' . $buyer->last_name . '@buyer.althesa.com');
+        $email = str_replace(' ', '', $email);
+        
+        $user = \App\Models\User::firstOrCreate(
+            ['buyer_master_list_id' => $buyer->id],
+            [
+                'name' => $buyer->first_name . ' ' . $buyer->last_name,
+                'email' => $email,
+                'password' => bcrypt('password123'), // Default password
+                'contact_number' => $buyer->contact_number,
+                'status' => 'Active',
+                'joined_at' => now(),
+            ]
+        );
+        
+        if (!$user->hasRole('Buyer')) {
+            $user->assignRole('Buyer');
+        }
+        
+        return back()->with('success', 'Buyer Account Generated! Email: ' . $email . ' | Password: password123');
+    }
+
     public function exportMsvs(Request $request, $id)
     {
         $buyer = BuyerMasterList::findOrFail($id);
+
 
         if ($request->query('format') === 'pdf') {
             $pdf = app('dompdf.wrapper');

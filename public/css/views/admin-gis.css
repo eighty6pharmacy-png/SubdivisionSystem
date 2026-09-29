@@ -161,4 +161,20 @@
             color: var(--primary);
             font-weight: 700;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
+        }@media (max-width: 1024px) {
+    .gis-wrapper {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 500px auto;
+        height: auto;
+        overflow-y: auto;
+    }
+    .gis-sidebar-left, .gis-sidebar-right {
+        border-right: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        width: 100%;
+        height: auto;
+    }
+    .gis-viewport {
+        min-height: 500px;
+    }
+}

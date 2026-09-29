@@ -20,7 +20,7 @@
     </div>
 
     <!-- Stats Summary Row -->
-    <div class="responsive-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; margin-bottom: 24px;">
+    <div class="responsive-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; margin-bottom: 24px;">
         <div style="background: #fff; padding: 20px; border-radius: 16px; border: 1px solid var(--bill-border); border-left: 4px solid var(--bill-primary);">
             <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Active Users</div>
             <div id="statTotal" style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ collect($users)->where('status', 'Active')->count() }}</div>
@@ -37,6 +37,10 @@
             <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Finance Team</div>
             <div id="statFinance" style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ collect($users)->where('role', 'Finance Officer')->count() }}</div>
         </div>
+        <div style="background: #fff; padding: 20px; border-radius: 16px; border: 1px solid var(--bill-border); border-left: 4px solid #ec4899;">
+            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Buyers</div>
+            <div id="statBuyers" style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ collect($users)->where('role', 'Buyer')->count() }}</div>
+        </div>
     </div>
 
     <!-- Filter Bar -->
@@ -52,6 +56,7 @@
                 <option value="Resident">Residents</option>
                 <option value="Security Guard">Security Guard</option>
                 <option value="Finance Officer">Finance Officer</option>
+                <option value="Buyer">Buyer</option>
             </select>
         </div>
         <div style="width: 150px;">

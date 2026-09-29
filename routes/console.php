@@ -42,3 +42,5 @@ Schedule::call(function () {
 
     Log::info('Daily billing SMS reminder check completed.');
 })->dailyAt('08:00');
+
+Schedule::command('sms:buyer-due')->dailyAt('09:00');

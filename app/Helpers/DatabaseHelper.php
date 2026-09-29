@@ -231,7 +231,7 @@ if (!function_exists('getValidBillingCycles')) {
     }
 }
 if (!function_exists('getElectricalBills')) {
-    function getElectricalBills($cycle = null, $includeHistory = true) {
+    function getElectricalBills($cycle = null, $includeHistory = true, $userId = null) {
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
                 // Check if any electricity bills exist at all
@@ -239,9 +239,15 @@ if (!function_exists('getElectricalBills')) {
                     return [];
                 }
                 
-                $residents = \App\Models\User::role('Resident')->with(['lots', 'utilityBills' => function($q) {
+                $query = \App\Models\User::role('Resident')->with(['lots', 'utilityBills' => function($q) {
                     $q->where('type', 'electricity')->orderBy('created_at', 'desc')->with('payments');
-                }])->get();
+                }]);
+                
+                if ($userId) {
+                    $query->where('id', $userId);
+                }
+                
+                $residents = $query->get();
                 
                 return $residents->map(function ($resident) use ($cycle, $includeHistory) {
                     $lot = $resident->lots->first();
@@ -315,7 +321,7 @@ if (!function_exists('getElectricalBills')) {
 }
 
 if (!function_exists('getWaterBills')) {
-    function getWaterBills($cycle = null, $includeHistory = true) {
+    function getWaterBills($cycle = null, $includeHistory = true, $userId = null) {
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
                 // Check if any water bills exist at all
@@ -323,9 +329,15 @@ if (!function_exists('getWaterBills')) {
                     return [];
                 }
 
-                $residents = \App\Models\User::role('Resident')->with(['lots', 'utilityBills' => function($q) {
+                $query = \App\Models\User::role('Resident')->with(['lots', 'utilityBills' => function($q) {
                     $q->where('type', 'water')->orderBy('created_at', 'desc')->with('payments');
-                }])->get();
+                }]);
+                
+                if ($userId) {
+                    $query->where('id', $userId);
+                }
+                
+                $residents = $query->get();
                 
                 return $residents->map(function ($resident) use ($cycle, $includeHistory) {
                     $lot = $resident->lots->first();
@@ -466,11 +478,14 @@ if (!function_exists('getReservationFees')) {
     function getReservationFees() {
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('reservations') && \App\Models\Reservation::count() > 0) {
-                return \App\Models\Reservation::with(['lot'])->get()->map(function ($res) {
+                return \App\Models\Reservation::with(['lot'])
+                    ->where('amount', '>', 0)
+                    ->get()
+                    ->map(function ($res) {
                     return [
                         'id' => substr($res->id, 0, 8),
-                        'buyer' => $res->notes ?? 'Guest', // Stored in notes
-                        'contact' => '0917-000-0000', // Mock
+                        'buyer' => ($res->buyerMasterList ? trim($res->buyerMasterList->first_name . ' ' . $res->buyerMasterList->last_name) : null) ?: ($res->notes ?? 'Guest'),
+                        'contact' => $res->buyerMasterList->contact_number ?? '0917-000-0000',
                         'block' => $res->lot->block ?? 'N/A',
                         'lot' => $res->lot->lot_number ?? 'N/A',
                         'amount' => $res->amount,

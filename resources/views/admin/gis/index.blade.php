@@ -6,6 +6,9 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
     <link rel="stylesheet" href="{{ asset('css/views/admin-gis.css') }}">
+    <style>
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 
     <div class="gis-wrapper fade-in" id="gisMain">
         <!-- Left Sidebar -->
@@ -111,7 +114,12 @@
         </aside>
 
         <!-- Main Viewport -->
-        <main class="gis-viewport" id="viewport">
+        <main class="gis-viewport" id="viewport" style="position: relative;">
+            <!-- Loading Overlay -->
+            <div id="mapLoadingOverlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.8); z-index: 2000; display: flex; flex-direction: column; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
+                <div style="width: 40px; height: 40px; border: 4px solid #e2e8f0; border-top: 4px solid #334155; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                <p style="margin-top: 16px; font-weight: 700; color: #64748b;">Loading Map Data...</p>
+            </div>
             <div id="adminMapContainer" class="map-container"></div>
         </main>
 
@@ -259,7 +267,7 @@
             </div>
             <div style="display: flex; gap: 12px; margin-top: 24px;">
                 <button class="btn btn-outline" style="flex:1;" onclick="document.getElementById('occupancyUpdateModal').style.display='none'">Cancel</button>
-                <button class="btn btn-primary" style="flex:1;" onclick="updateOccupancyStatus()">Save Update</button>
+                <button class="btn btn-primary" id="btnSaveOccupancy" style="flex:1;" onclick="updateOccupancyStatus()">Save Update</button>
             </div>
         </div>
     </div>
@@ -381,6 +389,10 @@
                 if (zoomInp) zoomInp.value = z.toFixed(1);
                 if (zoomVal) zoomVal.innerText = z.toFixed(1) + 'z';
             }, 200);
+
+            // Hide loading overlay when done
+            const overlay = document.getElementById('mapLoadingOverlay');
+            if (overlay) overlay.style.display = 'none';
         }
 
         function setLayer(layer, btn) {
@@ -530,8 +542,13 @@
             const block = document.getElementById('occUpdateBlock').value;
             const lot = document.getElementById('occUpdateLot').value;
             const status = document.getElementById('occUpdateStatus').value;
+            const btnSave = document.getElementById('btnSaveOccupancy');
             
             try {
+                // UI Loading state
+                btnSave.disabled = true;
+                btnSave.innerText = 'Saving...';
+
                 const res = await fetch('/admin/gis/update-occupancy', {
                     method: 'POST',
                     headers: {
@@ -542,13 +559,34 @@
                 });
                 
                 if (res.ok) {
-                    window.location.reload();
+                    // Update state locally without reloading the page
+                    const key = `B${block} L${lot}`;
+                    if(dbLots[key]) {
+                        dbLots[key].status = status;
+                        if(dbLots[key].isNotConnected === undefined) dbLots[key].isNotConnected = true;
+                    } else {
+                        dbLots[key] = { owner: 'Unassigned', status: status, electricity_status: 'unpaid', water_status: 'unpaid', block: block, lot_number: lot, isNotConnected: true };
+                    }
+                    
+                    // Re-render map layer styling instantly
+                    if(houseLayer) houseLayer.setStyle(getLotStyle);
+                    
+                    // Update sidebar if this lot is currently selected
+                    if(document.getElementById('detailLotId').innerText === key) {
+                        selectLot(key, dbLots[key]);
+                    }
+                    
+                    document.getElementById('occupancyUpdateModal').style.display = 'none';
                 } else {
                     alert('Failed to update occupancy status.');
                 }
             } catch (e) {
                 console.error(e);
                 alert('An error occurred.');
+            } finally {
+                // Reset UI
+                btnSave.disabled = false;
+                btnSave.innerText = 'Save Update';
             }
         }
 
