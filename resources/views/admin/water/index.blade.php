@@ -516,8 +516,8 @@
     const statsData = @json($stats);
 
     // Global Billing Settings
-    let currentRate = {{ \App\Models\Setting::where('key', 'water_rate')->value('value') ?? 15 }};
-    let currentPenaltyRate = {{ \App\Models\Setting::where('key', 'water_penalty')->value('value') ?? 5 }};
+    let currentRate = {{ floatval(\App\Models\Setting::where('key', 'water_rate')->value('value') ?: 15) }};
+    let currentPenaltyRate = {{ floatval(\App\Models\Setting::where('key', 'water_penalty')->value('value') ?: 5) }};
 
     // Load Data safely
     const allBillsRaw = @json($bills);

@@ -527,8 +527,8 @@
     let isPaidTodayFilter = false;
 
     // Global Billing Settings
-    let currentKwhRate = {{ \App\Models\Setting::where('key', 'elec_rate')->value('value') ?? 10 }};
-    let currentPenaltyRate = {{ \App\Models\Setting::where('key', 'electricity_penalty')->value('value') ?? 5 }};
+    let currentKwhRate = {{ floatval(\App\Models\Setting::where('key', 'elec_rate')->value('value') ?: 10) }};
+    let currentPenaltyRate = {{ floatval(\App\Models\Setting::where('key', 'electricity_penalty')->value('value') ?: 5) }};
 
     // Load Data safely
     const allBillsRaw = @json($bills);
