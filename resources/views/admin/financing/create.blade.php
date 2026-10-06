@@ -43,8 +43,8 @@
 <div class="bill-container fade-in">
     <div class="bill-header">
         <div class="bill-title">
-            <h1>Create Financing Record</h1>
-            <p>Select a buyer to initiate their financing and loan tracking process.</p>
+            <h1>Create Loan & Additional Fees Record</h1>
+            <p>Select a buyer to initiate their loan tracking process.</p>
         </div>
         <div class="bill-actions">
             <a href="{{ route('financing.index') }}" class="pay-button" style="background: #e2e8f0; color: #475569; text-decoration: none;">Back</a>

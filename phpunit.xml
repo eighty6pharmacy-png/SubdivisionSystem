@@ -32,5 +32,8 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="PAYMONGO_SECRET_KEY" value="sk_test_mocked_key_for_unit_tests"/>
+        <env name="PAYMONGO_PUBLIC_KEY" value="pk_test_mocked_key_for_unit_tests"/>
+        <env name="PAYMONGO_WEBHOOK_SECRET" value="whsec_test_mocked_secret_12345"/>
     </php>
 </phpunit>

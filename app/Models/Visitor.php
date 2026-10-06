@@ -23,6 +23,8 @@ class Visitor extends Model
         'plate_number',
         'type',
         'visitor_address',
+        'guard_id',
+        'guard_name',
     ];
 
     public function host(): BelongsTo

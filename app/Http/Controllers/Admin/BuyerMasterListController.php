@@ -12,7 +12,29 @@ class BuyerMasterListController extends Controller
 {
     public function index(Request $request)
     {
+        // Auto-archive overdue reservations without any paid downpayments
+        $overdueReservations = \App\Models\Reservation::where('deadline_date', '<', now()->format('Y-m-d'))
+            ->whereDoesntHave('downpayments', function ($query) {
+                $query->where('status', 'Paid');
+            })->get();
+
+        foreach ($overdueReservations as $res) {
+            $buyer = $res->buyerMasterList;
+            if ($buyer) {
+                $buyer->delete();
+                $user = \App\Models\User::where('buyer_master_list_id', $buyer->id)->first();
+                if ($user) {
+                    $user->delete();
+                }
+            }
+            $res->delete();
+        }
+
         $query = BuyerMasterList::with('reservations');
+
+        if ($request->status === 'cancelled') {
+            $query->onlyTrashed();
+        }
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -28,17 +50,19 @@ class BuyerMasterListController extends Controller
         }
 
         $buyers = $query->orderBy('created_at', 'desc')->get();
+        $totalBuyers = BuyerMasterList::count();
+        $cancelledBuyersCount = BuyerMasterList::onlyTrashed()->count();
         $availableLots = Lot::where('status', 'Available')->orderBy('block')->orderBy('lot_number')->get();
-        return view('admin.buyer_master_list.index', compact('buyers', 'availableLots'));
+        return view('admin.buyer_master_list.index', compact('buyers', 'availableLots', 'totalBuyers', 'cancelledBuyersCount'));
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            // Personal Info Validation
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
             'last_name' => 'required|string|max:255',
+            'email' => 'nullable|email|max:255',
             'civil_status' => 'nullable|string|max:50',
             'spouse_name' => 'nullable|string|max:255',
             'present_address' => 'nullable|string|max:1000',
@@ -101,6 +125,7 @@ class BuyerMasterListController extends Controller
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
             'last_name' => 'required|string|max:255',
+            'email' => 'nullable|email|max:255',
             'civil_status' => 'nullable|string|max:50',
             'spouse_name' => 'nullable|string|max:255',
             'present_address' => 'nullable|string|max:1000',
@@ -140,18 +165,25 @@ class BuyerMasterListController extends Controller
 
     public function destroy($id)
     {
-        $buyer = BuyerMasterList::findOrFail($id);
+        $buyer = BuyerMasterList::withTrashed()->findOrFail($id);
 
-        // Prevent deletion if they have active reservations linked
-        if ($buyer->reservations()->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Cannot delete buyer. They have active reservations or downpayments linked to their account.'
-            ], 403);
+        if ($buyer->trashed()) {
+            return response()->json(['success' => false, 'message' => 'Buyer is already archived.']);
+        }
+
+        // Archive related user account if exists
+        $user = \App\Models\User::where('buyer_master_list_id', $buyer->id)->first();
+        if ($user) {
+            $user->delete();
+        }
+
+        // Archive related reservations
+        foreach($buyer->reservations as $res) {
+             $res->delete();
         }
 
         $buyer->delete();
-        return response()->json(['success' => true, 'message' => 'Buyer record removed safely.']);
+        return response()->json(['success' => true, 'message' => 'Buyer record and account archived safely.']);
     }
 
     public function generateAccount($id)
@@ -161,15 +193,28 @@ class BuyerMasterListController extends Controller
         // Ensure role exists
         $role = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'Buyer']);
         
-        $email = strtolower($buyer->first_name . '.' . $buyer->last_name . '@buyer.althesa.com');
-        $email = str_replace(' ', '', $email);
+        $email = request()->input('account_email');
+        if (empty($email)) {
+            $email = $buyer->email;
+        }
+        if (empty($email)) {
+            $email = strtolower($buyer->first_name . '.' . $buyer->last_name . '@buyer.althesa.com');
+            $email = str_replace(' ', '', $email);
+        }
         
-        $user = \App\Models\User::firstOrCreate(
-            ['buyer_master_list_id' => $buyer->id],
+        $password = \Illuminate\Support\Str::random(8); // Random secure password
+        
+        $existingUser = \App\Models\User::where('buyer_master_list_id', $buyer->id)->first();
+        if ($existingUser) {
+            return back()->with('error', 'This buyer already has an account associated with email: ' . $existingUser->email);
+        }
+
+        $user = \App\Models\User::create(
             [
+                'buyer_master_list_id' => $buyer->id,
                 'name' => $buyer->first_name . ' ' . $buyer->last_name,
                 'email' => $email,
-                'password' => bcrypt('password123'), // Default password
+                'password' => bcrypt($password),
                 'contact_number' => $buyer->contact_number,
                 'status' => 'Active',
                 'joined_at' => now(),
@@ -179,8 +224,25 @@ class BuyerMasterListController extends Controller
         if (!$user->hasRole('Buyer')) {
             $user->assignRole('Buyer');
         }
+
+        // Send email if it's a real email address (not auto-generated @buyer.althesa.com)
+        if (!str_contains($email, '@buyer.althesa.com')) {
+            try {
+                \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($email, $buyer, $password) {
+                    $message->to($email)
+                        ->subject('Your Althesa Subdivision Buyer Account')
+                        ->html("<h2>Welcome, {$buyer->first_name}!</h2>
+                                <p>Your buyer account has been successfully created. Here are your login credentials:</p>
+                                <p><strong>Email:</strong> {$email}<br>
+                                <strong>Password:</strong> {$password}</p>
+                                <p>Please login to the portal and change your password as soon as possible.</p>");
+                });
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Failed to send email to new buyer: ' . $e->getMessage());
+            }
+        }
         
-        return back()->with('success', 'Buyer Account Generated! Email: ' . $email . ' | Password: password123');
+        return back()->with('success', 'Buyer Account Generated! Email: ' . $email . ' | Password: ' . $password);
     }
 
     public function exportMsvs(Request $request, $id)

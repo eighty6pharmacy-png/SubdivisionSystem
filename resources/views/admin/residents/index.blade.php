@@ -251,7 +251,7 @@
             window.pushSystemNotification("Account Created", `Credentials dispatched to ${email}`, new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), true);
         }
 
-        alert(`Digital Account Created for ${name}.\nInitial credentials have been dispatched to ${email}.\n\nNote: In a production environment, an automated SMTP/Mailgun service would handle the secure password delivery.`);
+        Swal.fire(`Digital Account Created for ${name}.\nInitial credentials have been dispatched to ${email}.\n\nNote: In a production environment, an automated SMTP/Mailgun service would handle the secure password delivery.`);
         
         // Update stats
         document.getElementById('statTotal').textContent = parseInt(document.getElementById('statTotal').textContent) + 1;
@@ -277,7 +277,7 @@
     }
 
     function editResident(id) {
-        alert(`Edit feature for ${id} will be wired to the profile patcher module.`);
+        Swal.fire(`Edit feature for ${id} will be wired to the profile patcher module.`);
     }
 
     // Close on escape

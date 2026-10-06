@@ -87,7 +87,7 @@
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
             },
-            body: JSON.stringify({ pin: pin })
+            body: JSON.stringify({ pin: pin, source: 'visitor' })
         })
         .then(res => {
             if (!res.ok) throw new Error("Server error");

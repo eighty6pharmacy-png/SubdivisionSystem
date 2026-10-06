@@ -10,6 +10,23 @@
     <link rel="stylesheet" href="{{ asset('css/admin.css') }}">
     <script src="{{ asset('js/subdivision-store.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.init({
+          appId: "{{ config('services.onesignal.app_id') }}",
+          allowLocalhostAsSecureOrigin: true,
+        });
+        
+        OneSignal.Slidedown.promptPush();
+
+        @if(auth()->check())
+            OneSignal.login("{{ auth()->user()->id }}");
+        @endif
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 
 <body class="admin-body">
@@ -32,74 +49,89 @@
             <nav class="sidebar-nav">
                 <div class="nav-section-label">Main</div>
                 <a href="/admin/dashboard" class="nav-item {{ request()->is('admin/dashboard') ? 'active' : '' }}">
-                    <span class="nav-icon">📊</span>
+
                     <span>Dashboard Overview</span>
                 </a>
                 <a href="/admin/users" class="nav-item {{ request()->is('admin/users*') ? 'active' : '' }}">
-                    <span class="nav-icon">👤</span>
+
                     <span>User Management</span>
                 </a>
 
                 <a href="/admin/buyer-master-list"
                     class="nav-item {{ request()->is('admin/buyer-master-list*') ? 'active' : '' }}">
-                    <span class="nav-icon">📁</span>
+
                     <span>Buyer Master List</span>
                 </a>
 
                 <div class="nav-section-label">Finance & Utilities</div>
                 <a href="/admin/billing" class="nav-item {{ request()->is('admin/billing*') ? 'active' : '' }}">
-                    <span class="nav-icon">⚡</span>
+
                     <span>Billing with Electricity</span>
                 </a>
                 <a href="/admin/water" class="nav-item {{ request()->is('admin/water*') ? 'active' : '' }}">
-                    <span class="nav-icon">💧</span>
+
                     <span>Water</span>
                 </a>
                 <a href="/admin/reservation-fee"
                     class="nav-item {{ request()->is('admin/reservation-fee*') ? 'active' : '' }}">
-                    <span class="nav-icon">🔑</span>
+
                     <span>Reservation Fee</span>
                 </a>
                 <a href="/admin/downpayment-fee"
                     class="nav-item {{ request()->is('admin/downpayment-fee*') ? 'active' : '' }}">
-                    <span class="nav-icon">🏡</span>
+
                     <span>Downpayment Fee</span>
                 </a>
                 <a href="/admin/financing"
                     class="nav-item {{ request()->is('admin/financing*') ? 'active' : '' }}">
-                    <span class="nav-icon">🏦</span>
-                    <span>Financing & Loans</span>
+
+                    <span>Loans & Addt'l Fees</span>
                 </a>
                 <div class="nav-section-label">Property Management</div>
                 <a href="/admin/gis" class="nav-item {{ request()->is('admin/gis*') ? 'active' : '' }}">
-                    <span class="nav-icon">🗺️</span>
+
                     <span>Property GIS Monitoring</span>
                 </a>
 
                 <div class="nav-section-label">Community</div>
-                <a href="/admin/incidents" class="nav-item {{ request()->is('admin/incidents*') ? 'active' : '' }}">
-                    <span class="nav-icon">📋</span>
-                    <span>Incident Reporting</span>
+                <a href="/admin/incidents" class="nav-item {{ request()->is('admin/incidents*') ? 'active' : '' }}" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+
+                        <span>Incident Reporting</span>
+                    </div>
+                    @if(isset($sidebarCounts) && $sidebarCounts['incidents'] > 0)
+                        <span style="background: var(--danger); color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">{{ $sidebarCounts['incidents'] }}</span>
+                    @endif
                 </a>
                 <a href="/admin/announcements"
                     class="nav-item {{ request()->is('admin/announcements*') ? 'active' : '' }}">
-                    <span class="nav-icon">📢</span>
+
                     <span>Announcements</span>
                 </a>
                 <a href="/admin/appointments"
-                    class="nav-item {{ request()->is('admin/appointments*') ? 'active' : '' }}">
-                    <span class="nav-icon">🗓️</span>
-                    <span>Appointment Management</span>
+                    class="nav-item {{ request()->is('admin/appointments*') ? 'active' : '' }}" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+
+                        <span>Appointment Management</span>
+                    </div>
+                    @if(isset($sidebarCounts) && $sidebarCounts['appointments'] > 0)
+                        <span style="background: var(--danger); color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">{{ $sidebarCounts['appointments'] }}</span>
+                    @endif
                 </a>
-                <a href="/admin/visitors" class="nav-item {{ request()->is('admin/visitors*') ? 'active' : '' }}">
-                    <span class="nav-icon">🔑</span>
-                    <span>Visitor Approvals</span>
+                <a href="/admin/visitors" class="nav-item {{ request()->is('admin/visitors*') ? 'active' : '' }}" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+
+                        <span>Visitor Approvals</span>
+                    </div>
+                    @if(isset($sidebarCounts) && $sidebarCounts['visitors'] > 0)
+                        <span style="background: var(--danger); color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">{{ $sidebarCounts['visitors'] }}</span>
+                    @endif
                 </a>
             </nav>
 
             <div class="sidebar-footer">
                 <a href="#" class="nav-item" onclick="openLogoutModal(); return false;">
-                    <span class="nav-icon">🚪</span>
+
                     <span>Logout</span>
                 </a>
                 <form id="logout-form" action="/logout" method="POST" style="display: none;">
@@ -121,7 +153,7 @@
                     </button>
                     <div class="topbar-title">@yield('title', 'Dashboard')</div>
                 </div>
-                <div class="topbar-actions">
+                <div class="topbar-actions" style="display: flex; align-items: center; gap: 16px;">
                     <!-- Functional Notification Dropdown -->
                     <div class="notification-container" id="notifContainer" onclick="toggleNotifications(event)">
                         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
@@ -129,16 +161,25 @@
                             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
                             <path d="M13.73 21a2 2 0 01-3.46 0" />
                         </svg>
-                        <span class="notif-dot" id="globalNotifDot" style="display: none;"></span>
+                        <span class="notif-dot" id="globalNotifDot" style="display: {{ (isset($adminUnreadCount) && $adminUnreadCount > 0) ? 'block' : 'none' }};"></span>
 
                         <div class="notification-dropdown" id="notifDropdown">
                             <div class="notification-header">
                                 <span>System Notifications</span>
-                                <span id="unreadCount" style="color: var(--accent);">0 New</span>
+                                <span id="unreadCount" style="color: var(--accent);">{{ $adminUnreadCount ?? 0 }} New</span>
                             </div>
                             <div class="notification-list" id="notifList">
-                                <!-- Injected dynamically by module JS -->
-                                <div class="notification-empty">No new notifications</div>
+                                @if(isset($adminNotifications) && count($adminNotifications) > 0)
+                                    @foreach($adminNotifications as $notif)
+                                        <div class="notification-item {{ is_null($notif->read_at) ? 'unread' : '' }}">
+                                            <div class="notification-title">{{ $notif->data['title'] ?? 'Notification' }}</div>
+                                            <div>{{ $notif->data['message'] ?? '' }}</div>
+                                            <div class="notification-time">{{ $notif->created_at->diffForHumans() }}</div>
+                                        </div>
+                                    @endforeach
+                                @else
+                                    <div class="notification-empty">No new notifications</div>
+                                @endif
                             </div>
                         </div>
                     </div>
@@ -167,6 +208,23 @@
         function toggleNotifications(event) {
             const dropdown = document.getElementById('notifDropdown');
             dropdown.classList.toggle('active');
+            
+            if (dropdown.classList.contains('active')) {
+                fetch('/api/notifications/mark-read', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'Accept': 'application/json'
+                    }
+                }).then(() => {
+                    document.getElementById('unreadCount').innerText = '0 New';
+                    document.getElementById('globalNotifDot').style.display = 'none';
+                    document.querySelectorAll('.notification-item.unread').forEach(item => {
+                        item.classList.remove('unread');
+                    });
+                });
+            }
+            
             event.stopPropagation();
         }
 
@@ -216,35 +274,6 @@
             }
         });
     </script>
-    <!-- Logout Confirmation Modal -->
-    <div id="logoutConfirmModal" class="modal-overlay"
-        style="display: none; align-items: center; justify-content: center; z-index: 99999; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px);">
-        <div class="modal-content"
-            style="background: #fff; max-width: 400px; width: 90%; border-radius: 20px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); overflow: hidden; transform: scale(0.95); transition: transform 0.2s ease-out;">
-            <div style="padding: 24px; text-align: center;">
-                <div
-                    style="width: 64px; height: 64px; background: #fee2e2; color: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
-                    <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                </div>
-                <h3 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0 0 8px;">Log out?</h3>
-                <p style="font-size: 14px; color: #64748b; margin: 0;">Are you sure you want to log out of your account?
-                    You will need to log in again to access the system.</p>
-            </div>
-            <div
-                style="padding: 16px 24px; background: #f8fafc; display: flex; gap: 12px; border-top: 1px solid #e2e8f0;">
-                <button class="btn btn-outline"
-                    style="flex: 1; justify-content: center; padding: 12px; font-weight: 600;"
-                    onclick="closeLogoutModal()">Cancel</button>
-                <button class="btn btn-primary"
-                    style="flex: 1; justify-content: center; padding: 12px; font-weight: 600; background: #ef4444; border-color: #ef4444;"
-                    onclick="document.getElementById('logout-form').submit();">Yes, Log out</button>
-            </div>
-        </div>
-    </div>
-    
     <!-- Global Loader -->
     <div id="global-loader" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 4px; background: rgba(59, 130, 246, 0.2); z-index: 999999;">
         <div style="height: 100%; background: #3b82f6; width: 30%; animation: loading-bar 1.5s infinite ease-in-out;"></div>
@@ -260,16 +289,26 @@
     </style>
     
     <script>
-        function openLogoutModal() {
-            const modal = document.getElementById('logoutConfirmModal');
-            modal.style.display = 'flex';
-            setTimeout(() => { modal.firstElementChild.style.transform = 'scale(1)'; }, 10);
-        }
-        function closeLogoutModal() {
-            const modal = document.getElementById('logoutConfirmModal');
-            modal.firstElementChild.style.transform = 'scale(0.95)';
-            setTimeout(() => { modal.style.display = 'none'; }, 200);
-        }
+            function openLogoutModal() {
+        Swal.fire({
+            title: 'Log out?',
+            text: 'Are you sure you want to log out of your account? You will need to log in again to access the system.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#94a3b8',
+            confirmButtonText: 'Yes, Log out'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                if(window.OneSignal){
+                    OneSignal.logout().then(function(){document.getElementById('logout-form').submit();});
+                }else{
+                    document.getElementById('logout-form').submit();
+                }
+            }
+        });
+    }
+    function closeLogoutModal() {}
 
         // Add page transition effects
         document.addEventListener('DOMContentLoaded', () => {

@@ -417,17 +417,18 @@
                 <svg width="32" height="32" fill="none" stroke="#0284c7" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
             </div>
             <h3 style="font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 12px;">Create New Billing Cycle</h3>
-            <p style="font-size: 14px; color: #64748b; margin-bottom: 24px; line-height: 1.6;">This will generate a new billing cycle. Previous cycles will remain accessible from the historic ledger dropdown.</p>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-            <div>
-                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 6px;">Start Date</label>
-                <input type="date" id="newCycleStart" class="filter-select" style="width: 100%; box-sizing: border-box;">
+        <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
+            <div style="background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;"><i class="fas fa-calendar-alt" style="margin-right: 6px; color: #0284c7;"></i>Previous Reading Date</label>
+                <input type="date" id="newCyclePrev" onclick="autoFillDates()" class="filter-select" style="width: 100%; box-sizing: border-box; background: white; border-color: #cbd5e1; cursor: pointer;">
             </div>
-            <div>
-                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 6px;">End Date</label>
-                <input type="date" id="newCycleEnd" class="filter-select" style="width: 100%; box-sizing: border-box;">
+            <div style="background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;"><i class="fas fa-calendar-check" style="margin-right: 6px; color: #10b981;"></i>Current Reading Date</label>
+                <input type="date" id="newCycleCurr" onclick="autoFillDates()" class="filter-select" style="width: 100%; box-sizing: border-box; background: white; border-color: #cbd5e1; cursor: pointer;">
+            </div>
+            <div style="background: #fef2f2; padding: 12px; border-radius: 12px; border: 1px solid #fecaca;">
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #991b1b; margin-bottom: 6px;"><i class="fas fa-exclamation-circle" style="margin-right: 6px; color: #ef4444;"></i>Due Date</label>
+                <input type="date" id="newCycleDue" onclick="autoFillDates()" class="filter-select" style="width: 100%; box-sizing: border-box; background: white; border-color: #fca5a5; cursor: pointer;">
             </div>
         </div>
 
@@ -645,12 +646,55 @@
         }
     }
 
+    let smartPrevDate = '';
+    let smartCurrDate = '';
+    let smartDueDate = '';
+
     function resetBillingCycle() {
         if (new URLSearchParams(window.location.search).get('action') !== 'reset') {
             window.history.pushState(null, '', '?action=reset');
         }
         document.getElementById('newCycleRate').value = currentRate;
+
+        // Auto-fill dates based on next month if a cycle already exists
+        if (allBillsRaw && allBillsRaw.length > 0 && allBillsRaw[0].curr_reading_date) {
+            const lastCurr = new Date(allBillsRaw[0].curr_reading_date);
+            const nextCurr = new Date(lastCurr);
+            nextCurr.setMonth(nextCurr.getMonth() + 1);
+            const dueDay = new Date(nextCurr);
+            dueDay.setDate(dueDay.getDate() + 15); // e.g. 15 days after current reading
+
+            const fDate = new Date(lastCurr.getTime() - (lastCurr.getTimezoneOffset() * 60000));
+            const lDate = new Date(nextCurr.getTime() - (nextCurr.getTimezoneOffset() * 60000));
+            const dDate = new Date(dueDay.getTime() - (dueDay.getTimezoneOffset() * 60000));
+
+            smartPrevDate = fDate.toISOString().split('T')[0];
+            smartCurrDate = lDate.toISOString().split('T')[0];
+            smartDueDate = dDate.toISOString().split('T')[0];
+        } else {
+            smartPrevDate = '';
+            smartCurrDate = '';
+            smartDueDate = '';
+        }
+
+        // Always start blank to force user action, they can click to auto-fill
+        document.getElementById('newCyclePrev').value = '';
+        document.getElementById('newCycleCurr').value = '';
+        document.getElementById('newCycleDue').value = '';
+
         document.getElementById('resetCycleModal').style.display = 'flex';
+    }
+
+    function autoFillDates() {
+        if (!document.getElementById('newCyclePrev').value && smartPrevDate) {
+            document.getElementById('newCyclePrev').value = smartPrevDate;
+        }
+        if (!document.getElementById('newCycleCurr').value && smartCurrDate) {
+            document.getElementById('newCycleCurr').value = smartCurrDate;
+        }
+        if (!document.getElementById('newCycleDue').value && smartDueDate) {
+            document.getElementById('newCycleDue').value = smartDueDate;
+        }
     }
 
     function closeResetCycleModal() {
@@ -661,13 +705,15 @@
     async function executeResetCycle() {
         const rate = document.getElementById('newCycleRate').value || currentRate;
         const penalty = document.getElementById('newCyclePenalty').value || 5;
-        const startDate = document.getElementById('newCycleStart').value;
-        const endDate = document.getElementById('newCycleEnd').value;
         const minM3 = document.getElementById('newCycleMinM3').value || 10;
         const minRate = document.getElementById('newCycleMinRate').value || 250;
         
-        if (!startDate || !endDate) {
-            alert('Please select start and end dates.');
+        const prevDate = document.getElementById('newCyclePrev').value;
+        const currDate = document.getElementById('newCycleCurr').value;
+        const dueDate = document.getElementById('newCycleDue').value;
+        
+        if (!prevDate || !currDate || !dueDate) {
+            Swal.fire('Please select all dates.');
             return;
         }
 
@@ -679,16 +725,16 @@
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 },
-                body: JSON.stringify({ type: 'water', rate: rate, penalty: penalty, start_date: startDate, end_date: endDate, water_min_m3: minM3, water_min_rate: minRate })
+                body: JSON.stringify({ type: 'water', rate: rate, penalty: penalty, prev_date: prevDate, curr_date: currDate, due_date: dueDate, water_min_m3: minM3, water_min_rate: minRate })
             });
             const data = await res.json();
             if(data.success) {
-                alert(`New billing cycle generated successfully with base rate ₱${rate}.`);
+                Swal.fire(`New billing cycle generated successfully with base rate ₱${rate}.`);
                 setTimeout(() => window.location.reload(), 500);
             }
         } catch(e) {
             console.error(e);
-            alert('Failed to reset billing cycle.');
+            Swal.fire('Failed to reset billing cycle.');
         }
     }
 
@@ -849,7 +895,7 @@
         if (inputAmount === null || inputAmount === "") return;
         const amountNum = parseFloat(inputAmount);
         if (isNaN(amountNum) || amountNum <= 0) {
-            alert("Invalid amount.");
+            Swal.fire("Invalid amount.");
             return;
         }
 
@@ -870,10 +916,10 @@
             });
             const data = await res.json();
             if (data.success) {
-                alert(`Payment of ₱${amountNum.toLocaleString()} recorded successfully.`);
+                Swal.fire(`Payment of ₱${amountNum.toLocaleString()} recorded successfully.`);
                 location.reload();
             } else {
-                alert(data.message || 'Failed to record payment.');
+                Swal.fire(data.message || 'Failed to record payment.');
                 if(actionContainer) {
                     const buttons = actionContainer.querySelectorAll('button');
                     buttons.forEach(btn => btn.disabled = false);
@@ -881,7 +927,7 @@
             }
         } catch (e) {
             console.error(e);
-            alert('An error occurred.');
+            Swal.fire('An error occurred.');
             if(actionContainer) {
                 const buttons = actionContainer.querySelectorAll('button');
                 buttons.forEach(btn => btn.disabled = false);
@@ -898,7 +944,7 @@
         if (inputBalance === null || inputBalance === "") return;
         const balanceNum = parseFloat(inputBalance);
         if (isNaN(balanceNum) || balanceNum <= 0) {
-            alert("Invalid balance amount.");
+            Swal.fire("Invalid balance amount.");
             return;
         }
         
@@ -913,7 +959,7 @@
             });
             const data = await res.json();
             if (data.success) {
-                alert(`Balance of ₱${balanceNum} added successfully.`);
+                Swal.fire(`Balance of ₱${balanceNum} added successfully.`);
                 let bill = allBillsRaw.find(b => String(b.id).trim() === String(id).trim() || String(b.db_id).trim() === String(id).trim());
                 if (bill) {
                     bill.previous_balance = (parseFloat(bill.previous_balance) || 0) + balanceNum;
@@ -927,11 +973,11 @@
                     location.reload();
                 }
             } else {
-                alert('Failed to add balance.');
+                Swal.fire('Failed to add balance.');
             }
         } catch (e) {
             console.error(e);
-            alert('Error adding balance.');
+            Swal.fire('Error adding balance.');
         }
     }
 

@@ -171,6 +171,10 @@ async function initGISMap(mapElementId, options = {}) {
 
     // Auto-fit map to houses bounds
     map.fitBounds(houseLayer.getBounds());
+    // Force a closer zoom level since rotated bounds can cause it to zoom out too much
+    setTimeout(() => {
+        map.setZoom(19);
+    }, 100);
 
     // Routing Logic
     if (config.showRouting && network) {

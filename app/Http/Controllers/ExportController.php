@@ -420,13 +420,12 @@ class ExportController extends Controller
         // Output to browser
         $filename = 'Bulk_SOA_Export_' . date('Y_m_d_His') . '.xlsx';
         
-        // redirect output to client browser
-        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        header('Content-Disposition: attachment;filename="'. $filename .'"');
-        header('Cache-Control: max-age=0');
-        
-        $writer = new Xlsx($spreadsheet);
-        $writer->save('php://output');
-        exit;
+        return response()->streamDownload(function () use ($spreadsheet) {
+            $writer = new Xlsx($spreadsheet);
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Cache-Control' => 'max-age=0',
+        ]);
     }
 }

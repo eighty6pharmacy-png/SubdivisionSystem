@@ -21,6 +21,7 @@ class Downpayment extends Model
         'monthly_amortization',
         'months_to_pay',
         'contract_date',
+        'penalty_percentage',
     ];
 
     protected function casts(): array

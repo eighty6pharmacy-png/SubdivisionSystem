@@ -13,6 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
         $middleware->append(\App\Http\Middleware\PreventBackHistory::class);
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
         $middleware->validateCsrfTokens(except: [
             'api/webhooks/paymongo',
         ]);

@@ -1,0 +1,16 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+
+    paths:
+        - app/
+
+    # Level 1 is the recommended starting point for existing projects
+    level: 1
+
+    # Ignore Eloquent magic properties (fixes "Access to undefined property")
+    checkModelProperties: false
+
+    # Fixes "Call to function property_exists() will always evaluate to true"
+    treatPhpDocTypesAsCertain: false

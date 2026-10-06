@@ -107,7 +107,7 @@ class BuyerPortalController extends Controller
         $response = \Illuminate\Support\Facades\Http::withHeaders([
             'accept' => 'application/json',
             'content-type' => 'application/json',
-            'authorization' => 'Basic ' . base64_encode(env('PAYMONGO_SECRET_KEY') . ':')
+            'authorization' => 'Basic ' . base64_encode(config('services.paymongo.secret_key') . ':')
         ])->post('https://api.paymongo.com/v1/checkout_sessions', [
             'data' => [
                 'attributes' => [

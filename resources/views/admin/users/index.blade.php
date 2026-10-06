@@ -117,7 +117,7 @@
                                 <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openViewModal('{{ $user['id'] }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ addslashes($user['contact_number'] ?? 'N/A') }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}', '{{ date('M d, Y', strtotime($user['joined'])) }}', '{{ $user['status'] }}')">View</button>
                                 @if($user['status'] === 'Active')
                                     <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openEditModal('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ $user['contact_number'] ?? '' }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}')">Edit</button>
-                                    <button class="btn btn-outline archive-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="archiveUser('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', this)">Archive</button>
+                                    <button class="btn btn-outline archive-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="archiveUser('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ $user['role'] }}', this)">Archive</button>
                                 @else
                                     <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; opacity: 0.5; cursor: not-allowed;" disabled>Edit</button>
                                     <button class="btn btn-outline restore-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #10b981; border-color: #a7f3d0;" onclick="restoreUser('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', this)">Restore</button>
@@ -173,7 +173,7 @@
                 </div>
                 <div style="flex: 1;">
                     <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Contact Number</label>
-                    <input type="text" id="userContact" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Optional">
+                    <input type="text" id="userContact" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Required">
                 </div>
             </div>
 
@@ -243,7 +243,7 @@
                 </div>
                 <div style="flex: 1;">
                     <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Contact Number</label>
-                    <input type="text" id="editUserContact" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Optional">
+                    <input type="text" id="editUserContact" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Required">
                 </div>
             </div>
 
@@ -416,12 +416,6 @@
         const email = document.getElementById('editUserEmail').value.trim();
         const contact_number = document.getElementById('editUserContact').value.trim();
         const newPass = document.getElementById('editUserPassword').value;
-        
-        if (!firstName || !lastName || !email || !contact_number) {
-            alert('Please fill in all mandatory fields (First Name, Last Name, Email, Contact Number).');
-            return;
-        }
-
         const name = `${firstName} ${lastName}`.trim();
         const payload = { name, email, contact_number, password: newPass };
         
@@ -430,12 +424,13 @@
             payload.block = document.getElementById('editResBlock').value;
             payload.lot = document.getElementById('editResLot').value;
             if (!payload.block || !payload.lot) {
-                alert('Block and Lot are mandatory for Resident accounts.');
+                Swal.fire('Block and Lot are mandatory for Resident accounts.');
                 return;
             }
         }
         
         try {
+            Swal.fire({ title: 'Processing...', text: 'Saving changes...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
             const res = await fetch(`/admin/users/${dbid}`, {
                 method: 'PUT',
                 headers: {
@@ -449,7 +444,7 @@
             if (!res.ok) {
                 const errorData = await res.json().catch(() => null);
                 const errorMsg = errorData && errorData.message ? errorData.message : 'Failed to update user.';
-                alert(`Error: ${errorMsg}`);
+                Swal.fire(`Error: ${errorMsg}`);
                 return;
             }
             
@@ -471,14 +466,13 @@
                     successMsg += `\n\nPassword has been reset to: ${newPass}\nThe old password was invalidated.`;
                 }
 
-                alert(successMsg);
-                window.location.reload();
+                Swal.fire(successMsg).then(() => window.location.reload());
             } else {
-                alert('Failed to update user.');
+                Swal.fire('Failed to update user.');
             }
         } catch(e) {
             console.error(e);
-            alert('An error occurred');
+            Swal.fire('An error occurred');
         }
     }
     function openAddUserModal() {
@@ -551,12 +545,6 @@
         const role = document.getElementById('newRole').value;
         const email = document.getElementById('userEmail').value.trim();
         const contact_number = document.getElementById('userContact').value.trim();
-        
-        if (!firstName || !lastName || !email || !contact_number) {
-            alert('Please fill in all mandatory fields (First Name, Last Name, Email, Contact Number).');
-            return;
-        }
-
         const name = `${firstName} ${lastName}`.trim();
         const payload = { name, email, contact_number, role, status: 'Active' };
         
@@ -564,7 +552,7 @@
             payload.block = document.getElementById('resBlock').value;
             payload.lot = document.getElementById('resLot').value;
             if (!payload.block || !payload.lot) {
-                alert('Block and Lot are mandatory for Resident accounts.');
+                Swal.fire('Block and Lot are mandatory for Resident accounts.');
                 return;
             }
         }
@@ -574,6 +562,7 @@
         payload.password = tempPassword;
         
         try {
+            Swal.fire({ title: 'Processing...', text: 'Creating account...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
             const res = await fetch('/admin/users', {
                 method: 'POST',
                 headers: {
@@ -587,73 +576,104 @@
             if (!res.ok) {
                 const errorData = await res.json().catch(() => null);
                 const errorMsg = errorData && errorData.message ? errorData.message : 'Failed to create account.';
-                alert(`Error: ${errorMsg}`);
+                Swal.fire(`Error: ${errorMsg}`);
                 return;
             }
             
             const data = await res.json();
             if(data.success) {
-                alert(`Account created successfully!\n\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nPlease provide this password to the user.`);
-                window.location.reload();
+                Swal.fire(`Account created successfully!\n\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nPlease provide this password to the user.`).then(() => window.location.reload());
             } else {
-                alert('Failed to create account. Email may already be in use.');
+                Swal.fire('Failed to create account. Email may already be in use.');
             }
         } catch(err) {
             console.error(err);
-            alert('An error occurred.');
+            Swal.fire('An error occurred.');
         }
     }
 
     function resetPassword(id) {
-        alert(`A secure password reset link has been dispatched to the registered email for user ${id}.`);
+        Swal.fire(`A secure password reset link has been dispatched to the registered email for user ${id}.`);
     }
 
-    async function archiveUser(id, dbid, btnElement) {
-        if (confirm(`Are you sure you want to archive user ${id}? They will no longer be able to log in.`)) {
-            try {
-                const res = await fetch(`/admin/users/${dbid}/archive`, {
-                    method: 'PUT',
-                    headers: {
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                    }
-                });
-                const data = await res.json();
-                if(data.success) {
-                    alert('User archived successfully.');
-                    window.location.reload();
-                } else {
-                    alert('Failed to archive user.');
-                }
-            } catch(e) {
-                console.error(e);
-                alert('An error occurred.');
-            }
+    function archiveUser(id, dbid, role, btnElement) {
+        if (role === 'Admin') {
+            Swal.fire({
+                icon: 'error',
+                title: 'Action Denied',
+                text: 'Admin accounts cannot be archived to prevent system lockouts.'
+            });
+            return;
         }
+
+        Swal.fire({
+            title: 'Archive User?',
+            text: `Are you sure you want to archive user ${id}? They will no longer be able to log in.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            confirmButtonText: 'Yes, Archive'
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                try {
+                    const res = await fetch(`/admin/users/${dbid}/archive`, {
+                        method: 'PUT',
+                        headers: {
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                        }
+                    });
+                    const data = await res.json();
+                    if(data.success) {
+                        Swal.fire('User archived successfully.').then(() => window.location.reload());
+                    } else {
+                        Swal.fire('Failed to archive user.');
+                    }
+                } catch(e) {
+                    console.error(e);
+                    Swal.fire('An error occurred.');
+                }
+            }
+        });
     }
 
-    async function restoreUser(id, dbid, btnElement) {
-        if (confirm(`Are you sure you want to restore user ${id}?`)) {
-            try {
-                const res = await fetch(`/admin/users/${dbid}/restore`, {
-                    method: 'PUT',
-                    headers: {
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+    function restoreUser(id, dbid, btnElement) {
+        Swal.fire({
+            title: 'Restore User?',
+            text: `Are you sure you want to restore user ${id}?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#10b981',
+            confirmButtonText: 'Yes, Restore'
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                try {
+                    const res = await fetch(`/admin/users/${dbid}/restore`, {
+                        method: 'PUT',
+                        headers: {
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                        }
+                    });
+                    const data = await res.json();
+                    if(data.success) {
+                        Swal.fire('User restored successfully.').then(() => window.location.reload());
+                    } else {
+                        Swal.fire('Failed to restore user.');
                     }
-                });
-                const data = await res.json();
-                if(data.success) {
-                    alert('User restored successfully.');
-                    window.location.reload();
-                } else {
-                    alert('Failed to restore user.');
+                } catch(e) {
+                    console.error(e);
+                    Swal.fire('An error occurred.');
                 }
-            } catch(e) {
-                console.error(e);
-                alert('An error occurred.');
             }
-        }
+        });
     }
 </script>
+
+<style>
+    /* Fix SweetAlert z-index being behind modals */
+    .swal2-container {
+        z-index: 99999 !important;
+    }
+</style>
 
 <link rel="stylesheet" href="{{ asset('css/views/admin-users.css') }}">
 @endsection

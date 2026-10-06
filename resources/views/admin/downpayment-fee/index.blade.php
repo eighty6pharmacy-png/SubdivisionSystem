@@ -268,7 +268,7 @@
                         style="display: flex; gap: 16px; margin-top: 40px; border-top: 1px solid var(--bill-border); padding-top: 32px;">
                         <button class="btn btn-outline"
                             style="color: var(--bill-primary); border-color: var(--bill-primary);"
-                            onclick="alert('Creating receipt...')">Create Receipt</button>
+                            onclick="Swal.fire('Creating receipt...')">Create Receipt</button>
                         <button class="btn btn-outline" onclick="viewHistory()">View History</button>
                     </div>
                 </div>
@@ -405,6 +405,14 @@
                             value="24">
                     </div>
                 </div>
+                <div style="display: grid; grid-template-columns: 1fr; margin-top: 16px;">
+                    <div>
+                        <label
+                            style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Penalty %</label>
+                        <input type="number" id="calcPenalty" class="filter-select" style="width: 100%; padding: 12px;"
+                            value="0">
+                    </div>
+                </div>
                 <div style="margin-top: 16px; border-top: 1px dashed #cbd5e1; padding-top: 16px;">
                     <label
                         style="display: block; font-size: 12px; font-weight: 700; color: #0f172a; margin-bottom: 8px; text-transform: uppercase;">Calculated
@@ -461,7 +469,7 @@
             const amount = parseFloat(amountStr);
             const paymentDate = document.getElementById('directPaymentDate').value || new Date().toISOString().split('T')[0];
 
-            if (!amount || amount <= 0) return alert('Enter valid amount');
+            if (!amount || amount <= 0) return Swal.fire('Enter valid amount');
 
             try {
                 const res = await fetch('/admin/downpayment-fee/pay', {
@@ -532,11 +540,11 @@
                         window.pushSystemNotification("Payment Logged", `₱${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} posted to ${bill.buyer}'s contract.`, "System");
                     }
                 } else {
-                    alert('Failed to save payment');
+                    Swal.fire('Failed to save payment');
                 }
             } catch (e) {
                 console.error(e);
-                alert('Error connecting to server');
+                Swal.fire('Error connecting to server');
             }
         }
 
@@ -649,6 +657,7 @@
             const tcp = parseFloat(tcpStr) || 0;
             const percent = parseFloat(inpPercent.value) || 0;
             const months = parseInt(inpMonths.value) || 1;
+            const penalty = parseFloat(document.getElementById('calcPenalty').value) || 0;
             const dpAmount = tcp * (percent / 100);
             const amortization = dpAmount / months;
 
@@ -656,7 +665,7 @@
             nextDate.setMonth(nextDate.getMonth() + 1);
 
             if (!buyerId) {
-                alert('Please select a buyer from the Master List.');
+                Swal.fire('Please select a buyer from the Master List.');
                 if (btn) {
                     btn.disabled = false;
                     btn.textContent = 'Save & Initialize Contract';
@@ -684,7 +693,8 @@
                         dpAmount: dpAmount,
                         nextDate: nextDate.toISOString(),
                         monthly_amortization: amortization,
-                        months_to_pay: months
+                        months_to_pay: months,
+                        penalty_percentage: penalty
                     })
                 });
 
@@ -692,7 +702,7 @@
                     window.location.reload();
                 } else {
                     const errorData = await res.json().catch(() => null);
-                    alert(errorData && errorData.message ? errorData.message : 'Failed to save contract to database');
+                    Swal.fire(errorData && errorData.message ? errorData.message : 'Failed to save contract to database');
                     if (btn) {
                         btn.disabled = false;
                         btn.textContent = 'Save & Initialize Contract';
@@ -701,7 +711,7 @@
                 }
             } catch (e) {
                 console.error(e);
-                alert('Error connecting to server');
+                Swal.fire('Error connecting to server');
                 if (btn) {
                     btn.disabled = false;
                     btn.textContent = 'Save & Initialize Contract';

@@ -11,7 +11,7 @@ class BuyerMasterList extends Model
     use HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'first_name', 'middle_name', 'last_name', 'civil_status', 'spouse_name',
+        'first_name', 'middle_name', 'last_name', 'email', 'civil_status', 'spouse_name',
         'present_address', 'postal_address', 'contact_number', 'proof_of_id', 'pagibig_number',
         'financing_method', // Newly added
         'block_no', 'lot_no', 'tct_no', 'pid', 'tax_dec_no', 'lot_area', 'floor_area', 'description',
@@ -20,7 +20,7 @@ class BuyerMasterList extends Model
         'retention', 'total_deductions'
     ];
     
-    public function reservations()
+    public function reservations(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(Reservation::class);
     }

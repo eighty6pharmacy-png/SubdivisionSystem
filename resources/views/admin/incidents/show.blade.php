@@ -56,7 +56,7 @@
                     <h3 style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--incident-text-sub); margin-bottom: 16px;">Admin Notes</h3>
                     <textarea style="width: 100%; min-height: 100px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; resize: vertical; font-family: inherit; color: var(--incident-text-main);" placeholder="Add internal notes about this incident (visible to admin only)..."></textarea>
                     <div style="display: flex; justify-content: flex-end; margin-top: 12px;">
-                        <button class="btn btn-primary" style="background: var(--incident-accent); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer;" onclick="alert('Notes saved.')">Save Notes</button>
+                        <button class="btn btn-primary" style="background: var(--incident-accent); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer;" onclick="Swal.fire('Notes saved.')">Save Notes</button>
                     </div>
                 </div>
             </div>
@@ -73,7 +73,7 @@
                         </select>
                     </div>
                     <div style="margin-top: 12px;">
-                        <button class="btn btn-primary" style="width: 100%; background: var(--incident-accent); color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;" onclick="alert('Status updated.')">Update Status</button>
+                        <button class="btn btn-primary" style="width: 100%; background: var(--incident-accent); color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;" onclick="Swal.fire('Status updated.')">Update Status</button>
                     </div>
                 </div>
 

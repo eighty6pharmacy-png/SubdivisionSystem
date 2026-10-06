@@ -32,5 +32,35 @@ class DatabaseSeeder extends Seeder
         );
 
         $user->assignRole($adminRole);
+
+        // Ensure Security Guard role exists
+        $guardRole = Role::firstOrCreate(['name' => 'Security Guard']);
+        
+        // Create Guard User
+        $guard = User::updateOrCreate(
+            ['email' => 'guard@althesa.com'],
+            [
+                'name' => 'Security Officer',
+                'password' => Hash::make('password123'),
+                'status' => 'Active',
+                'joined_at' => now(),
+            ]
+        );
+        $guard->assignRole($guardRole);
+
+        // Ensure Finance Officer role exists
+        $financeRole = Role::firstOrCreate(['name' => 'Finance Officer']);
+        
+        // Create Finance User
+        $finance = User::updateOrCreate(
+            ['email' => 'finance@althesa.com'],
+            [
+                'name' => 'Finance Department',
+                'password' => Hash::make('password123'),
+                'status' => 'Active',
+                'joined_at' => now(),
+            ]
+        );
+        $finance->assignRole($financeRole);
     }
 }

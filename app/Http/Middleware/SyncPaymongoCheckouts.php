@@ -38,7 +38,7 @@ class SyncPaymongoCheckouts
             try {
                 $response = \Illuminate\Support\Facades\Http::withHeaders([
                     'accept' => 'application/json',
-                    'authorization' => 'Basic ' . base64_encode(env('PAYMONGO_SECRET_KEY') . ':')
+                    'authorization' => 'Basic ' . base64_encode(config('services.paymongo.secret_key') . ':')
                 ])->get('https://api.paymongo.com/v1/checkout_sessions/' . $bill->paymongo_checkout_id);
                 
                 if ($response->successful()) {
@@ -95,7 +95,7 @@ class SyncPaymongoCheckouts
             try {
                 $response = \Illuminate\Support\Facades\Http::withHeaders([
                     'accept' => 'application/json',
-                    'authorization' => 'Basic ' . base64_encode(env('PAYMONGO_SECRET_KEY') . ':')
+                    'authorization' => 'Basic ' . base64_encode(config('services.paymongo.secret_key') . ':')
                 ])->get('https://api.paymongo.com/v1/checkout_sessions/' . $dp->paymongo_checkout_id);
 
                 if ($response->successful()) {
@@ -149,7 +149,7 @@ class SyncPaymongoCheckouts
             try {
                 $response = \Illuminate\Support\Facades\Http::withHeaders([
                     'accept' => 'application/json',
-                    'authorization' => 'Basic ' . base64_encode(env('PAYMONGO_SECRET_KEY') . ':')
+                    'authorization' => 'Basic ' . base64_encode(config('services.paymongo.secret_key') . ':')
                 ])->get('https://api.paymongo.com/v1/checkout_sessions/' . $fin->paymongo_checkout_id);
 
                 if ($response->successful()) {

@@ -42,15 +42,15 @@
 <div class="bill-container fade-in">
     <div class="bill-header">
         <div class="bill-title">
-            <h1>Financing & Loan Tracking</h1>
-            <p>Monitor Pag-IBIG loan releases, deductions, and buyer receivables.</p>
+            <h1>Loan & Additional Fees Tracking</h1>
+            <p>Monitor loan releases, deductions, and buyer receivables.</p>
         </div>
         <div class="bill-actions">
-            <a href="{{ route('financing.create') }}" class="pay-button" style="display: flex; align-items: center; gap: 8px; text-decoration: none;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M5 12h14" />
-                    <path d="M12 5v14" />
+            <a href="{{ route('financing.create') }}" class="btn btn-outline" style="border-color: var(--bill-primary); color: var(--bill-primary); display: inline-flex; align-items: center; text-decoration: none;">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+                    style="margin-right: 8px;">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 New Record
             </a>
@@ -155,7 +155,7 @@
                                 <span class="status-badge status-{{ strtolower($rec->status) }}">{{ $rec->status }}</span>
                             </td>
                             <td style="padding: 12px 24px; text-align: right;">
-                                <a href="{{ route('financing.show', $rec->id) }}" class="action-btn btn-view">Manage</a>
+                                <a href="{{ route('financing.show', $rec->id) }}" class="action-btn btn-view">Edit</a>
                             </td>
                         </tr>
                     @empty

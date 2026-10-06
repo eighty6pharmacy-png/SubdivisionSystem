@@ -30,7 +30,7 @@ class Lot extends Model
         return $this->belongsToMany(User::class, 'user_lots', 'lot_id', 'user_id')->withTimestamps();
     }
 
-    public function utilityBills()
+    public function utilityBills(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(UtilityBill::class, 'lot_id');
     }

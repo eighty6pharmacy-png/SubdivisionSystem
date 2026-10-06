@@ -10,6 +10,7 @@
     <script src="{{ asset('js/subdivision-store.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="{{ asset('css/views/layout-resident.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="admin-body">
 
@@ -194,17 +195,26 @@
         }
     }
 
-    function openLogoutModal() {
-        if (new URLSearchParams(window.location.search).get('action') !== 'logout') {
-            window.history.pushState(null, '', '?action=logout');
-        }
-        document.getElementById('logoutModal').style.display = 'flex';
+        function openLogoutModal() {
+        Swal.fire({
+            title: 'Log out?',
+            text: 'Are you sure you want to log out of your account? You will need to log in again to access the system.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#94a3b8',
+            confirmButtonText: 'Yes, Log out'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                if(window.OneSignal){
+                    OneSignal.logout().then(function(){document.getElementById('resident-logout-form').submit();});
+                }else{
+                    document.getElementById('resident-logout-form').submit();
+                }
+            }
+        });
     }
-
-    function closeLogoutModal() {
-        window.history.replaceState(null, '', window.location.pathname);
-        document.getElementById('logoutModal').style.display = 'none';
-    }
+    function closeLogoutModal() {}
 
     window.addEventListener('DOMContentLoaded', () => {
         if (new URLSearchParams(window.location.search).get('action') === 'logout') {

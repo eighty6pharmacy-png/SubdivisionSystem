@@ -7,9 +7,21 @@
 <link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
 <link rel="stylesheet" href="{{ asset('css/views/guard-dashboard.css') }}">
 
+<style>
+    .responsive-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+    }
+    @media (max-width: 768px) {
+        .responsive-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
 <div class="fade-in">
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+    <div class="responsive-grid">
 
         <!-- Left Column: PIN Scanner -->
         <div class="analytic-card" style="padding: 32px; display: flex; flex-direction: column; align-items: center;">
@@ -59,6 +71,8 @@
                     <tr>
                         <th>Visit ID</th>
                         <th>Visitor Name</th>
+                        <th>Address (Walk-in)</th>
+                        <th>Plate Number</th>
                         <th>Host Property</th>
                         <th>Purpose</th>
                         <th>Status</th>
@@ -75,6 +89,7 @@
 
 @section('scripts')
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
 <script src="{{ asset('js/dijkstra.js') }}"></script>
 <script src="{{ asset('js/gis-map.js') }}"></script>
 <script>
@@ -116,8 +131,18 @@
                     <td style="font-family: monospace; font-size: 12px; font-weight: 700; color: #64748b;">${pin.id}</td>
                     <td>
                         <div style="font-weight: 700; color: #0f172a;">${pin.visitor}</div>
-                        <div style="font-size: 11px; color: #94a3b8; margin-top: 4px; font-weight: 500;">
-                            ${pin.type === 'Walk-in' ? 'Address: ' + (pin.visitor_address || 'N/A') : 'Plate: ' + (pin.plate_number || 'N/A')}
+                        <div style="font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 4px; background: ${pin.type === 'Walk-in' ? '#eff6ff; color: #2563eb;' : '#f0fdf4; color: #16a34a;'}">
+                            ${pin.type || 'PIN Auth'}
+                        </div>
+                    </td>
+                    <td>
+                        <div style="font-size: 12px; color: #64748b; font-weight: 500;">
+                            ${pin.type === 'Walk-in' ? (pin.visitor_address || 'N/A') : 'N/A'}
+                        </div>
+                    </td>
+                    <td>
+                        <div style="font-family: monospace; font-weight: 700; background: #f8fafc; padding: 4px 8px; border: 1px solid #e2e8f0; border-radius: 4px; display: inline-block;">
+                            ${pin.plate_number || 'N/A'}
                         </div>
                     </td>
                     <td>
@@ -169,7 +194,7 @@
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
             },
-            body: JSON.stringify({ pin: pin })
+            body: JSON.stringify({ pin: pin, source: 'guard' })
         })
         .then(res => {
             if (!res.ok) throw new Error("Server Error");
@@ -196,19 +221,29 @@
                     visitor: data.visitor_name,
                     block: block,
                     lot: lot,
-                    host: host
+                    host: host,
+                    appointment_type: data.appointment_type,
+                    appointment_time: data.appointment_time
                 };
 
                 // Automatically mark as entered
-                fetch('/api/visitors/' + data.db_id + '/enter', {
+                let enterUrl = '/api/visitors/' + data.db_id + '/enter';
+                let bodyData = { plate_number: 'N/A' };
+                
+                if (data.is_appointment) {
+                    enterUrl = '/api/appointments/' + data.db_id + '/status';
+                    bodyData = { status: 'Completed', report: 'Arrived at Gate' };
+                }
+
+                fetch(enterUrl, {
                     method: 'PUT',
                     headers: { 
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
                     },
-                    body: JSON.stringify({ plate_number: 'N/A' })
+                    body: JSON.stringify(bodyData)
                 }).then(() => {
-                    renderSuccess(record, 'Visitor');
+                    renderSuccess(record, data.is_appointment ? 'Appointment' : 'Visitor');
                     loadDailyLog(); // Refresh table immediately
                 });
             } else {
@@ -251,18 +286,37 @@
             </div>
 
             <div style="padding: 24px; width: 100%;">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div class="responsive-grid" style="margin-bottom: 20px;">
                     <div>
                         <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">${type === 'Resident' ? 'Resident Name' : 'Visitor'}</div>
                         <div style="font-size: 18px; font-weight: 800; color: #0f172a;">${record.visitor}</div>
                     </div>
                     <div style="background: var(--guard-primary-soft); padding: 12px; border-radius: 12px; border: 1px solid #dbeafe;">
                         <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Destination</div>
-                        <div style="font-size: 13px; font-weight: 800; color: #1e3a8a;">Blk ${record.block} Lot ${record.lot}</div>
+                        <div style="font-size: 13px; font-weight: 800; color: #1e3a8a;">${record.block !== 'N/A' ? 'Blk ' + record.block + ' Lot ' + record.lot : record.host}</div>
                     </div>
                 </div>
 
-                <div id="guardMapContainer" style="width: 100%; height: 250px; border-radius: 12px; margin-bottom: 20px; background: #f1f5f9; overflow: hidden; border: 1px solid #cbd5e1;"></div>
+                <div id="mapWrapper" style="display: ${type === 'Appointment' ? 'none' : 'block'}; position: relative; margin-bottom: 20px;">
+                    <div id="guardMapContainer" style="width: 100%; height: 250px; border-radius: 12px; background: #f1f5f9; overflow: hidden; border: 1px solid #cbd5e1; z-index: 1;"></div>
+                    <button onclick="toggleFullScreenMap()" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: white; border: none; padding: 8px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                    </button>
+                </div>
+
+                <div id="appointmentWrapper" style="display: ${type === 'Appointment' ? 'block' : 'none'}; background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
+                    <div style="font-size: 14px; font-weight: 700; color: #334155; margin-bottom: 12px;">Appointment Details</div>
+                    <div class="responsive-grid" style="gap: 12px;">
+                        <div>
+                            <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Type</span>
+                            <div style="font-size: 13px; font-weight: 600; color: #0f172a;">${record.appointment_type || 'General'}</div>
+                        </div>
+                        <div>
+                            <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Time</span>
+                            <div style="font-size: 13px; font-weight: 600; color: #0f172a;">${record.appointment_time || 'N/A'}</div>
+                        </div>
+                    </div>
+                </div>
 
                 <div style="margin-bottom: 20px;">
                     <label style="font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; display: block; margin-bottom: 8px;">Vehicle Plate Number (Optional)</label>
@@ -279,13 +333,66 @@
         `;
 
         setTimeout(() => {
-            initGISMap('guardMapContainer', {
-                interactive: true,
-                showRouting: true,
-                endNode: record.block !== 'N/A' && record.lot !== 'N/A' ? `B${record.block} L${record.lot}` : null
-            });
+            if (type !== 'Appointment') {
+                initGISMap('guardMapContainer', {
+                    interactive: true,
+                    showRouting: true,
+                    endNode: record.block !== 'N/A' && record.lot !== 'N/A' ? `B${record.block} L${record.lot}` : null
+                });
+            }
         }, 100);
     }
+
+    function toggleFullScreenMap() {
+        const wrapper = document.getElementById('mapWrapper');
+        if (!document.fullscreenElement) {
+            if (wrapper.requestFullscreen) {
+                wrapper.requestFullscreen();
+            } else if (wrapper.webkitRequestFullscreen) { /* Safari */
+                wrapper.webkitRequestFullscreen();
+            } else if (wrapper.msRequestFullscreen) { /* IE11 */
+                wrapper.msRequestFullscreen();
+            }
+            
+            const container = document.getElementById('guardMapContainer');
+            container.style.height = '100vh';
+            container.style.borderRadius = '0';
+            container.style.border = 'none';
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) { /* Safari */
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) { /* IE11 */
+                document.msExitFullscreen();
+            }
+            
+            const container = document.getElementById('guardMapContainer');
+            container.style.height = '250px';
+            container.style.borderRadius = '12px';
+            container.style.border = '1px solid #cbd5e1';
+        }
+        
+        // Let leaflet recalculate its size
+        setTimeout(() => {
+            window.dispatchEvent(new Event('resize'));
+        }, 200);
+    }
+    
+    document.addEventListener('fullscreenchange', () => {
+        const container = document.getElementById('guardMapContainer');
+        if (container) {
+            if (!document.fullscreenElement) {
+                container.style.height = '250px';
+                container.style.borderRadius = '12px';
+                container.style.border = '1px solid #cbd5e1';
+            } else {
+                container.style.height = '100vh';
+                container.style.borderRadius = '0';
+                container.style.border = 'none';
+            }
+        }
+    });
 
     function updatePlate(id) {
         const plate = document.getElementById('plateNo')?.value || 'N/A';
@@ -298,7 +405,7 @@
             body: JSON.stringify({ plate_number: plate })
         }).then(res => res.json()).then(data => {
             if (data.success) {
-                alert('Plate number updated!');
+                Swal.fire('Plate number updated!');
             }
         });
     }
@@ -340,10 +447,10 @@
             })
         }).then(res => res.json()).then(response => {
             if(response.success) {
-                alert(`Walk-in recorded for ${data.name}.`);
+                Swal.fire(`Walk-in recorded for ${data.name}.`);
                 location.reload();
             } else {
-                alert('Failed to record walk-in.');
+                Swal.fire('Failed to record walk-in.');
             }
         });
     }

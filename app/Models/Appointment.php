@@ -12,7 +12,9 @@ class Appointment extends Model
     use HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'client_name',
+        'first_name',
+        'middle_name',
+        'last_name',
         'contact_number',
         'email',
         'type',
@@ -21,6 +23,7 @@ class Appointment extends Model
         'notes',
         'report',
         'status',
+        'pin',
     ];
 
     protected function casts(): array
@@ -28,5 +31,11 @@ class Appointment extends Model
         return [
             'date' => 'date',
         ];
+    }
+
+    public function getClientNameAttribute()
+    {
+        $parts = array_filter([$this->first_name, $this->middle_name, $this->last_name]);
+        return implode(' ', $parts);
     }
 }

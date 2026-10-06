@@ -32,8 +32,8 @@ class SmsHelper
      */
     public static function sendSms($contactNumber, $message)
     {
-        $apiKey = env('TEXTBEE_API_KEY');
-        $deviceId = env('TEXTBEE_DEVICE_ID');
+        $apiKey = config('services.textbee.api_key');
+        $deviceId = config('services.textbee.device_id');
 
         if (empty($apiKey) || empty($deviceId) || $apiKey === 'your_textbee_api_key_here') {
             Log::warning('TextBee API Key or Device ID not configured. SMS not sent.');

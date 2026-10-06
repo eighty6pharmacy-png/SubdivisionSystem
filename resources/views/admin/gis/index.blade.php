@@ -478,8 +478,8 @@
             } else {
                 if (btnUpdate) btnUpdate.style.display = 'flex';
                 if (lockedMsg) lockedMsg.style.display = 'none';
-                if (btnEdit) btnEdit.onclick = () => alert('No resident assigned to this lot.');
-                if (btnProfile) btnProfile.onclick = () => alert('No resident assigned to this lot.');
+                if (btnEdit) btnEdit.onclick = () => Swal.fire('No resident assigned to this lot.');
+                if (btnProfile) btnProfile.onclick = () => Swal.fire('No resident assigned to this lot.');
             }
             if (btnUpdate) {
                 btnUpdate.onclick = () => {
@@ -578,11 +578,11 @@
                     
                     document.getElementById('occupancyUpdateModal').style.display = 'none';
                 } else {
-                    alert('Failed to update occupancy status.');
+                    Swal.fire('Failed to update occupancy status.');
                 }
             } catch (e) {
                 console.error(e);
-                alert('An error occurred.');
+                Swal.fire('An error occurred.');
             } finally {
                 // Reset UI
                 btnSave.disabled = false;

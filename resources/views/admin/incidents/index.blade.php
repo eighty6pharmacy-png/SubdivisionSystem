@@ -518,11 +518,11 @@
             if (result.success) {
                 window.location.reload(); // Reload to fetch fresh data from DB
             } else {
-                alert('Failed to update status.');
+                Swal.fire('Failed to update status.');
             }
         } catch (error) {
             console.error(error);
-            alert('An error occurred.');
+            Swal.fire('An error occurred.');
         }
     }
 

@@ -82,8 +82,7 @@
 <div class="bill-container fade-in">
     <div class="bill-header">
         <div class="bill-title">
-            <h1>Financing Dashboard - {{ $record->buyerMasterList->first_name ?? '' }} {{ $record->buyerMasterList->last_name ?? 'Buyer' }}</h1>
-            <p>Update loan details, deductions, and track shortfall payments.</p>
+            <h1>Loan & Additional Fees Dashboard - {{ $record->buyerMasterList->first_name ?? '' }} {{ $record->buyerMasterList->last_name ?? 'Buyer' }}</h1>
         </div>
         <div class="bill-actions">
             <a href="{{ route('financing.index') }}" class="pay-button" style="background: #e2e8f0; color: #475569; text-decoration: none;">Back</a>
@@ -110,11 +109,12 @@
                     
                     <div class="responsive-grid grid-2" style="gap: 24px;">
                         <div>
-                            <h4 style="font-size: 14px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">Base Information</h4>
+                            <h4 style="font-size: 14px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">Base Information & Add-ons</h4>
                             <div class="form-group"><label>Contract Price</label><input type="number" step="0.01" name="contract_price" class="form-control" value="{{ $record->contract_price }}"></div>
                             <div class="form-group"><label>MBRDC Add. Fees</label><input type="number" step="0.01" name="mbrdc_add_fees" class="form-control" value="{{ $record->mbrdc_add_fees }}"></div>
                             <div class="form-group"><label>Other Exp (Annotation/DA/SPA)</label><input type="number" step="0.01" name="other_exp_annotation" class="form-control" value="{{ $record->other_exp_annotation }}"></div>
-                            <div class="form-group"><label>Gross Loan Released (by Pag-IBIG)</label><input type="number" step="0.01" name="pag_ibig_loan_release" class="form-control" style="border-color: #3b82f6;" value="{{ $record->pag_ibig_loan_release }}"></div>
+                            <div class="form-group"><label>Improvements Fee</label><input type="number" step="0.01" name="improvements_fee" class="form-control" value="{{ $record->improvements_fee }}"></div>
+                            <div class="form-group"><label>Turn Over Fees</label><input type="number" step="0.01" name="mbrdc_turn_over_fee" class="form-control" value="{{ $record->mbrdc_turn_over_fee }}"></div>
                             <div class="form-group">
                                 <label>Status</label>
                                 <select name="status" class="form-control">
@@ -127,12 +127,14 @@
                         </div>
                         
                         <div>
-                            <h4 style="font-size: 14px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">Pag-IBIG Deductions</h4>
-                            <div class="form-group"><label>SRI/MRI</label><input type="number" step="0.01" name="pag_ibig_sri_mri" class="form-control" style="color: #dc2626;" value="{{ $record->pag_ibig_sri_mri }}"></div>
-                            <div class="form-group"><label>Non-Life Ins. (Fire)</label><input type="number" step="0.01" name="pag_ibig_non_life_ins" class="form-control" style="color: #dc2626;" value="{{ $record->pag_ibig_non_life_ins }}"></div>
-                            <div class="form-group"><label>Interim MRI</label><input type="number" step="0.01" name="pag_ibig_interim_mri" class="form-control" style="color: #dc2626;" value="{{ $record->pag_ibig_interim_mri }}"></div>
-                            <div class="form-group"><label>Inspection/Processing Fee</label><input type="number" step="0.01" name="pag_ibig_inspection_fee" class="form-control" style="color: #dc2626;" value="{{ $record->pag_ibig_inspection_fee }}"></div>
-                            <div class="form-group"><label>Retention/Conversion</label><input type="number" step="0.01" name="pag_ibig_retention" class="form-control" style="color: #dc2626;" value="{{ $record->pag_ibig_retention }}"></div>
+                            <div style="font-size: 14px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">&nbsp;</div>
+                            <div class="form-group"><label>Gross Loan Released</label><input type="number" step="0.01" name="loan_release" class="form-control" style="border-color: #3b82f6;" value="{{ $record->loan_release }}"></div>
+                            <div class="form-group"><label>Inspection/Processing Fee</label><input type="number" step="0.01" name="inspection_fee" class="form-control" style="color: #dc2626;" value="{{ $record->inspection_fee }}"></div>
+                            <div class="form-group"><label>Retention/Conversion</label><input type="number" step="0.01" name="retention_fee" class="form-control" style="color: #dc2626;" value="{{ $record->retention_fee }}"></div>
+                            <div class="form-group"><label>SRI/MRI</label><input type="number" step="0.01" name="sri_mri" class="form-control" style="color: #dc2626;" value="{{ $record->sri_mri }}"></div>
+                            <div class="form-group"><label>Pag-Ibig Non Life</label><input type="number" step="0.01" name="pag_ibig_non_life" class="form-control" style="color: #dc2626;" value="{{ $record->pag_ibig_non_life }}"></div>
+                            <div class="form-group"><label>Interim MRI</label><input type="number" step="0.01" name="interim_mri" class="form-control" style="color: #dc2626;" value="{{ $record->interim_mri }}"></div>
+                            <div class="form-group"><label>Net Loan Proceeds</label><input type="number" step="0.01" name="net_loan_proceeds" class="form-control" style="background-color: #f1f5f9; font-weight: bold; color: #059669;" value="{{ $record->net_loan_proceeds }}" readonly title="Auto-calculated (Gross Loan - Total Deductions)"></div>
                         </div>
                     </div>
                     <div style="margin-top: 24px; text-align: right; border-top: 1px solid #e2e8f0; padding-top: 16px;">
@@ -146,7 +148,7 @@
             <!-- Math Summary -->
             <div class="card-section">
                 <div class="card-section-header" style="background: #0f172a; color: #fff;">
-                    The Math (Auto)
+                    &nbsp;
                 </div>
                 <div class="card-section-body" style="background: #f8fafc;">
                     <div class="list-item">
@@ -162,16 +164,16 @@
                         <strong style="color:#0f172a;">₱{{ number_format($record->mbrdc_amt_due_for_financing, 2) }}</strong>
                     </div>
                     <div class="list-item" style="margin-top: 12px;">
-                        <span style="color:#64748b;">Pag-IBIG Gross Release</span>
-                        <span style="font-weight:700; color:#3b82f6;">₱{{ number_format($record->pag_ibig_loan_release, 2) }}</span>
+                        <span style="color:#64748b;">Gross Loan Release</span>
+                        <span style="font-weight:700; color:#3b82f6;">₱{{ number_format($record->loan_release, 2) }}</span>
                     </div>
                     <div class="list-item">
-                        <span style="color:#64748b;">Total Pag-IBIG Deductions</span>
+                        <span style="color:#64748b;">Total Loan Deductions</span>
                         <span style="font-weight:700; color:#dc2626;">- ₱{{ number_format($record->total_amt_due, 2) }}</span>
                     </div>
                     <div class="list-item" style="background: #dcfce7; margin: 0 -24px -24px -24px; padding: 16px 24px; border-radius: 0 0 16px 16px;">
-                        <strong style="color:#065f46;">Net Proceeds (Dev Gets)</strong>
-                        <strong style="color:#059669; font-size: 16px;">₱{{ number_format($record->pag_ibig_loan_net_proceeds, 2) }}</strong>
+                        <strong style="color:#065f46;">Net Loan Proceeds (Dev Gets)</strong>
+                        <strong style="color:#059669; font-size: 16px;">₱{{ number_format($record->net_loan_proceeds, 2) }}</strong>
                     </div>
                 </div>
             </div>
@@ -179,10 +181,10 @@
             <!-- Shortfall / Receivables -->
             <div class="card-section" style="border-color: #fca5a5;">
                 <div class="card-section-header" style="background: #fef2f2; color: #991b1b; border-color: #fca5a5;">
-                    Shortfall Receivables
+                    Receivables
                 </div>
                 <div class="card-section-body" style="text-align: center;">
-                    <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 4px;">Total Shortfall Owed to Developer</div>
+                    <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 4px;">Total Owed to Developer</div>
                     <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-bottom: 16px;">₱{{ number_format($record->receivables, 2) }}</div>
                     
                     <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 4px;">Remaining Balance</div>

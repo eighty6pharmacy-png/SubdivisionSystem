@@ -18,9 +18,19 @@
             </div>
 
             <form id="appointmentForm" onsubmit="handleAppointmentSubmit(event)">
-                <div class="form-group">
-                    <label class="form-label" for="fullName">Full Name</label>
-                    <input type="text" class="form-input" id="fullName" placeholder="e.g. Juan Dela Cruz" required>
+                <div class="form-row" style="display: flex; gap: 12px; flex-wrap: nowrap; margin-bottom: 16px;">
+                    <div class="form-group" style="flex: 1; min-width: 0; margin-bottom: 0;">
+                        <label class="form-label" for="firstName">First Name</label>
+                        <input type="text" class="form-input" id="firstName" placeholder="e.g. Juan" required>
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 0; margin-bottom: 0;">
+                        <label class="form-label" for="middleName">Middle Name</label>
+                        <input type="text" class="form-input" id="middleName" placeholder="e.g. Santos">
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 0; margin-bottom: 0;">
+                        <label class="form-label" for="lastName">Last Name</label>
+                        <input type="text" class="form-input" id="lastName" placeholder="e.g. Dela Cruz" required>
+                    </div>
                 </div>
 
                 <div class="form-row">
@@ -32,16 +42,6 @@
                         <label class="form-label" for="contact">Contact / Mobile Number</label>
                         <input type="tel" class="form-input" id="contact" placeholder="+63 9XX XXX XXXX" required>
                     </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label" for="inquiryType">Inquiry Type</label>
-                    <select class="form-input" id="inquiryType" required>
-                        <option value="Site Visit / Lot Viewing" selected>Site Visit / Lot Viewing</option>
-                        <option value="Architectural Consultation">Architectural Consultation</option>
-                        <option value="Price Negotiation">Price Negotiation</option>
-                        <option value="General Inquiry">General Inquiry</option>
-                    </select>
                 </div>
 
                 <div class="form-row">
@@ -114,7 +114,7 @@
                         const dateRaw = instance.formatDate(selectedDates[0], "Y-m-d");
                         
                         if (blackouts.includes(dateRaw) || blackouts.includes(formattedDate)) {
-                            alert("This date is unavailable. Please select another date.");
+                            Swal.fire("This date is unavailable. Please select another date.");
                             instance.clear();
                             resetTimeDropdown();
                         } else {
@@ -160,11 +160,16 @@
                 
                 document.getElementById('appointmentForm').addEventListener('submit', function(e) {
                     e.preventDefault();
+
+                    const submitBtn = this.querySelector('button[type="submit"]');
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = 'Submitting...';
                     
-                    const fullName = document.getElementById('fullName').value;
+                    const firstName = document.getElementById('firstName').value;
+                    const middleName = document.getElementById('middleName').value;
+                    const lastName = document.getElementById('lastName').value;
                     const email = document.getElementById('email').value;
                     const contact = document.getElementById('contact').value;
-                    const inquiryType = document.getElementById('inquiryType').value;
                     const selectedDate = document.getElementById('date').value;
                     const selectedTime = document.getElementById('time').value;
 
@@ -176,12 +181,14 @@
                             'X-CSRF-TOKEN': '{{ csrf_token() }}'
                         },
                         body: JSON.stringify({
-                            client_name: fullName,
+                            first_name: firstName,
+                            middle_name: middleName,
+                            last_name: lastName,
                             contact_number: contact,
                             email: email,
                             date: selectedDate,
                             time: selectedTime,
-                            type: inquiryType,
+                            type: 'Site Visit / Lot Viewing',
                             notes: ''
                         })
                     }).then(() => {
@@ -194,17 +201,24 @@
                             },
                             body: JSON.stringify({
                                 email: email,
-                                name: fullName,
+                                name: firstName + ' ' + (middleName ? middleName + ' ' : '') + lastName,
                                 date: selectedDate,
                                 time: selectedTime,
-                                type: inquiryType,
+                                type: 'Site Visit / Lot Viewing',
                                 notes: ''
                             })
                         }).catch(err => console.error("Email dispatch error:", err));
 
                         document.getElementById('appointmentForm').style.display = 'none';
                         document.getElementById('appointmentSuccess').style.display = 'block';
-                    }).catch(err => console.error("Database save error:", err));
+                    }).catch(err => {
+                        console.error("Database save error:", err);
+                        const submitBtn = document.getElementById('appointmentForm').querySelector('button[type="submit"]');
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = 'Confirm Appointment';
+                        }
+                    });
                 });
             })
             .catch(err => console.error('Failed to load availability', err));

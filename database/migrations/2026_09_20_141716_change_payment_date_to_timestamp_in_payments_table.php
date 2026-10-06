@@ -11,7 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        \Illuminate\Support\Facades\DB::statement('ALTER TABLE payments ALTER COLUMN payment_date TYPE timestamp USING payment_date::timestamp');
+        if (\Illuminate\Support\Facades\DB::getDriverName() === 'pgsql') {
+            \Illuminate\Support\Facades\DB::statement('ALTER TABLE payments ALTER COLUMN payment_date TYPE timestamp USING payment_date::timestamp');
+        }
     }
 
     /**
@@ -19,6 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        \Illuminate\Support\Facades\DB::statement('ALTER TABLE payments ALTER COLUMN payment_date TYPE date USING payment_date::date');
+        if (\Illuminate\Support\Facades\DB::getDriverName() === 'pgsql') {
+            \Illuminate\Support\Facades\DB::statement('ALTER TABLE payments ALTER COLUMN payment_date TYPE date USING payment_date::date');
+        }
     }
 };

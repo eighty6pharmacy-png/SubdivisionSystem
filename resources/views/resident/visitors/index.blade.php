@@ -172,9 +172,9 @@
                     window.pushSystemNotification("Request Submitted", `Visitor request for ${name} sent to Admin for approval.`, "Just now", true);
                 }
 
-                alert(`✓ VISITOR ACCESS REQUEST SUBMITTED!\n\nYour request for ${name} has been routed to Subdivision Admin for approval.\nOnce approved, your 6-digit verification code will be generated and forwarded to the security guard.`);
+                Swal.fire(`✓ VISITOR ACCESS REQUEST SUBMITTED!\n\nYour request for ${name} has been routed to Subdivision Admin for approval.\nOnce approved, your 6-digit verification code will be generated and forwarded to the security guard.`);
             } else {
-                alert('Failed to submit request.');
+                Swal.fire('Failed to submit request.');
             }
         });
     }

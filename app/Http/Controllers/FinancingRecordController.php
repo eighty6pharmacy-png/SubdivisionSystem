@@ -95,23 +95,24 @@ class FinancingRecordController extends Controller
         $contractPrice = $data['contract_price'] ?? $record->contract_price;
         $mbrdcAddFees = $data['mbrdc_add_fees'] ?? $record->mbrdc_add_fees;
         $otherExp = $data['other_exp_annotation'] ?? $record->other_exp_annotation;
+        $improvementsFee = $data['improvements_fee'] ?? $record->improvements_fee;
         
-        $data['total_consideration'] = $contractPrice + $mbrdcAddFees + $otherExp;
+        $data['total_consideration'] = $contractPrice + $mbrdcAddFees + $otherExp + $improvementsFee;
         $data['mbrdc_amt_due_for_financing'] = $data['total_consideration'] - $record->paid_by_vendee_equity;
 
         // Auto Calculate Totals
         $totalDeductions = 
-            ($data['pag_ibig_sri_mri'] ?? 0) + 
-            ($data['pag_ibig_non_life_ins'] ?? 0) + 
-            ($data['pag_ibig_interim_mri'] ?? 0) + 
-            ($data['pag_ibig_inspection_fee'] ?? 0) + 
-            ($data['pag_ibig_retention'] ?? 0);
+            ($data['inspection_fee'] ?? 0) + 
+            ($data['retention_fee'] ?? 0) +
+            ($data['sri_mri'] ?? 0) +
+            ($data['pag_ibig_non_life'] ?? 0) +
+            ($data['interim_mri'] ?? 0);
             
         $data['total_amt_due'] = $totalDeductions;
         
-        if (isset($data['pag_ibig_loan_release'])) {
-            $data['pag_ibig_loan_net_proceeds'] = $data['pag_ibig_loan_release'] - $totalDeductions;
-            $data['receivables'] = $data['mbrdc_amt_due_for_financing'] - $data['pag_ibig_loan_net_proceeds'] + ($data['additional_bill_of_materials'] ?? 0) + ($data['mbrdc_turn_over_fee'] ?? 0);
+        if (isset($data['loan_release'])) {
+            $data['net_loan_proceeds'] = $data['loan_release'] - $totalDeductions;
+            $data['receivables'] = $data['mbrdc_amt_due_for_financing'] - $data['net_loan_proceeds'] + ($data['additional_bill_of_materials'] ?? 0) + ($data['mbrdc_turn_over_fee'] ?? 0);
             $data['balance'] = max(0, $data['receivables'] - $record->amount_paid);
         }
 

@@ -143,9 +143,42 @@
         filterRows(); // initial filter
 
         document.getElementById('exportPdfBtn').addEventListener('click', function() {
-            document.body.setAttribute('data-print-date', dateFilter.value || new Date().toISOString().split('T')[0]);
-            window.print();
+            const doc = new jsPDF('landscape');
+            
+            const dateStr = dateFilter.value || new Date().toISOString().split('T')[0];
+            
+            // Add a clean header title
+            doc.setFontSize(16);
+            doc.text("Visitor History Log - " + dateStr, 14, 15);
+            
+            // Extract table data manually to ensure it's not blank
+            const headers = [['Timestamp', 'Type', 'Visitor', 'Purpose', 'Home Address', 'Vehicle / Plate', 'Destination', 'Status']];
+            const data = [];
+            
+            document.querySelectorAll('.visitor-row').forEach(row => {
+                if (row.style.display !== 'none') {
+                    const rowData = [];
+                    row.querySelectorAll('td').forEach(td => {
+                        rowData.push(td.innerText.trim().replace(/\n/g, ' - '));
+                    });
+                    data.push(rowData);
+                }
+            });
+            
+            // Generate professional text-based table
+            doc.autoTable({
+                head: headers,
+                body: data,
+                startY: 25,
+                theme: 'grid',
+                headStyles: { fillColor: [5, 150, 105] }, // Match brand green
+                styles: { fontSize: 9, cellPadding: 3 }
+            });
+            
+            doc.save('Visitor-Log-' + dateStr + '.pdf');
         });
     });
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/1.5.3/jspdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.6/jspdf.plugin.autotable.min.js"></script>
 @endsection

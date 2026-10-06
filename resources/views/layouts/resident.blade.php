@@ -10,6 +10,23 @@
     <script src="{{ asset('js/subdivision-store.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="{{ asset('css/views/layout-resident.css') }}">
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.init({
+          appId: "{{ config('services.onesignal.app_id') }}",
+          allowLocalhostAsSecureOrigin: true,
+        });
+        
+        OneSignal.Slidedown.promptPush();
+
+        @if(auth()->check())
+            OneSignal.login("{{ auth()->user()->id }}");
+        @endif
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="admin-body">
 
@@ -87,7 +104,7 @@
             <p style="font-size: 14px; color: #64748b; line-height: 1.6; margin-bottom: 32px;">Are you sure you want to log out? Any unsaved changes in your profile or reports may be lost.</p>
             <div style="display: flex; gap: 12px;">
                 <button class="btn btn-outline" style="flex: 1; justify-content: center; padding: 14px;" onclick="closeLogoutModal()">Cancel</button>
-                <a href="#" onclick="document.getElementById('resident-logout-form').submit(); return false;" class="btn btn-primary" style="flex: 1; justify-content: center; padding: 14px; background: #ef4444; border-color: #ef4444; text-decoration: none;">Yes, Log Out</a>
+                <a href="#" onclick="if(window.OneSignal){OneSignal.logout().then(function(){document.getElementById('resident-logout-form').submit();});}else{document.getElementById('resident-logout-form').submit();} return false;" class="btn btn-primary" style="flex: 1; justify-content: center; padding: 14px; background: #ef4444; border-color: #ef4444; text-decoration: none;">Yes, Log Out</a>
                 <form id="resident-logout-form" action="/logout" method="POST" style="display: none;">
                     @csrf
                 </form>
@@ -105,10 +122,13 @@
                 <div class="topbar-title">@yield('title', 'Welcome')</div>
             </div>
             <div class="topbar-actions" style="display: flex; align-items: center; gap: 16px;">
+                
                 <!-- Notification Bell -->
                 <div style="position: relative; cursor: pointer; padding: 4px;" onclick="window.location.href='/resident/notifications'" title="View Notifications">
                     <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color: #64748b;"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                    <div style="position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; background: #ef4444; border: 2px solid #fff; border-radius: 50%;"></div>
+                    @if(\Illuminate\Support\Facades\Auth::user()->unreadNotifications->count() > 0)
+                        <div style="position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; background: #ef4444; border: 2px solid #fff; border-radius: 50%;"></div>
+                    @endif
                 </div>
 
                 <div id="resLotBadge" style="background: var(--res-primary-soft); color: var(--res-primary); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;">
@@ -222,17 +242,26 @@
         }
     }
 
-    function openLogoutModal() {
-        if (new URLSearchParams(window.location.search).get('action') !== 'logout') {
-            window.history.pushState(null, '', '?action=logout');
-        }
-        document.getElementById('logoutModal').style.display = 'flex';
+        function openLogoutModal() {
+        Swal.fire({
+            title: 'Log out?',
+            text: 'Are you sure you want to log out of your account? You will need to log in again to access the system.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#94a3b8',
+            confirmButtonText: 'Yes, Log out'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                if(window.OneSignal){
+                    OneSignal.logout().then(function(){document.getElementById('resident-logout-form').submit();});
+                }else{
+                    document.getElementById('resident-logout-form').submit();
+                }
+            }
+        });
     }
-
-    function closeLogoutModal() {
-        window.history.replaceState(null, '', window.location.pathname);
-        document.getElementById('logoutModal').style.display = 'none';
-    }
+    function closeLogoutModal() {}
 
     window.addEventListener('DOMContentLoaded', () => {
         if (new URLSearchParams(window.location.search).get('action') === 'logout') {

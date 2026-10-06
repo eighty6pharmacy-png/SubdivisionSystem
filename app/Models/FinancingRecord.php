@@ -17,12 +17,12 @@ class FinancingRecord extends Model
         'loan_release_date' => 'date',
     ];
 
-    public function buyerMasterList()
+    public function buyerMasterList(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(BuyerMasterList::class, 'buyer_master_list_id');
     }
 
-    public function lot()
+    public function lot(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Lot::class, 'lot_id');
     }

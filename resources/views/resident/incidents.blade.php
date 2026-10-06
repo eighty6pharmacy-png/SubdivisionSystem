@@ -170,15 +170,8 @@
 
             <div style="margin-bottom: 24px;">
                 <h4 style="font-size: 12px; text-transform: uppercase; color: #94a3b8; margin-bottom: 12px;">Timeline & Updates</h4>
-                <div style="display: flex; flex-direction: column; gap: 16px;">
-                    <div style="display: flex; gap: 12px;">
-                        <div style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; margin-top: 6px; flex-shrink: 0;"></div>
-                        <div>
-                            <div style="font-size: 13px; font-weight: 700; color: #1e293b;">Report Received</div>
-                            <div style="font-size: 12px; color: #64748b;">Administrative review is in progress.</div>
-                            <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Just Now</div>
-                        </div>
-                    </div>
+                <div id="detTimelineContainer" style="display: flex; flex-direction: column; gap: 16px;">
+                    <!-- JS injected timeline -->
                 </div>
             </div>
 
@@ -214,6 +207,7 @@
             sub: inc.subject,
             type: inc.type,
             date: inc.created_at,
+            updated: inc.updated_at,
             desc: inc.description,
             status: inc.status.toLowerCase(),
             photos: parsedPhotos
@@ -304,13 +298,13 @@
         
         for (let i = 0; i < input.files.length; i++) {
             if (uploadedPhotosBase64.length >= MAX_PHOTOS) {
-                alert(`You can only upload a maximum of ${MAX_PHOTOS} photos.`);
+                Swal.fire(`You can only upload a maximum of ${MAX_PHOTOS} photos.`);
                 break;
             }
             
             const file = input.files[i];
             if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-                alert(`File ${file.name} exceeds the ${MAX_SIZE_MB}MB limit.`);
+                Swal.fire(`File ${file.name} exceeds the ${MAX_SIZE_MB}MB limit.`);
                 continue;
             }
             
@@ -360,9 +354,9 @@
         const type = document.getElementById('reportType').value;
         const desc = document.getElementById('reportDesc').value.trim();
 
-        if (!type) { alert('Please select a category.'); return; }
-        if (!subject) { alert('Please enter a subject.'); return; }
-        if (!desc) { alert('Please enter a description.'); return; }
+        if (!type) { Swal.fire('Please select a category.'); return; }
+        if (!subject) { Swal.fire('Please enter a subject.'); return; }
+        if (!desc) { Swal.fire('Please enter a description.'); return; }
 
         isSubmittingReport = true;
         const submitBtn = document.querySelector('#formStep1 .btn-primary');
@@ -393,7 +387,7 @@
                 document.getElementById('formSuccess').style.display = 'block';
                 document.getElementById('modalFooter').innerHTML = '<button class="btn btn-primary" onclick="window.location.reload()" style="background: var(--res-primary); border-color: var(--res-primary); width: 100%; justify-content: center;">Done</button>';
             } else {
-                alert('Failed to submit report.');
+                Swal.fire('Failed to submit report.');
                 if (submitBtn) {
                     submitBtn.disabled = false;
                     submitBtn.textContent = 'Submit Report';
@@ -403,7 +397,7 @@
             }
         } catch (error) {
             console.error(error);
-            alert('An error occurred.');
+            Swal.fire('An error occurred.');
             if (submitBtn) {
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Submit Report';
@@ -444,6 +438,40 @@
         } else {
             photoWrapper.style.display = 'none';
         }
+        
+        const timelineContainer = document.getElementById('detTimelineContainer');
+        let timelineHtml = '';
+        
+        // Always show created
+        timelineHtml += `
+            <div style="display: flex; gap: 12px;">
+                <div style="width: 8px; height: 8px; background: #3b82f6; border-radius: 50%; margin-top: 6px; flex-shrink: 0;"></div>
+                <div>
+                    <div style="font-size: 13px; font-weight: 700; color: #1e293b;">Report Submitted</div>
+                    <div style="font-size: 12px; color: #64748b;">Your incident report was received by the system.</div>
+                    <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">${inc.date ? new Date(inc.date).toLocaleString('en-US', {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'}) : 'Unknown Date'}</div>
+                </div>
+            </div>
+        `;
+
+        if (statusClass !== 'pending') {
+            let color = statusClass === 'resolved' ? '#10b981' : '#f59e0b';
+            let title = statusClass === 'resolved' ? 'Issue Resolved' : 'Status Updated';
+            let desc = statusClass === 'resolved' ? 'The admin has marked this incident as resolved.' : 'The administrative review updated the status.';
+            
+            timelineHtml += `
+                <div style="display: flex; gap: 12px;">
+                    <div style="width: 8px; height: 8px; background: ${color}; border-radius: 50%; margin-top: 6px; flex-shrink: 0;"></div>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 700; color: #1e293b;">${title}</div>
+                        <div style="font-size: 12px; color: #64748b;">${desc}</div>
+                        <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">${inc.updated ? new Date(inc.updated).toLocaleString('en-US', {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'}) : 'Unknown Date'}</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        timelineContainer.innerHTML = timelineHtml;
         
         document.getElementById('detailsModal').style.display = 'flex';
     }

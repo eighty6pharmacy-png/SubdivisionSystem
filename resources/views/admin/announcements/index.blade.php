@@ -13,7 +13,7 @@
             <p>Broadcast important news, updates, and emergency alerts to residents.</p>
         </div>
         <div class="ann-header-actions">
-            <div class="ann-search-wrapper">
+            <div class="ann-search-wrapper" style="position: relative;">
                 <input type="text" id="annSearch" placeholder="Search announcements..." 
                        style="width: 100%; padding: 12px 16px 12px 42px; border-radius: 12px; border: 1px solid var(--ann-border); font-size: 14px; outline: none; transition: all 0.2s; box-shadow: var(--ann-shadow);">
                 <svg width="20" height="20" fill="none" stroke="var(--ann-text-sub)" stroke-width="2" viewBox="0 0 24 24" 
@@ -52,11 +52,7 @@
         </div>
 
         <div style="display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none;">
-            <button class="btn btn-outline active-filter" data-cat="all">All Categories</button>
-            <button class="btn btn-outline" data-cat="Emergency">Emergency</button>
-            <button class="btn btn-outline" data-cat="Event">Events</button>
-            <button class="btn btn-outline" data-cat="Maintenance">Maintenance</button>
-            <button class="btn btn-outline" data-cat="General">General</button>
+            <button class="btn btn-outline active-filter" data-cat="all">All Events</button>
         </div>
     </div>
 
@@ -106,13 +102,10 @@
                 <label style="display: block; font-size: 13px; font-weight: 700; color: var(--ann-text-main); margin-bottom: 8px;">Announcement Title</label>
                 <input type="text" id="annTitle" placeholder="e.g. Schedule Maintenance" style="width: 100%; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--ann-border); font-size: 14px;" required>
             </div>
-            <div style="margin-bottom: 16px;">
+            <div style="margin-bottom: 16px; display: none;">
                 <label style="display: block; font-size: 13px; font-weight: 700; color: var(--ann-text-main); margin-bottom: 8px;">Category</label>
                 <select id="annCat" style="width: 100%; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--ann-border); font-size: 14px; outline: none;">
-                    <option value="General">General Updates</option>
-                    <option value="Emergency">Emergency Alert</option>
-                    <option value="Maintenance">Maintenance</option>
-                    <option value="Event">Event</option>
+                    <option value="Event" selected>Event</option>
                 </select>
             </div>
             <div>
@@ -277,7 +270,7 @@
             const content = document.getElementById('annContent').value;
 
             if (!title || !content) {
-                alert('Please fill in all required fields.');
+                Swal.fire('Please fill in all required fields.');
                 isPublishing = false;
                 btnDraft.disabled = false; btnDraft.style.opacity = '1'; btnDraft.style.pointerEvents = 'auto';
                 btnPublish.disabled = false; btnPublish.style.opacity = '1'; btnPublish.style.pointerEvents = 'auto';
@@ -301,10 +294,10 @@
 
                 const result = await response.json();
                 if (result.success) {
-                    alert('Announcement posted! An email has been sent to the residents.');
+                    Swal.fire('Announcement posted! An email has been sent to the residents.');
                     window.location.reload();
                 } else {
-                    alert('Failed to post announcement.');
+                    Swal.fire('Failed to post announcement.');
                     isPublishing = false;
                     btnDraft.disabled = false; btnDraft.style.opacity = '1'; btnDraft.style.pointerEvents = 'auto';
                     btnPublish.disabled = false; btnPublish.style.opacity = '1'; btnPublish.style.pointerEvents = 'auto';
@@ -312,7 +305,7 @@
                 }
             } catch (error) {
                 console.error(error);
-                alert('An error occurred.');
+                Swal.fire('An error occurred.');
                 isPublishing = false;
                 btnDraft.disabled = false; btnDraft.style.opacity = '1'; btnDraft.style.pointerEvents = 'auto';
                 btnPublish.disabled = false; btnPublish.style.opacity = '1'; btnPublish.style.pointerEvents = 'auto';

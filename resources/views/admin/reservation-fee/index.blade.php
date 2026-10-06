@@ -409,7 +409,7 @@
             const amount = parseFloat(amountStr);
 
             if (!buyerId) {
-                alert('Please select a buyer from the Master List.');
+                Swal.fire('Please select a buyer from the Master List.');
                 if (btn) {
                     btn.disabled = false;
                     btn.textContent = 'Save Reservation Record';
@@ -419,7 +419,7 @@
             }
 
             if (isNaN(amount) || amount <= 0) {
-                alert('Please enter a valid amount.');
+                Swal.fire('Please enter a valid amount.');
                 if (btn) {
                     btn.disabled = false;
                     btn.textContent = 'Save Reservation Record';
@@ -449,7 +449,7 @@
                 if (res.ok) {
                     window.location.reload();
                 } else {
-                    alert('Failed to save reservation to database');
+                    Swal.fire('Failed to save reservation to database');
                     if (btn) {
                         btn.disabled = false;
                         btn.textContent = 'Save Reservation Record';
@@ -458,7 +458,7 @@
                 }
             } catch (e) {
                 console.error(e);
-                alert('Error connecting to server');
+                Swal.fire('Error connecting to server');
                 if (btn) {
                     btn.disabled = false;
                     btn.textContent = 'Save Reservation Record';
@@ -517,11 +517,11 @@
                 if (res.ok) {
                     window.location.reload();
                 } else {
-                    alert('Failed to cancel reservation.');
+                    Swal.fire('Failed to cancel reservation.');
                 }
             } catch (e) {
                 console.error('Error cancelling reservation:', e);
-                alert('An error occurred.');
+                Swal.fire('An error occurred.');
             }
         }
 

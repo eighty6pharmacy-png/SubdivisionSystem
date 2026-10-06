@@ -6,10 +6,23 @@
 <link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
 
 <div class="bill-container fade-in">
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:9999; justify-content:center; align-items:center; flex-direction:column;">
+        <div class="spinner" style="width:40px; height:40px; border:4px solid #e2e8f0; border-top-color:#3b82f6; border-radius:50%; animation:spin 1s linear infinite;"></div>
+        <div style="margin-top:16px; font-weight:700; color:#1e293b;">Processing Visitor, Please Wait...</div>
+        <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+    </div>
+
     <div class="bill-header">
         <div class="bill-title">
             <h1>Visitor Access Approvals</h1>
             <p>Review resident visitor requests, generate verification PINs, and forward access clearance to Gate Security.</p>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <button id="exportPdfBtn" class="btn btn-outline" style="font-size: 13px; padding: 10px 20px;">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                Export PDF
+            </button>
         </div>
     </div>
 
@@ -39,6 +52,7 @@
                         <th>Resident / Host</th>
                         <th>Visitor Details</th>
                         <th>Visit Date</th>
+                        <th>Validated By (Guard)</th>
                         <th>Approval Status</th>
                         <th>Verification Code</th>
                         <th>Actions</th>
@@ -120,11 +134,9 @@
                     <td>
                         <div style="font-weight: 700; color: #0f172a;">${v.visitor}</div>
                         <div style="font-size: 12px; color: #64748b;">${v.purpose}</div>
-                        <div style="font-size: 11px; color: #94a3b8; margin-top: 4px; font-weight: 500;">
-                            ${v.type === 'Walk-in' ? 'Address: ' + (v.visitor_address || 'N/A') : 'Plate: ' + (v.plate_number || 'N/A')}
-                        </div>
                     </td>
                     <td style="font-size: 13px; color: #64748b; font-weight: 600;">${v.validity || 'Today'}</td>
+                    <td style="font-size: 12px; color: #0f172a; font-weight: 600;">${v.guard_name || (v.status === 'Entered' ? 'Gate Guard' : 'System / Pending')}</td>
                     <td>${statusBadge}</td>
                     <td>${codeDisplay}</td>
                     <td>${actionHtml}</td>
@@ -143,6 +155,9 @@
     }
 
     function approveVisitorRequest(reqId, hostName, visitorName) {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) overlay.style.display = 'flex';
+        
         fetch('/api/visitors/' + reqId + '/approve', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
@@ -153,15 +168,23 @@
                 if (window.pushSystemNotification) {
                     window.pushSystemNotification("Visitor Approved", `Code generated for ${visitorName} and sent to resident & security guard.`, "Just now", true);
                 }
-                alert(`✓ VISITOR APPROVED!\n\nEmail sent to Resident and Code Forwarded to Security Guard Portal.`);
+                Swal.fire(`✓ VISITOR APPROVED!\n\nEmail sent to Resident and Code Forwarded to Security Guard Portal.`);
             } else {
-                alert('Error approving visitor: ' + data.message);
+                Swal.fire('Error approving visitor: ' + data.message);
             }
+        }).catch(err => {
+            console.error('Error:', err);
+            Swal.fire('An error occurred during approval.');
+        }).finally(() => {
+            if (overlay) overlay.style.display = 'none';
         });
     }
 
     function rejectVisitorRequest(reqId) {
         if (confirm(`Are you sure you want to reject visitor request ${reqId}?`)) {
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) overlay.style.display = 'flex';
+
             fetch('/api/visitors/' + reqId + '/reject', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
@@ -169,10 +192,51 @@
                 if(data.success) {
                     renderAdminVisitorTable();
                 } else {
-                    alert('Error rejecting visitor: ' + data.message);
+                    Swal.fire('Error rejecting visitor: ' + data.message);
                 }
+            }).catch(err => {
+                console.error('Error:', err);
+                Swal.fire('An error occurred during rejection.');
+            }).finally(() => {
+                if (overlay) overlay.style.display = 'none';
             });
         }
     }
+
+    document.getElementById('exportPdfBtn').addEventListener('click', function() {
+        const doc = new jsPDF('landscape');
+        
+        const dateStr = new Date().toISOString().split('T')[0];
+        
+        doc.setFontSize(16);
+        doc.text("Admin Visitor Approvals Log - " + dateStr, 14, 15);
+        
+        const headers = [['Request ID', 'Host', 'Visitor', 'Visit Date', 'Validated By', 'Status', 'Code']];
+        const data = [];
+        
+        document.querySelectorAll('.visitor-req-row').forEach(row => {
+            const rowData = [];
+            row.querySelectorAll('td').forEach((td, index) => {
+                // skip Actions column (index 7)
+                if (index < 7) {
+                    rowData.push(td.innerText.trim().replace(/\n/g, ' - '));
+                }
+            });
+            data.push(rowData);
+        });
+        
+        doc.autoTable({
+            head: headers,
+            body: data,
+            startY: 25,
+            theme: 'grid',
+            headStyles: { fillColor: [5, 150, 105] },
+            styles: { fontSize: 9, cellPadding: 3 }
+        });
+        
+        doc.save('Admin-Visitor-Log-' + dateStr + '.pdf');
+    });
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/1.5.3/jspdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.6/jspdf.plugin.autotable.min.js"></script>
 @endsection

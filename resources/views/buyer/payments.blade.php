@@ -65,6 +65,10 @@
                             <strong style="color: #dc2626; font-size: 15px;">{{ \Carbon\Carbon::parse($dp->due_date)->format('F d, Y h:i A') }}</strong>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: #64748b; font-size: 14px; font-weight: 500;">Penalty Rate:</span>
+                            <strong style="color: #dc2626; font-size: 15px;">{{ number_format($dp->penalty_percentage ?? 0, 2) }}%</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span style="color: #64748b; font-size: 14px; font-weight: 500;">Status:</span>
                             @if($dp->status !== 'Good Standing')
                                 <span class="status-badge status-{{ strtolower(str_replace(' ', '-', $dp->status)) }}">{{ $dp->status }}</span>
@@ -159,6 +163,10 @@
                     </div>
 
                     <div style="display: flex; flex-direction: column; gap: 16px; border-top: 1px solid #e2e8f0; padding-top: 20px; flex: 1;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: #64748b; font-size: 14px; font-weight: 500;">Total Consideration:</span>
+                            <strong style="color: #0f172a; font-size: 15px;">₱{{ number_format($financing->total_consideration, 2) }}</strong>
+                        </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span style="color: #64748b; font-size: 14px; font-weight: 500;">Due for Financing:</span>
                             <strong style="color: #0f172a; font-size: 15px;">₱{{ number_format($financing->mbrdc_amt_due_for_financing, 2) }}</strong>
@@ -288,7 +296,7 @@
             }
         } catch(e) {
             console.error(e);
-            alert('⚠️ Unable to initiate secure payment. ' + e.message);
+            Swal.fire('⚠️ Unable to initiate secure payment. ' + e.message);
             btn.disabled = false;
             btn.innerHTML = 'Pay with GCash';
         }
@@ -317,7 +325,7 @@
             }
         } catch(e) {
             console.error(e);
-            alert('⚠️ Unable to initiate secure payment. ' + e.message);
+            Swal.fire('⚠️ Unable to initiate secure payment. ' + e.message);
             btn.disabled = false;
             btn.innerHTML = 'Pay Shortfall with GCash';
         }

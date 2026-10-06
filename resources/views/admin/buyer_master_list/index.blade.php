@@ -56,11 +56,11 @@
                 <p>Manage subdivision buyers, property lots, and their respective financing details.</p>
             </div>
             <div class="bill-actions">
-                <button class="pay-button" onclick="openModal('add')" style="display: flex; align-items: center; gap: 8px;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M5 12h14" />
-                        <path d="M12 5v14" />
+                <button class="btn btn-outline" style="border-color: var(--bill-primary); color: var(--bill-primary);" onclick="openModal('add')">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+                        style="margin-right: 8px;">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     Add New Buyer
                 </button>
@@ -74,7 +74,13 @@
                 style="background: #fff; padding: 20px; border-radius: 16px; border: 1px solid var(--bill-border); border-left: 4px solid #3b82f6;">
                 <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Buyers
                 </div>
-                <div style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ count($buyers) }}</div>
+                <div style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $totalBuyers ?? 0 }}</div>
+            </div>
+            <div
+                style="background: #fff; padding: 20px; border-radius: 16px; border: 1px solid var(--bill-border); border-left: 4px solid #ef4444;">
+                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Cancelled Buyers
+                </div>
+                <div style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $cancelledBuyersCount ?? 0 }}</div>
             </div>
         </div>
 
@@ -89,7 +95,13 @@
                     <input type="text" name="search" placeholder="Search by name..." value="{{ request('search') }}"
                         style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; width: 200px;">
 
-                    <select name="block"
+                    <select name="status" onchange="this.form.submit()"
+                        style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: white;">
+                        <option value="active" {{ request('status') !== 'cancelled' ? 'selected' : '' }}>Active Buyers</option>
+                        <option value="cancelled" {{ request('status') === 'cancelled' ? 'selected' : '' }}>Cancelled Buyers</option>
+                    </select>
+
+                    <select name="block" onchange="this.form.submit()"
                         style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: white;">
                         <option value="">All Blocks</option>
                         @for($i = 1; $i <= 18; $i++)
@@ -97,9 +109,7 @@
                         @endfor
                     </select>
 
-                    <button type="submit"
-                        style="padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;">Filter</button>
-                    @if(request('search') || request('block'))
+                    @if(request('search') || request('block') || request('status'))
                         <a href="{{ route('buyer-master-list.index') }}"
                             style="padding: 6px 12px; background: #e2e8f0; color: #475569; border-radius: 6px; font-weight: 600; font-size: 13px; text-decoration: none;">Clear</a>
                     @endif
@@ -140,54 +150,27 @@
                                     style="color: {{ $reservation && $reservation->deadline_date && \Carbon\Carbon::parse($reservation->deadline_date)->isPast() ? '#dc2626' : '#059669' }}; font-weight: 600;">
                                     {{ $reservation && $reservation->deadline_date ? \Carbon\Carbon::parse($reservation->deadline_date)->format('M d, Y') : '-' }}
                                 </td>
-                                <td style="display: flex; gap: 6px;">
-                                    <button onclick="viewBuyer('{{ $buyer->id }}')" class="action-btn btn-view">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                            stroke-linejoin="round">
-                                            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-                                            <circle cx="12" cy="12" r="3" />
-                                        </svg>
+                                <td style="display: flex; gap: 8px;">
+                                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="viewBuyer('{{ $buyer->id }}')">
                                         View
                                     </button>
-                                    <button onclick="editBuyer('{{ $buyer->id }}')" class="action-btn btn-edit">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                            stroke-linejoin="round">
-                                            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                                            <path d="m15 5 4 4" />
-                                        </svg>
+                                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="editBuyer('{{ $buyer->id }}')">
                                         Edit
                                     </button>
-                                    <form method="POST" action="{{ route('buyer.generate-account', $buyer->id) }}" style="display:inline-block;">
+                                    @php
+                                        $hasUserAccount = \App\Models\User::where('buyer_master_list_id', $buyer->id)->exists();
+                                    @endphp
+                                    <form method="POST" action="{{ route('buyer.generate-account', $buyer->id) }}" id="generate-account-form-{{ $buyer->id }}" style="display:inline-block; margin: 0;">
                                         @csrf
-                                        <button type="submit" class="action-btn" style="background-color: #fef08a; color: #854d0e;" title="Generate Login Account">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
-                                            </svg>
+                                        <button type="button" class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #854d0e; border-color: #eab308; background: transparent;" title="Generate Login Account" onclick="confirmGenerateAccount('{{ $buyer->id }}', '{{ $buyer->email }}', {{ $hasUserAccount ? 'true' : 'false' }})">
                                             Account
                                         </button>
                                     </form>
-                                    <button onclick="openExportModal('{{ $buyer->id }}')" class="action-btn"
-                                        style="background-color: #f3f4f6; color: #4b5563;" title="Export Contract">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                            stroke-linejoin="round">
-                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                            <polyline points="7 10 12 15 17 10" />
-                                            <line x1="12" y1="15" x2="12" y2="3" />
-                                        </svg>
+                                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openExportModal('{{ $buyer->id }}')" title="Export Contract">
                                         Export
                                     </button>
-                                    <button onclick="deleteBuyer('{{ $buyer->id }}')" class="action-btn btn-delete">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                            stroke-linejoin="round">
-                                            <path d="M3 6h18" />
-                                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                                        </svg>
-                                        Del
+                                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="deleteBuyer('{{ $buyer->id }}')">
+                                        Archive
                                     </button>
                                 </td>
                             </tr>
@@ -284,6 +267,10 @@
                                 Number</label><input type="text" name="contact_number" id="inp_contact_number"
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
+                        <div><label class="form-label"
+                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Email Address</label><input type="email" name="email" id="inp_email"
+                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
+                                class="view-readonly"></div>
                         <div style="grid-column: span 3;"><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Present
                                 Address</label><input type="text" name="present_address" id="inp_present_address"
@@ -375,10 +362,9 @@
                             style="padding:8px; border:1px solid #cbd5e1; border-radius:8px; width: 100%; max-width: 300px;"
                             onchange="toggleFinancingFields()">
                             <option value="">-- Select Method --</option>
-                            <option value="Pag-IBIG">Pag-IBIG Financing</option>
+                            <option value="Pag-IBIG">Pag-IBIG</option>
                             <option value="Bank Loan">Bank Loan</option>
-                            <option value="In-House">In-House Financing</option>
-                            <option value="Spot Cash">Spot Cash (No Loan)</option>
+                            <option value="Cash">Cash</option>
                         </select>
                     </div>
 
@@ -562,7 +548,7 @@
             const method = document.getElementById('inp_financing_method').value;
             const loanSection = document.getElementById('loanSection');
 
-            if (method === 'Spot Cash' || method === '') {
+            if (method === 'Cash' || method === '') {
                 loanSection.style.display = 'none';
                 // Clear out optional fields so they dont get submitted
                 document.getElementById('inp_loan_base').value = '';
@@ -709,22 +695,22 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    alert(result.message);
+                    Swal.fire(result.message);
                     window.location.reload();
                 } else {
-                    alert(result.message || 'Validation error. Please check your inputs.');
+                    Swal.fire(result.message || 'Validation error. Please check your inputs.');
                     submitBtn.disabled = false;
                     submitBtn.textContent = originalBtnText;
                 }
             } catch (err) {
-                alert('An error occurred. Check input constraints.');
+                Swal.fire('An error occurred. Check input constraints.');
                 submitBtn.disabled = false;
                 submitBtn.textContent = originalBtnText;
             }
         }
 
         async function deleteBuyer(id) {
-            if (!confirm("Are you sure you want to delete this buyer? If they have reservations, it will be blocked.")) return;
+            if (!confirm("Are you sure you want to archive this buyer? The buyer account and related reservations will also be archived.")) return;
 
             try {
                 const response = await fetch('/admin/buyer-master-list/' + id, {
@@ -736,14 +722,87 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    alert('Deleted safely.');
+                    Swal.fire('Archived successfully.');
                     window.location.reload();
                 } else {
-                    alert(result.message); // Will show the security block message
+                    Swal.fire(result.message);
                 }
             } catch (err) {
-                alert('Error communicating with server.');
+                Swal.fire('Error communicating with server.');
             }
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('action') === 'add') {
+                openModal('add');
+                if (params.get('fname')) document.getElementById('inp_first_name').value = decodeURIComponent(params.get('fname'));
+                if (params.get('mname')) document.getElementById('inp_middle_name').value = decodeURIComponent(params.get('mname'));
+                if (params.get('lname')) document.getElementById('inp_last_name').value = decodeURIComponent(params.get('lname'));
+                if (params.get('email')) document.getElementById('inp_email').value = decodeURIComponent(params.get('email'));
+                if (params.get('contact')) document.getElementById('inp_contact_number').value = decodeURIComponent(params.get('contact'));
+                
+                // Clear URL to prevent re-triggering on refresh
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        });
+
+        function confirmGenerateAccount(id, defaultEmail, hasAccount) {
+            if (hasAccount) {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Account Exists',
+                    text: 'This buyer already has an active system account. You can manage it in User Management.',
+                });
+                return;
+            }
+
+            Swal.fire({
+                title: 'Generate Buyer Account',
+                text: 'Enter the email address for this account. If they already have an email, it is pre-filled below.',
+                input: 'email',
+                inputValue: defaultEmail,
+                showCancelButton: true,
+                confirmButtonText: 'Generate Account',
+                showLoaderOnConfirm: true,
+                preConfirm: (inputEmail) => {
+                    Swal.showLoading();
+                    const form = document.getElementById('generate-account-form-' + id);
+                    let emailInput = document.createElement('input');
+                    emailInput.type = 'hidden';
+                    emailInput.name = 'account_email';
+                    emailInput.value = inputEmail;
+                    form.appendChild(emailInput);
+                    
+                    form.submit();
+                    // Return a promise that never resolves so the loading spinner stays until page refresh
+                    return new Promise(() => {});
+                }
+            });
+        }
     </script>
+    @if(session('success'))
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            Swal.fire({
+                icon: 'success',
+                title: 'Account Generated Successfully!',
+                text: '{!! addslashes(session('success')) !!}',
+                allowOutsideClick: false,
+                confirmButtonText: 'I have copied the details'
+            });
+        });
+    </script>
+    @endif
+    @if(session('error'))
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            Swal.fire({
+                icon: 'error',
+                title: 'Cannot Generate Account',
+                text: '{!! addslashes(session('error')) !!}',
+            });
+        });
+    </script>
+    @endif
 @endsection

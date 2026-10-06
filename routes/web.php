@@ -169,7 +169,7 @@ Route::prefix('resident')->middleware(['auth', 'web', 'role:Resident', 'sync_pay
 
     Route::post('/api/billing/pay', function (\Illuminate\Http\Request $request) {
         $billId = $request->input('bill_id');
-        $bill = \App\Models\UtilityBill::where('id', 'like', $billId . '%')->where('status', '!=', 'paid')->first();
+        $bill = \App\Models\UtilityBill::whereRaw('id::text LIKE ?', [$billId . '%'])->where('status', '!=', 'paid')->first();
 
         if (!$bill) {
             return response()->json(['success' => false, 'message' => 'Bill not found or already paid.'], 404);
@@ -386,29 +386,48 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::post('/api/appointments', function (\Illuminate\Http\Request $request) {
-    \App\Models\Appointment::create([
-        'client_name' => $request->input('client_name'),
+    $apt = \App\Models\Appointment::create([
+        'first_name' => $request->input('first_name'),
+        'middle_name' => $request->input('middle_name'),
+        'last_name' => $request->input('last_name'),
         'contact_number' => $request->input('contact_number'),
         'email' => $request->input('email'),
         'type' => $request->input('type'),
         'date' => \Carbon\Carbon::parse($request->input('date')),
         'time' => $request->input('time'),
-        'status' => 'Pending',
+        'status' => $request->input('status', 'Pending'),
         'notes' => $request->input('notes'),
     ]);
+    
+    $admins = \App\Models\User::role('Admin')->get();
+    foreach ($admins as $admin) {
+        $admin->notify(new \App\Notifications\WebAndPushNotification(
+            'New Appointment Request',
+            "{$apt->client_name} requested a {$apt->type} appointment for " . \Carbon\Carbon::parse($apt->date)->format('M d, Y') . " at {$apt->time}.",
+            'appointment'
+        ));
+    }
+    
     return response()->json(['success' => true]);
 });
 Route::put('/api/incidents/{id}/status', function (\Illuminate\Http\Request $request, $id) {
-    $inc = \App\Models\Incident::where('id', 'like', $id . '%')->first();
+    $inc = \App\Models\Incident::whereRaw('id::text LIKE ?', [str_replace(['%', '_'], ['\%', '\_'], $id) . '%'])->first();
     if ($inc) {
         $inc->update(['status' => $request->input('status')]);
+        if ($inc->user) {
+            $inc->user->notify(new \App\Notifications\WebAndPushNotification(
+                'Incident Report Update',
+                "Your incident report '{$inc->subject}' status has been updated to: {$request->input('status')}.",
+                'incident'
+            ));
+        }
         return response()->json(['success' => true]);
     }
     return response()->json(['success' => false], 404);
 });
 
 Route::put('/api/appointments/{id}/email', function (\Illuminate\Http\Request $request, $id) {
-    $apt = \App\Models\Appointment::where('id', 'like', $id . '%')->first();
+    $apt = \App\Models\Appointment::whereRaw('id::text LIKE ?', [$id . '%'])->first();
     if ($apt) {
         $apt->update(['email' => $request->input('email')]);
         return response()->json(['success' => true]);
@@ -416,19 +435,37 @@ Route::put('/api/appointments/{id}/email', function (\Illuminate\Http\Request $r
     return response()->json(['success' => false], 404);
 });
 Route::put('/api/appointments/{id}/status', function (\Illuminate\Http\Request $request, $id) {
-    $apt = \App\Models\Appointment::where('id', 'like', $id . '%')->first();
+    $apt = \App\Models\Appointment::whereRaw('id::text LIKE ?', [$id . '%'])->first();
     if ($apt) {
         $oldStatus = $apt->status;
         $apt->update([
             'status' => $request->input('status'),
             'report' => $request->input('report', $apt->report)
         ]);
+        
+        if ($request->input('status') === 'Completed' && $oldStatus !== 'Completed') {
+            \App\Models\Visitor::create([
+                'host_id' => null,
+                'visitor_name' => $apt->client_name,
+                'pin' => $apt->pin,
+                'purpose' => 'Appointment: ' . $apt->type,
+                'validity' => \Carbon\Carbon::parse($apt->date)->format('Y-m-d') . ' ' . $apt->time,
+                'arrival_time' => now(),
+                'status' => 'Entered',
+                'plate_number' => 'N/A',
+                'type' => 'Appointment',
+                'visitor_address' => 'N/A',
+                'guard_id' => auth()->id(),
+                'guard_name' => auth()->check() ? auth()->user()->name : 'Guard',
+            ]);
+        }
 
         if ($request->input('status') === 'Scheduled' && $oldStatus !== 'Scheduled' && !empty($apt->email)) {
             try {
                 $name = $apt->client_name;
                 $date = \Carbon\Carbon::parse($apt->date)->format('F j, Y');
                 $pin = $request->input('pin', rand(100000, 999999));
+                $apt->update(['pin' => $pin]);
                 \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($apt, $name, $date, $pin) {
                     $message->to($apt->email)
                         ->subject('🎉 Appointment Approved & Gate Access PIN — Althesa Subdivision')
@@ -605,8 +642,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $notifications = $notifications->sortByDesc('timestamp')->take(5);
 
         // 8. Today's Appointments List
-        $todaysAppointmentsList = \Illuminate\Support\Facades\DB::table('appointments')
-            ->whereDate('date', \Carbon\Carbon::today())
+        $todaysAppointmentsList = \App\Models\Appointment::query()->whereDate('date', \Carbon\Carbon::today())
             ->orderBy('time')
             ->get();
 
@@ -771,7 +807,8 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'status' => 'Good Standing',
             'monthly_amortization' => $request->input('monthly_amortization') ?? 15000,
             'months_to_pay' => $request->input('months_to_pay') ?? 24,
-            'contract_date' => $request->input('contract_date') ? \Carbon\Carbon::parse($request->input('contract_date')) : now()
+            'contract_date' => $request->input('contract_date') ? \Carbon\Carbon::parse($request->input('contract_date')) : now(),
+            'penalty_percentage' => $request->input('penalty_percentage') ?? 0
         ]);
 
         // "Client First" Workflow: Sync back the newly established contract details to the Masterlist
@@ -1042,6 +1079,38 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
     Route::get('/visitors', function () {
         return view('resident.visitors.index');
     });
+
+    Route::get('/bills/history/{type}', function ($type) {
+        if (!in_array($type, ['electricity', 'water'])) abort(404);
+        
+        $user = \Illuminate\Support\Facades\Auth::user();
+        
+        $latestBill = \App\Models\UtilityBill::where('user_id', $user->id)
+            ->where('type', $type)
+            ->orderBy('created_at', 'desc')
+            ->first();
+            
+        $query = \App\Models\UtilityBill::where('user_id', $user->id)
+            ->where('type', $type)
+            ->orderBy('created_at', 'desc');
+            
+        if ($latestBill && $latestBill->status !== 'paid') {
+            $query->where('id', '!=', $latestBill->id);
+        }
+
+        $bills = $query->get();
+        return view('resident.history', compact('bills', 'type'));
+    });
+
+    Route::get('/bills/history/{type}/pdf/{id}', function ($type, $id) {
+        $bill = \App\Models\UtilityBill::with(['user', 'lot'])->findOrFail($id);
+        if ($bill->user_id !== \Illuminate\Support\Facades\Auth::id()) abort(403);
+        
+        $pdf = app('dompdf.wrapper');
+        $pdf->loadView('resident.bill_pdf', compact('bill'));
+        return $pdf->stream('Statement_of_Account_'.$type.'_'.\Carbon\Carbon::parse($bill->created_at)->format('Y_m').'.pdf');
+    });
+
     Route::get('/electricity', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
         $elecBills = getElectricalBills(request('cycle'));
@@ -1136,7 +1205,7 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             }
         }
 
-        \App\Models\Incident::create([
+        $inc = \App\Models\Incident::create([
             'subject' => $request->input('subject'),
             'type' => $request->input('type'),
             'description' => $request->input('description'),
@@ -1144,19 +1213,37 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             'user_id' => \Illuminate\Support\Facades\Auth::id(),
             'image_url' => count($imageUrls) > 0 ? json_encode($imageUrls) : null,
         ]);
+        
+        $admins = \App\Models\User::role('Admin')->get();
+        foreach ($admins as $admin) {
+            $admin->notify(new \App\Notifications\WebAndPushNotification(
+                'New Incident Report',
+                'A new incident report "' . $inc->subject . '" has been submitted by a resident.',
+                'incident'
+            ));
+        }
+
         return response()->json(['success' => true]);
     });
 
     Route::put('/incidents/{id}/status', function (\Illuminate\Http\Request $request, $id) {
-        $inc = \App\Models\Incident::where('id', 'like', $id . '%')->first();
+        $inc = \App\Models\Incident::whereRaw('id::text LIKE ?', [$id . '%'])->first();
         if ($inc) {
             $inc->update(['status' => $request->input('status')]);
         }
         return response()->json(['success' => true]);
     });
     Route::get('/notifications', function () {
+        $user = \Illuminate\Support\Facades\Auth::user();
+        $user->unreadNotifications->markAsRead();
+        
         $announcements = \App\Models\Announcement::orderBy('created_at', 'desc')->get();
-        return view('resident.notifications', ['announcements' => $announcements]);
+        $systemNotifications = $user->notifications()->get();
+        
+        return view('resident.notifications', [
+            'announcements' => $announcements,
+            'systemNotifications' => $systemNotifications
+        ]);
     });
 });
 
@@ -1313,21 +1400,7 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
                     'due_date' => $dt->copy()->addDays(30)
                 ]);
             } else {
-                $bill = \App\Models\UtilityBill::create([
-                    'id' => (string) \Illuminate\Support\Str::uuid(),
-                    'type' => $type,
-                    'user_id' => $user ? $user->id : null,
-                    'lot_id' => $lot->id,
-                    'previous_reading' => $prevReading,
-                    'current_reading' => $currReading,
-                    'usage_value' => $usage,
-                    'amount' => $amount,
-                    'due_date' => $dt->copy()->addDays(30),
-                    'status' => 'unpaid',
-                    'is_at_risk' => false,
-                ]);
-                $bill->created_at = $dt->copy()->startOfMonth();
-                $bill->save();
+                return response()->json(['success' => false, 'message' => 'Cannot input reading: Admin has not generated a billing cycle for this month.'], 403);
             }
             if ($user) {
                 updateResidentBehavior($user);
@@ -1478,8 +1551,9 @@ Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $r
     $type = $request->input('type'); // 'electricity' or 'water'
     $rate = $request->input('rate');
     $penalty = $request->input('penalty', 5);
-    $startDate = $request->input('start_date');
-    $endDate = $request->input('end_date');
+    $prevDate = $request->input('prev_date');
+    $currDate = $request->input('curr_date');
+    $dueDate = $request->input('due_date');
 
     $waterMinM3 = $request->input('water_min_m3');
     $waterMinRate = $request->input('water_min_rate');
@@ -1527,12 +1601,12 @@ Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $r
             $carriedBalance = max(0, $totalDueAfterPenalty - $totalPaid);
         }
 
-        if ($startDate) {
-            $startDt = \Carbon\Carbon::parse($startDate)->startOfDay();
+        if ($currDate) {
+            $currDt = \Carbon\Carbon::parse($currDate)->startOfDay();
             $existingBill = \App\Models\UtilityBill::where('lot_id', $lot->id)
                 ->where('type', $type)
-                ->whereYear('created_at', $startDt->year)
-                ->whereMonth('created_at', $startDt->month)
+                ->whereYear('created_at', $currDt->year)
+                ->whereMonth('created_at', $currDt->month)
                 ->exists();
 
             if ($existingBill) {
@@ -1546,18 +1620,20 @@ Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $r
             'user_id' => $user ? $user->id : null,
             'lot_id' => $lot->id,
             'previous_reading' => $prevReading,
+            'previous_reading_date' => $prevDate,
+            'current_reading_date' => $currDate,
             'current_reading' => 0,
             'usage_value' => 0,
             'amount' => 0,
             'previous_balance' => $carriedBalance,
-            'due_date' => $endDate,
+            'due_date' => $dueDate,
             'status' => 'unpaid',
             'is_at_risk' => false,
         ]);
         $generatedCount++;
 
-        if ($startDate) {
-            $bill->created_at = \Carbon\Carbon::parse($startDate)->startOfDay();
+        if ($currDate) {
+            $bill->created_at = \Carbon\Carbon::parse($currDate)->startOfDay();
             $bill->save();
         }
     }
@@ -1594,7 +1670,7 @@ Route::post('/admin/api/billing/reconnect', function (\Illuminate\Http\Request $
 Route::post('/admin/api/billing/add-balance', function (\Illuminate\Http\Request $request) {
     $id = $request->input('id');
     $balance = (float) $request->input('balance');
-    $bill = \App\Models\UtilityBill::where('id', 'like', $id . '%')->first();
+    $bill = \App\Models\UtilityBill::whereRaw('id::text LIKE ?', [$id . '%'])->first();
     if ($bill) {
         $bill->update(['previous_balance' => $bill->previous_balance + $balance]);
         return response()->json(['success' => true]);
@@ -1606,7 +1682,7 @@ Route::post('/admin/api/billing/pay', function (\Illuminate\Http\Request $reques
     $id = $request->input('id');
     $amount = (float) $request->input('amount');
 
-    $bill = \App\Models\UtilityBill::where('id', 'like', $id . '%')->first();
+    $bill = \App\Models\UtilityBill::whereRaw('id::text LIKE ?', [$id . '%'])->first();
     if ($bill) {
         $totalDueBeforePenalty = $bill->amount + $bill->previous_balance;
         $penalty = ($bill->due_date && \Carbon\Carbon::parse($bill->due_date)->isPast()) ? ($totalDueBeforePenalty * 0.05) : 0;
@@ -1693,8 +1769,6 @@ Route::post('/api/send-appointment-email', function (\Illuminate\Http\Request $r
                             <div style='background: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid #10b981; margin: 20px 0;'>
                                 <p style='margin: 4px 0;'><strong>📅 Date:</strong> {$date}</p>
                                 <p style='margin: 4px 0;'><strong>⏰ Time:</strong> {$time}</p>
-                                <p style='margin: 4px 0;'><strong>📋 Inquiry Type:</strong> {$type}</p>
-                                <p style='margin: 4px 0;'><strong>📝 Notes:</strong> {$notes}</p>
                             </div>
                             <p style='color: #475569;'>Our administration team will review your booking shortly. If approved, you will receive a follow-up email with your Gate Viewing Access PIN.</p>
                         </div>

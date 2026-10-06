@@ -12,9 +12,16 @@
             Your lot is directly connected to CASURECO. No new internal electricity bills will be generated.
         </div>
     @endif
-    <div style="margin-bottom: 32px;">
-        <h1 style="font-size: 28px; font-weight: 800; color: #0f172a; margin: 0;">Electricity Billing</h1>
-        <p style="color: #64748b; margin-top: 8px;">Monitor your electricity consumption and settle outstanding balances.</p>
+    <div style="margin-bottom: 32px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <h1 style="font-size: 28px; font-weight: 800; color: #0f172a; margin: 0;">Electricity Billing</h1>
+            <p style="color: #64748b; margin-top: 8px;">Monitor your electricity consumption and settle outstanding balances.</p>
+        </div>
+        <div>
+            <a href="/resident/bills/history/electricity" class="btn btn-outline-primary" style="border-radius: 12px; font-weight: 600; padding: 10px 20px;">
+                <i class="fas fa-history me-2"></i>View History
+            </a>
+        </div>
     </div>
 
     <!-- Current Bill Card -->
@@ -185,7 +192,7 @@
             }
         } catch(e) {
             console.error(e);
-            alert('⚠️ Unable to initiate secure payment. ' + e.message);
+            Swal.fire('⚠️ Unable to initiate secure payment. ' + e.message);
             btn.disabled = false;
             btn.innerHTML = '📱 Pay via GCash';
         }

@@ -347,7 +347,7 @@
         const currInput = document.getElementById('valCurr').value;
 
         if (currInput === '') {
-            alert('Please enter a current reading.');
+            Swal.fire('Please enter a current reading.');
             return;
         }
         
@@ -355,7 +355,7 @@
         const prev = parseFloat(document.getElementById('valPrev').value) || 0;
         
         if (curr < prev) {
-            alert(`Current reading (${curr}) cannot be lower than previous reading (${prev}).`);
+            Swal.fire(`Current reading (${curr}) cannot be lower than previous reading (${prev}).`);
             return;
         }
 
@@ -428,12 +428,11 @@
                       );
                   }
               } else {
-                  alert(data.message || 'Failed to update billing record.');
+                  Swal.fire(data.message || 'Failed to update billing record.');
               }
           })
           .catch(err => {
-              console.error(err);
-              alert('Error communicating with server.');
+              console.error("Billing operation exception:", err);
           }).finally(() => {
               btn.innerText = origText;
               btn.disabled = false;

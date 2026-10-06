@@ -13,7 +13,7 @@ class VisitorController extends Controller
     // For Admin / Guard viewing all visitors
     public function index()
     {
-        $query = Visitor::with('host.lots')->orderBy('created_at', 'desc');
+        $query = Visitor::with('host.lots')->orderBy('updated_at', 'desc');
         
         if (auth()->check() && auth()->user()->hasRole('Resident')) {
             $query->where('host_id', auth()->id());
@@ -48,6 +48,7 @@ class VisitorController extends Controller
                 'type' => $vis->type,
                 'plate_number' => $vis->plate_number,
                 'visitor_address' => $vis->visitor_address,
+                'guard_name' => $vis->guard_name,
                 'date' => $vis->updated_at->format('Y-m-d'),
                 'date_formatted' => $vis->updated_at->format('M d, Y'),
             ];
@@ -69,7 +70,7 @@ class VisitorController extends Controller
 
         $isWalkIn = $request->type === 'Walk-in';
 
-        $visitor = Visitor::create([
+        $data = [
             'host_id' => $isWalkIn ? null : auth()->id(),
             'visitor_name' => $request->visitor_name,
             'purpose' => $request->purpose,
@@ -79,7 +80,26 @@ class VisitorController extends Controller
             'visitor_address' => $request->visitor_address,
             'status' => $isWalkIn ? 'Entered' : 'Pending',
             'arrival_time' => $isWalkIn ? \Carbon\Carbon::now()->setTimezone(config('app.timezone', 'Asia/Manila'))->format('h:i A') : null,
-        ]);
+        ];
+
+        if ($isWalkIn && auth()->check()) {
+            $data['guard_id'] = auth()->user()->id;
+            $data['guard_name'] = auth()->user()->name;
+        }
+
+        $visitor = Visitor::create($data);
+
+        // Notify Admins if it is a pending request (from a resident)
+        if (!$isWalkIn) {
+            $admins = User::role('Admin')->get();
+            foreach ($admins as $admin) {
+                $admin->notify(new \App\Notifications\WebAndPushNotification(
+                    'New Visitor Request',
+                    'A new visitor request has been submitted by ' . (auth()->user()->name ?? 'a resident') . ' for ' . $visitor->visitor_name,
+                    'visitor'
+                ));
+            }
+        }
 
         return response()->json(['success' => true, 'id' => substr($visitor->id, 0, 8)]);
     }
@@ -99,35 +119,20 @@ class VisitorController extends Controller
             'pin' => $pin
         ]);
 
-        // Send Email to Resident
-        if ($visitor->host && $visitor->host->email) {
-            try {
+        // Send SMS and Push Notification to Resident
+        if ($visitor->host) {
+            if ($visitor->host->contact_number) {
                 $hostName = $visitor->host->name;
                 $visName = $visitor->visitor_name;
-                Mail::send([], [], function ($message) use ($visitor, $hostName, $visName, $pin) {
-                    $message->to($visitor->host->email)
-                        ->subject('🎉 Visitor Access Approved — Althesa Subdivision')
-                        ->html("
-                            <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff;'>
-                                <div style='background: #059669; padding: 20px; border-radius: 12px; text-align: center;'>
-                                    <h2 style='color: #ffffff; margin: 0;'>Althesa Subdivision</h2>
-                                    <p style='color: #ecfdf5; margin: 4px 0 0 0; font-size: 13px;'>Visitor Code Approved</p>
-                                </div>
-                                <div style='padding: 20px 0;'>
-                                    <p style='font-size: 16px; color: #0f172a;'>Hello <strong>{$hostName}</strong>,</p>
-                                    <p style='color: #475569;'>Your visitor request for <strong>{$visName}</strong> has been approved. Please share this PIN with them.</p>
-                                    <div style='background: #ecfdf5; border: 2px dashed #059669; padding: 20px; border-radius: 12px; text-align: center; margin: 20px 0;'>
-                                        <span style='font-size: 13px; color: #047857; text-transform: uppercase; font-weight: 700;'>Visitor Entry PIN</span>
-                                        <div style='font-size: 36px; font-weight: 800; color: #047857; letter-spacing: 6px; margin-top: 8px;'>{$pin}</div>
-                                    </div>
-                                    <p style='color: #475569;'>They can enter this PIN on the landing page for routing instructions or present it at the guard house.</p>
-                                </div>
-                            </div>
-                        ");
-                });
-            } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::error('Failed to send visitor approval email: ' . $e->getMessage());
+                $message = "Althesa Subd: Visitor request for {$visName} is Approved. PIN: {$pin}. Please share with them.";
+                \App\Helpers\SmsHelper::sendSms($visitor->host->contact_number, $message);
             }
+
+            $visitor->host->notify(new \App\Notifications\WebAndPushNotification(
+                'Visitor Approved',
+                "Your visitor request for {$visitor->visitor_name} has been approved. PIN: {$pin}",
+                'visitor'
+            ));
         }
 
         return response()->json(['success' => true]);
@@ -138,29 +143,87 @@ class VisitorController extends Controller
     {
         $request->validate(['pin' => 'required|string']);
         
+        $source = $request->input('source', 'visitor');
+        $today = now()->setTimezone(config('app.timezone', 'Asia/Manila'))->startOfDay();
+
         $visitor = Visitor::where('pin', $request->pin)
             ->whereIn('status', ['Approved', 'Entered']) // Can view route even if already entered
             ->with('host.lots')
             ->first();
 
-        if (!$visitor) {
-            return response()->json(['success' => false, 'message' => 'Invalid or expired PIN.']);
-        }
-        
-        $dest = 'Unknown';
-        if ($visitor->host && $visitor->host->lots->count() > 0) {
-            $lot = $visitor->host->lots->first();
-            $dest = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
+        if ($visitor) {
+            if ($source === 'visitor' && $visitor->status !== 'Entered') {
+                return response()->json(['success' => false, 'message' => 'PIN not yet validated by the guard.']);
+            }
+
+            try {
+                if ($visitor->validity !== 'Today') {
+                    $validDate = \Carbon\Carbon::parse($visitor->validity)->startOfDay();
+                    if (!$validDate->equalTo($today)) {
+                        if ($today->isBefore($validDate)) {
+                            return response()->json(['success' => false, 'message' => 'This PIN is only valid on ' . $visitor->validity . '.']);
+                        } else {
+                            return response()->json(['success' => false, 'message' => 'This PIN has expired (was valid only on ' . $visitor->validity . ').']);
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                // Ignore parsing errors, assume valid if unparseable
+            }
+            
+            $dest = 'Unknown';
+            if ($visitor->host && $visitor->host->lots->count() > 0) {
+                $lot = $visitor->host->lots->first();
+                $dest = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
+            }
+
+            return response()->json([
+                'success' => true,
+                'is_appointment' => false,
+                'visitor_id' => substr($visitor->id, 0, 8),
+                'db_id' => $visitor->id,
+                'visitor_name' => $visitor->visitor_name,
+                'destination' => $dest,
+                'status' => $visitor->status,
+            ]);
         }
 
-        return response()->json([
-            'success' => true,
-            'visitor_id' => substr($visitor->id, 0, 8),
-            'db_id' => $visitor->id,
-            'visitor_name' => $visitor->visitor_name,
-            'destination' => $dest,
-            'status' => $visitor->status,
-        ]);
+        $appointment = \App\Models\Appointment::where('pin', $request->pin)
+            ->whereIn('status', ['Scheduled', 'Completed'])
+            ->first();
+
+        if ($appointment) {
+            if ($source === 'visitor' && $appointment->status !== 'Completed') { // For appointments, 'Completed' means they have entered
+                return response()->json(['success' => false, 'message' => 'PIN not yet validated by the guard.']);
+            }
+
+            try {
+                $appointmentDate = \Carbon\Carbon::parse($appointment->date)->startOfDay();
+                if (!$appointmentDate->equalTo($today)) {
+                    if ($today->isBefore($appointmentDate)) {
+                        return response()->json(['success' => false, 'message' => 'This PIN is only valid on ' . $appointmentDate->format('M d, Y') . '.']);
+                    } else {
+                        return response()->json(['success' => false, 'message' => 'This PIN has expired (was valid only on ' . $appointmentDate->format('M d, Y') . ').']);
+                    }
+                }
+            } catch (\Exception $e) {
+                // Ignore parsing errors, assume valid if unparseable
+            }
+
+            return response()->json([
+                'success' => true,
+                'is_appointment' => true,
+                'visitor_id' => substr($appointment->id, 0, 8),
+                'db_id' => $appointment->id,
+                'visitor_name' => $appointment->client_name,
+                'destination' => 'Management Office',
+                'status' => $appointment->status === 'Completed' ? 'Entered' : 'Approved',
+                'appointment_type' => $appointment->type,
+                'appointment_time' => $appointment->time,
+            ]);
+        }
+
+        return response()->json(['success' => false, 'message' => 'Invalid or expired PIN.']);
     }
     
     // For Guard marking visitor as Entered
@@ -176,7 +239,23 @@ class VisitorController extends Controller
             $updateData['plate_number'] = $request->plate_number;
         }
 
+        if (auth()->check()) {
+            $updateData['guard_id'] = auth()->user()->id;
+            $updateData['guard_name'] = auth()->user()->name;
+        }
+
         $visitor->update($updateData);
+
+        // Notify Admins that visitor entered
+        $admins = User::role('Admin')->get();
+        foreach ($admins as $admin) {
+            $admin->notify(new \App\Notifications\WebAndPushNotification(
+                'Visitor Entered',
+                "Visitor {$visitor->visitor_name} has entered the gate.",
+                'visitor'
+            ));
+        }
+
         return response()->json(['success' => true]);
     }
 

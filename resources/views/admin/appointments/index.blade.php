@@ -107,7 +107,7 @@
                         <td>
                             <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewAptDetail(
                                 this.closest('.apt-row')
-                            )">Manage</button>
+                            )">Edit</button>
                         </td>
                     </tr>
                     @endforeach
@@ -147,12 +147,15 @@
         
         <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; max-height: 75vh;">
             <div class="responsive-grid grid-2">
-                <div style="background: #f8fafc; padding: 16px; border-radius: 12px;">
+                <div style="background: #f8fafc; padding: 16px; border-radius: 12px; display: flex; flex-direction: column; gap: 12px;">
                     <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Contact Info</span>
-                    <div id="modalContact" style="font-size: 16px; font-weight: 600; color: #334155; margin-top: 4px;">Phone</div>
-                    <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
-                        <input type="email" id="modalEmailInput" class="filter-select" style="padding: 4px 8px; font-size: 13px; height: auto; width: 100%;" placeholder="No Email (Enter to save)">
-                        <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px;" onclick="updateAptEmail()">Save</button>
+                    <div>
+                        <span style="font-size: 11px; color: #94a3b8; font-weight: 600;">Phone Number</span>
+                        <div id="modalContact" style="font-size: 14px; font-weight: 600; color: #334155; margin-top: 2px;">Phone</div>
+                    </div>
+                    <div>
+                        <span style="font-size: 11px; color: #94a3b8; font-weight: 600;">Email Address</span>
+                        <div id="modalEmailInput" style="font-size: 14px; font-weight: 600; color: #334155; margin-top: 2px; word-break: break-all;">No Email</div>
                     </div>
                 </div>
                 <div style="background: #f8fafc; padding: 16px; border-radius: 12px;">
@@ -164,7 +167,6 @@
             <div style="background: #e0e7ff; padding: 16px; border-radius: 12px; border: 1px solid #c7d2fe;">
                 <span style="font-size: 11px; color: #4f46e5; font-weight: 700; text-transform: uppercase;">Requested Appointment Scheduled</span>
                 <div id="modalDateTime" style="font-size: 18px; font-weight: 800; color: #312e81; margin-top: 8px;">May 15 @ 10:00 AM</div>
-                <div id="modalInquiryType" style="font-size: 13px; font-weight: 700; color: #4f46e5; margin-top: 8px;">Lot Viewing / Site Visit</div>
             </div>
 
             <div id="modalReportSection" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-top: 8px;">
@@ -196,26 +198,48 @@
             </button>
         </div>
         <form id="addAptForm" onsubmit="submitNewApt(event)" style="padding: 24px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; max-height: 75vh;">
-            <div>
-                <label style="font-size: 12px; font-weight: 700; color: #64748b;">Client Name</label>
-                <input type="text" id="addAptName" class="filter-select" required style="width: 100%; margin-top: 4px;">
+            <div style="display: flex; gap: 8px;">
+                <div style="flex: 1;">
+                    <label style="font-size: 12px; font-weight: 700; color: #64748b;">First Name</label>
+                    <input type="text" id="addAptFirstName" class="filter-select" required style="width: 100%; margin-top: 4px;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="font-size: 12px; font-weight: 700; color: #64748b;">Middle Name</label>
+                    <input type="text" id="addAptMiddleName" class="filter-select" style="width: 100%; margin-top: 4px;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="font-size: 12px; font-weight: 700; color: #64748b;">Last Name</label>
+                    <input type="text" id="addAptLastName" class="filter-select" required style="width: 100%; margin-top: 4px;">
+                </div>
             </div>
-            <div>
-                <label style="font-size: 12px; font-weight: 700; color: #64748b;">Contact Infomation</label>
-                <input type="text" id="addAptContact" class="filter-select" required style="width: 100%; margin-top: 4px;">
-            </div>
-            <div>
-                <label style="font-size: 12px; font-weight: 700; color: #64748b;">Email Address</label>
-                <input type="email" id="addAptEmail" class="filter-select" style="width: 100%; margin-top: 4px;">
+            <div style="display: flex; gap: 12px;">
+                <div style="flex: 1;">
+                    <label style="font-size: 12px; font-weight: 700; color: #64748b;">Contact Infomation</label>
+                    <input type="text" id="addAptContact" class="filter-select" required style="width: 100%; margin-top: 4px;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="font-size: 12px; font-weight: 700; color: #64748b;">Email Address</label>
+                    <input type="email" id="addAptEmail" class="filter-select" style="width: 100%; margin-top: 4px;">
+                </div>
             </div>
             <div style="display: flex; gap: 12px;">
                 <div style="flex: 1;">
                     <label style="font-size: 12px; font-weight: 700; color: #64748b;">Date</label>
-                    <input type="date" id="addAptDate" class="filter-select" required style="width: 100%; margin-top: 4px;">
+                    <input type="text" id="addAptDate" class="filter-select" required style="width: 100%; margin-top: 4px; background-color: #fff;" placeholder="Select a date...">
                 </div>
                 <div style="flex: 1;">
                     <label style="font-size: 12px; font-weight: 700; color: #64748b;">Time</label>
-                    <input type="time" id="addAptTime" class="filter-select" required style="width: 100%; margin-top: 4px;">
+                    <select id="addAptTime" class="filter-select" required disabled style="width: 100%; margin-top: 4px;">
+                        <option value="">Select Date First</option>
+                        <option value="09:00 AM">09:00 AM</option>
+                        <option value="10:00 AM">10:00 AM</option>
+                        <option value="11:00 AM">11:00 AM</option>
+                        <option value="01:00 PM">01:00 PM</option>
+                        <option value="02:00 PM">02:00 PM</option>
+                        <option value="03:00 PM">03:00 PM</option>
+                        <option value="04:00 PM">04:00 PM</option>
+                        <option value="05:00 PM">05:00 PM</option>
+                    </select>
                 </div>
             </div>
             <button type="submit" class="btn btn-primary" style="justify-content: center; padding: 12px; font-weight: 700;">Confirm Schedule Layout</button>
@@ -371,7 +395,10 @@
                 </td>
                 <td>${badgeHtml}</td>
                 <td>
-                    <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewAptDetail(this.closest('.apt-row'))">Manage</button>
+                    <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                        <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;" onclick="viewAptDetail(this.closest('.apt-row'))">Details</button>
+                        ${apt.status === 'Completed' ? `<button class="btn btn-primary" style="padding: 6px 10px; font-size: 11px; background: #0ea5e9; border-color: #0ea5e9;" onclick="window.location.href='/admin/buyer-master-list?action=add&fname=' + encodeURIComponent('${apt.first_name || ''}') + '&mname=' + encodeURIComponent('${apt.middle_name || ''}') + '&lname=' + encodeURIComponent('${apt.last_name || ''}') + '&email=' + encodeURIComponent('${apt.email || ''}') + '&contact=' + encodeURIComponent('${apt.contact || ''}')">To Masterlist</button>` : ''}
+                    </div>
                 </td>
             `;
 
@@ -458,7 +485,7 @@
                 today.setHours(0, 0, 0, 0);
                 
                 if (clickedDate < today) {
-                    alert("You cannot modify availability for past dates.");
+                    Swal.fire("You cannot modify availability for past dates.");
                     return;
                 }
 
@@ -497,7 +524,7 @@
         const id = document.getElementById('modalAptId').textContent;
         const newEmail = document.getElementById('modalEmailInput').value;
         if (!newEmail) {
-            alert('Please enter a valid email.');
+            Swal.fire('Please enter a valid email.');
             return;
         }
         
@@ -575,24 +602,22 @@
     function submitNewApt(e) {
         e.preventDefault();
         
-        const client = document.getElementById('addAptName').value;
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = 'Scheduling...';
+        }
+
+        const firstName = document.getElementById('addAptFirstName').value;
+        const middleName = document.getElementById('addAptMiddleName').value;
+        const lastName = document.getElementById('addAptLastName').value;
+        const client = `${firstName} ${middleName} ${lastName}`.trim();
         const contact = document.getElementById('addAptContact').value;
         const email = document.getElementById('addAptEmail').value;
         const dateRaw = document.getElementById('addAptDate').value;
         const timeRaw = document.getElementById('addAptTime').value;
 
-        // format date simply
-        const dateObj = new Date(dateRaw);
-        const formattedDate = dateObj.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
 
-        // format time simply
-        const timeParts = timeRaw.split(':');
-        const hs = parseInt(timeParts[0]);
-        const ampms = hs >= 12 ? 'PM' : 'AM';
-        const hsf = hs % 12 || 12;
-        const formattedTime = `${hsf}:${timeParts[1]} ${ampms}`;
-
-        const newId = 'APT-' + Math.floor(2000 + Math.random() * 9000);
         
         fetch('/api/appointments', {
             method: 'POST',
@@ -601,17 +626,26 @@
                 'X-CSRF-TOKEN': '{{ csrf_token() }}'
             },
             body: JSON.stringify({
-                client_name: client,
+                first_name: firstName,
+                middle_name: middleName,
+                last_name: lastName,
                 contact_number: contact,
                 email: email,
                 date: dateRaw,
                 time: timeRaw,
                 type: 'Manual Walk-In',
+                status: 'Scheduled',
                 notes: ''
             })
         }).then(() => {
             window.location.reload();
-        }).catch(err => console.error(err));
+        }).catch(err => {
+            console.error(err);
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Schedule Appointment';
+            }
+        });
         
         generateAppointmentPin(newId, client);
         
@@ -645,7 +679,7 @@
         // Validate if there are existing appointments on this date
         const existing = allAppointments.filter(apt => apt.status !== 'Cancelled' && (apt.date === formattedDate || apt.date === dateRaw));
         if (existing.length > 0) {
-            alert(`Cannot mark ${formattedDate} as unavailable because there are ${existing.length} active appointment(s) scheduled for this date.`);
+            Swal.fire(`Cannot mark ${formattedDate} as unavailable because there are ${existing.length} active appointment(s) scheduled for this date.`);
             return;
         }
 
@@ -699,11 +733,10 @@
         document.getElementById('modalAptId').textContent = id;
         document.getElementById('modalClient').textContent = clientText;
         document.getElementById('modalContact').textContent = contactText;
-        document.getElementById('modalEmailInput').value = emailText !== 'No Email' ? emailText : '';
+        document.getElementById('modalEmailInput').textContent = emailText !== 'No Email' ? emailText : 'No Email provided';
         
         // Parse the dynamic format
         document.getElementById('modalDateTime').textContent = `${dateText} at ${timeText}`;
-        document.getElementById('modalInquiryType').textContent = inquiryType;
 
         const reportSect = document.getElementById('modalReportSection');
         if (reportData) {
@@ -812,7 +845,7 @@
         if (sendEmail && currentAptId) {
             const aptObj = allAppointments.find(a => a.id === currentAptId);
             const emailToSend = (aptObj && aptObj.email) ? aptObj.email : 'eighty6pharmacy@gmail.com';
-            alert(`Cancellation logged.\nAn automated email detailing "${reason}" has been dispatched to ${emailToSend}.`);
+            Swal.fire(`Cancellation logged.\nAn automated email detailing "${reason}" has been dispatched to ${emailToSend}.`);
         }
     }
 
@@ -852,6 +885,71 @@
         if (event.target == modal) closeAptModal();
     }
     window.addEventListener('DOMContentLoaded', () => {
+        fetch('/api/appointments/availability')
+            .then(res => res.json())
+            .then(data => {
+                const blackouts = data.unavailable_dates || [];
+                const takenTimeslots = data.taken_timeslots || [];
+
+                flatpickr("#addAptDate", {
+                    minDate: "today",
+                    disableMobile: true,
+                    onDayCreate: function(dObj, dStr, fp, dayElem) {
+                        const dateRaw = fp.formatDate(dayElem.dateObj, "Y-m-d");
+                        const formattedDate = dayElem.dateObj.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
+
+                        if(blackouts.includes(dateRaw) || blackouts.includes(formattedDate)) {
+                            dayElem.style.backgroundColor = '#fee2e2';
+                            dayElem.style.color = '#b91c1c';
+                            dayElem.style.fontWeight = 'bold';
+                            dayElem.title = 'Office Unavailable';
+                        }
+                    },
+                    onChange: function(selectedDates, dateStr, instance) {
+                        const timeSelect = document.getElementById('addAptTime');
+                        if (selectedDates.length === 0) {
+                            timeSelect.innerHTML = '<option value="">Select Date First</option>';
+                            timeSelect.disabled = true;
+                            return;
+                        }
+                        const formattedDate = selectedDates[0].toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
+                        const dateRaw = instance.formatDate(selectedDates[0], "Y-m-d");
+                        
+                        if (blackouts.includes(dateRaw) || blackouts.includes(formattedDate)) {
+                            Swal.fire("This date is unavailable. Please select another date.");
+                            instance.clear();
+                            timeSelect.innerHTML = '<option value="">Select Date First</option>';
+                            timeSelect.disabled = true;
+                        } else {
+                            timeSelect.innerHTML = '<option value="">Select a time...</option>';
+                            timeSelect.disabled = false;
+                            const availableHours = [
+                                "09:00 AM", "10:00 AM", "11:00 AM", "01:00 PM", 
+                                "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM"
+                            ];
+                            availableHours.forEach(hour => {
+                                const isTaken = takenTimeslots.some(apt => 
+                                    (apt.date.split('T')[0] === dateRaw) && 
+                                    apt.time === hour
+                                );
+
+                                const option = document.createElement('option');
+                                option.value = hour;
+                                if (isTaken) {
+                                    option.textContent = `${hour} (Taken)`;
+                                    option.disabled = true;
+                                    option.style.color = '#dc2626';
+                                    option.style.backgroundColor = '#fef2f2';
+                                } else {
+                                    option.textContent = hour;
+                                }
+                                timeSelect.appendChild(option);
+                            });
+                        }
+                    }
+                });
+            });
+
         const params = new URLSearchParams(window.location.search);
         const action = params.get('action');
         const apt = params.get('apt');
@@ -881,4 +979,6 @@
     });
 
 </script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 @endsection

@@ -18,7 +18,9 @@ class UtilityBill extends Model
         'user_id',
         'lot_id',
         'previous_reading',
+        'previous_reading_date',
         'current_reading',
+        'current_reading_date',
         'usage_value',
         'amount',
         'previous_balance',
@@ -34,6 +36,8 @@ class UtilityBill extends Model
         return [
             'is_at_risk' => 'boolean',
             'due_date' => 'date',
+            'previous_reading_date' => 'date',
+            'current_reading_date' => 'date',
         ];
     }
 
