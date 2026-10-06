@@ -218,7 +218,7 @@ Route::prefix('resident')->middleware(['auth', 'web', 'role:Resident', 'sync_pay
         $response = \Illuminate\Support\Facades\Http::withHeaders([
             'accept' => 'application/json',
             'content-type' => 'application/json',
-            'authorization' => 'Basic ' . base64_encode(env('PAYMONGO_SECRET_KEY') . ':')
+            'authorization' => 'Basic ' . base64_encode(config('services.paymongo.secret_key') . ':')
         ])->post('https://api.paymongo.com/v1/checkout_sessions', [
                     'data' => [
                         'attributes' => [
@@ -256,7 +256,7 @@ Route::post('/api/webhooks/paymongo', function (\Illuminate\Http\Request $reques
     \Illuminate\Support\Facades\Log::info('Webhook received', $request->all());
 
     $signatureHeader = $request->header('Paymongo-Signature');
-    $secret = env('PAYMONGO_WEBHOOK_SECRET');
+    $secret = config('services.paymongo.webhook_secret');
 
     if (!$signatureHeader || !$secret) {
         \Illuminate\Support\Facades\Log::error('Webhook missing auth', ['header' => $signatureHeader, 'secret_exists' => !!$secret]);

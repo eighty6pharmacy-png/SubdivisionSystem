@@ -207,7 +207,7 @@
         }).then((result) => {
             if (result.isConfirmed) {
                 if(window.OneSignal){
-                    OneSignal.logout().then(function(){document.getElementById('resident-logout-form').submit();});
+                    try{OneSignal.logout().finally(function(){document.getElementById('resident-logout-form').submit();});}catch(e){document.getElementById('resident-logout-form').submit();}
                 }else{
                     document.getElementById('resident-logout-form').submit();
                 }

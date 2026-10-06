@@ -37,7 +37,7 @@ class PushNotificationHelper
 
         try {
             $response = Http::withHeaders([
-                    'Authorization' => 'Basic ' . $restApiKey,
+                    'Authorization' => 'Key ' . $restApiKey,
                     'accept' => 'application/json',
                     'content-type' => 'application/json'
                 ])
