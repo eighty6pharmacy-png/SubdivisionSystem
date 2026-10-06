@@ -703,8 +703,8 @@
         document.getElementById('newCycleRate').value = currentKwhRate;
 
         // Auto-fill dates based on next month if a cycle already exists
-        if (allBillsRaw && allBillsRaw.length > 0 && allBillsRaw[0].curr_reading_date) {
-            const lastCurr = new Date(allBillsRaw[0].curr_reading_date);
+        if (allBillsRaw && allBillsRaw.length > 0 && allBillsRaw[0].current_reading_date) {
+            const lastCurr = new Date(allBillsRaw[0].current_reading_date);
             const nextCurr = new Date(lastCurr);
             nextCurr.setMonth(nextCurr.getMonth() + 1);
             const dueDay = new Date(nextCurr);
