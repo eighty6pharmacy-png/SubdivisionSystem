@@ -19,6 +19,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        \Illuminate\Support\Facades\Mail::extend('brevo', function (array $config) {
+            return (new \Symfony\Component\Mailer\Bridge\Brevo\Transport\BrevoTransportFactory())->create(
+                new \Symfony\Component\Mailer\Transport\Dsn('brevo+api', 'default', $config['key'])
+            );
+        });
+
+
         \Illuminate\Support\Facades\View::composer('layouts.admin', function ($view) {
             $pendingVisitors = \Illuminate\Support\Facades\Schema::hasTable('visitors') ? \Illuminate\Support\Facades\DB::table('visitors')->where('status', 'Pending')->count() : 0;
             $pendingAppointments = \Illuminate\Support\Facades\Schema::hasTable('appointments') ? \Illuminate\Support\Facades\DB::table('appointments')->where('status', 'Pending')->count() : 0;

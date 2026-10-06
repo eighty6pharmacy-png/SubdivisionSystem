@@ -17,7 +17,7 @@
                 ⚠️ CONFLICT: An appointment is already scheduled on this time and day. Please select a different date or time slot.
             </div>
 
-            <form id="appointmentForm" onsubmit="handleAppointmentSubmit(event)">
+            <form id="appointmentForm">
                 <div class="form-row" style="display: flex; gap: 12px; flex-wrap: nowrap; margin-bottom: 16px;">
                     <div class="form-group" style="flex: 1; min-width: 0; margin-bottom: 0;">
                         <label class="form-label" for="firstName">First Name</label>
