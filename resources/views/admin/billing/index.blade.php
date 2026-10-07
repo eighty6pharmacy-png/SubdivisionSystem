@@ -393,6 +393,7 @@
                                 <th>Amount</th>
                                 <th>Status</th>
                                 <th>Date</th>
+                                <th>Receipt</th>
                             </tr>
                         </thead>
                         <tbody id="modalHistoryTableBody">
@@ -411,11 +412,27 @@
                         <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                         View Payment History
                     </button>
-                    <button class="btn btn-outline" onclick="window.print()">Print Statement</button>
+                    <button class="btn btn-outline" onclick="printStatementReceipt()">🖨️ Print Statement</button>
                     <button id="modalDisconnectBtn" class="btn btn-outline" style="color: #ef4444; border-color: #ef4444; margin-top: 8px;" onclick="disconnectCasureco()">Disconnect (CASURECO)</button>
                     <button id="modalReconnectBtn" class="btn btn-outline" style="color: #10b981; border-color: #10b981; margin-top: 8px; display: none;" onclick="reconnectGrid()">Reconnect to Grid</button>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Receipt Preview Modal -->
+<div id="receiptModal" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(15,23,42,0.75); backdrop-filter:blur(6px); align-items:center; justify-content:center; padding:24px; box-sizing:border-box;">
+    <div style="background:#fff; max-width:720px; width:100%; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35); overflow:hidden; display:flex; flex-direction:column; max-height:90vh;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:20px 28px; border-bottom:1px solid #e2e8f0; background:#f8fafc;">
+            <span style="font-size:14px; font-weight:800; color:#047857; text-transform:uppercase; letter-spacing:0.05em;">🧾 Statement of Account — Electricity</span>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <button onclick="printReceiptFrame()" style="background:#047857; color:#fff; border:none; padding:8px 18px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;">🖨️ Print</button>
+                <button onclick="closeReceiptModal()" style="background:#f1f5f9; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; font-size:18px; line-height:1; color:#64748b;">✕</button>
+            </div>
+        </div>
+        <div style="overflow-y:auto; flex:1; padding:0;">
+            <iframe id="receiptFrame" style="width:100%; min-height:560px; border:none; display:block;"></iframe>
         </div>
     </div>
 </div>
@@ -428,6 +445,7 @@
                 <svg width="32" height="32" fill="none" stroke="#0284c7" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
             </div>
             <h3 style="font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 12px;">Create New Billing Cycle</h3>
+        </div>
         <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
             <div style="background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0;">
                 <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;"><i class="fas fa-calendar-alt" style="margin-right: 6px; color: #0284c7;"></i>Previous Reading Date</label>
@@ -484,6 +502,8 @@
     function promptAsync(title, desc, defaultValue, hideInput = false, confirmText = "Confirm", confirmClass = "btn-primary") {
         return new Promise((resolve) => {
             const modal = document.getElementById('genericInputModal');
+            modal.style.display = 'flex';
+            setTimeout(() => { modal.firstElementChild.style.transform = 'scale(1)'; }, 10);
             document.getElementById('genericInputTitle').textContent = title;
             document.getElementById('genericInputDesc').textContent = desc;
             const inputContainer = document.getElementById('genericInputContainer');
@@ -783,6 +803,41 @@
         }
     }
 
+    async function addPreviousBalanceFromModal(id, resident) {
+        const inputAmount = await promptAsync(
+            "Add Unpaid Balance", 
+            `Enter previous unpaid balance for ${resident} to add to this cycle:`, 
+            ""
+        );
+        if (inputAmount === null || inputAmount === "") return;
+        const amountNum = parseFloat(inputAmount);
+        if (isNaN(amountNum) || amountNum <= 0) {
+            Swal.fire("Invalid amount.");
+            return;
+        }
+
+        try {
+            const res = await fetch('/admin/api/billing/add-balance', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ id: id, amount: amountNum })
+            });
+            const data = await res.json();
+            if (data.success) {
+                Swal.fire(`Unpaid balance of ₱${amountNum.toLocaleString()} added for ${resident}.`);
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                Swal.fire(data.message || 'Failed to add balance.');
+            }
+        } catch(e) {
+            console.error(e);
+            Swal.fire('Failed to add balance.');
+        }
+    }
+
     function systemNotificationScan() {
         if (!window.pushSystemNotification) return;
         
@@ -868,6 +923,8 @@
         }
     }
 
+    let _currentBill = null;
+
     function viewDetail(id) {
         let bill = allBillsRaw.find(b => String(b.id).trim() === String(id).trim());
         if (!bill) {
@@ -880,6 +937,7 @@
             bill = allBillsRaw[0];
         }
         if (!bill) return;
+        _currentBill = bill;
 
         const resident = bill.resident;
         const lot = bill.lot;
@@ -965,6 +1023,7 @@
                 <td data-label="Amount" style="font-weight: 700;">₱${item.amount.toLocaleString()}</td>
                 <td data-label="Status"><span class="badge ${item.status === 'Paid' ? 'badge-success' : 'badge-danger'}">${item.status}</span></td>
                 <td data-label="Date" style="font-size: 11px; color: #64748b;">${item.date}</td>
+                <td data-label="Receipt"><button onclick="printStatementReceipt()" style="background:#047857; color:#fff; border:none; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;">🖨️</button></td>
             `;
             historyBody.appendChild(row);
         });
@@ -987,6 +1046,129 @@
 
     function closeModal() {
         document.getElementById('billModal').style.display = 'none';
+    }
+
+    function closeReceiptModal() {
+        document.getElementById('receiptModal').style.display = 'none';
+    }
+
+    function printReceiptFrame() {
+        const frame = document.getElementById('receiptFrame');
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+    }
+
+    function printStatementReceipt() {
+        const bill = _currentBill;
+        if (!bill) return;
+
+        const resident = bill.resident || 'N/A';
+        const lot = bill.lot || 'N/A';
+        const status = bill.status || 'unpaid';
+        const usageKwh = bill.usage_kwh || 0;
+        const prevReading = bill.prev_reading || 0;
+        const currReading = bill.curr_reading || 0;
+        const prevBalance = parseFloat(bill.previous_balance) || 0;
+        const totalPaid = parseFloat(bill.total_paid) || 0;
+        const issuedDate = bill.issued_date || 'N/A';
+        const dueDate = bill.due || 'N/A';
+
+        const amountBefore = (usageKwh * currentKwhRate) + prevBalance;
+        const penaltyAmount = amountBefore * (currentPenaltyRate / 100);
+        const amountAfter = amountBefore + penaltyAmount;
+        const history = bill.payment_history || [];
+        const latestPay = history.length > 0 ? history[history.length - 1] : null;
+        const trn = latestPay ? (latestPay.trn || 'N/A') : 'N/A';
+        const mop = latestPay ? (latestPay.method || 'Office Payment') : 'N/A';
+        const paidDate = latestPay ? (latestPay.date || 'N/A') : 'N/A';
+
+        const statusColor = status === 'paid' ? '#10b981' : '#ef4444';
+        const statusLabel = status === 'paid' ? 'PAID' : 'UNPAID';
+
+        const paidRowsHtml = status === 'paid' ? `
+            <tr><td style="padding:5px;border:none;"><strong>MOP:</strong></td><td style="padding:5px;border:none;">${mop}</td></tr>
+            <tr><td style="padding:5px;border:none;"><strong>Reference (TRN):</strong></td><td style="padding:5px;border:none;font-family:monospace;font-size:11px;">${trn}</td></tr>
+            <tr><td style="padding:5px;border:none;"><strong>Date Paid:</strong></td><td style="padding:5px;border:none;font-size:11px;">${paidDate}</td></tr>
+        ` : '';
+
+        const penaltyRowHtml = penaltyAmount > 0 ? `
+            <tr><td>Late Payment Penalty (5%)</td><td style="text-align:right;">₱${penaltyAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
+        ` : '';
+
+        const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Electricity SOA</title>
+<style>
+  body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#333;font-size:14px;margin:0;padding:24px;}
+  .header{text-align:center;border-bottom:2px solid #047857;padding-bottom:12px;margin-bottom:20px;position:relative;}
+  .header h1{color:#047857;margin:0;font-size:22px;text-transform:uppercase;}
+  .header p{margin:4px 0 0;color:#666;font-size:12px;}
+  .watermark{position:absolute;top:8px;right:12px;border:4px solid ${statusColor};color:${statusColor};padding:6px 14px;font-size:26px;font-weight:bold;border-radius:8px;transform:rotate(15deg);opacity:0.75;}
+  .row{width:100%;margin-bottom:20px;}
+  .col-half{width:48%;display:inline-block;vertical-align:top;}
+  .box{border:1px solid #ddd;padding:14px;border-radius:6px;background:#f9f9f9;}
+  .box h3{margin-top:0;border-bottom:1px solid #ddd;padding-bottom:5px;font-size:15px;color:#047857;}
+  table{width:100%;border-collapse:collapse;margin-bottom:20px;}
+  th,td{padding:9px;border-bottom:1px solid #eee;}
+  th{text-align:left;color:#555;background:#f0f0f0;}
+  .text-right{text-align:right;}
+  .fw-bold{font-weight:bold;}
+  .total-row td{border-top:2px solid #047857;font-size:15px;font-weight:bold;color:#047857;}
+  .footer{margin-top:32px;text-align:center;font-size:12px;color:#888;border-top:1px solid #eee;padding-top:16px;}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Althesa Subdivision</h1>
+  <p>Z1, Tagbong, Pili, Camarines Sur</p>
+  <p><strong>STATEMENT OF ACCOUNT (ELECTRICITY)</strong></p>
+  <div class="watermark">${statusLabel}</div>
+</div>
+<div class="row">
+  <div class="col-half box" style="margin-right:2%;">
+    <h3>Account Details</h3>
+    <table style="border:none;margin-bottom:0;">
+      <tr><td style="padding:5px;border:none;width:42%;"><strong>Name:</strong></td><td style="padding:5px;border:none;">${resident}</td></tr>
+      <tr><td style="padding:5px;border:none;"><strong>Address:</strong></td><td style="padding:5px;border:none;">${lot}</td></tr>
+      <tr><td style="padding:5px;border:none;"><strong>Date Issued:</strong></td><td style="padding:5px;border:none;">${issuedDate}</td></tr>
+      <tr><td style="padding:5px;border:none;"><strong>Due Date:</strong></td><td style="padding:5px;border:none;color:red;">${dueDate}</td></tr>
+      ${paidRowsHtml}
+    </table>
+  </div>
+  <div class="col-half box">
+    <h3>Meter Information</h3>
+    <table style="border:none;margin-bottom:0;">
+      <tr><td style="padding:5px;border:none;width:55%;"><strong>Previous Reading:</strong></td><td style="padding:5px;border:none;text-align:right;">${prevReading}</td></tr>
+      <tr><td style="padding:5px;border:none;"><strong>Current Reading:</strong></td><td style="padding:5px;border:none;text-align:right;">${currReading}</td></tr>
+      <tr><td style="padding:5px;border:none;"><strong>Consumption:</strong></td><td style="padding:5px;border:none;text-align:right;font-weight:bold;">${usageKwh} kWh</td></tr>
+      <tr><td style="padding:5px;border:none;"><strong>Rate:</strong></td><td style="padding:5px;border:none;text-align:right;">₱${currentKwhRate.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}/kWh</td></tr>
+    </table>
+  </div>
+</div>
+<h3 style="color:#047857;border-bottom:1px solid #ddd;padding-bottom:5px;">Billing Summary</h3>
+<table>
+  <thead><tr><th>Description</th><th class="text-right">Amount (PHP)</th></tr></thead>
+  <tbody>
+    <tr><td>Current Charges (${usageKwh} kWh @ ₱${currentKwhRate.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}/kWh)</td><td class="text-right">₱${((usageKwh * currentKwhRate)).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
+    <tr><td>Previous Balance</td><td class="text-right">₱${prevBalance.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
+    ${penaltyRowHtml}
+    <tr class="total-row"><td>TOTAL AMOUNT DUE</td><td class="text-right">₱${amountAfter.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
+    <tr><td style="color:#10b981;font-weight:700;">Total Paid</td><td class="text-right" style="color:#10b981;font-weight:700;">₱${totalPaid.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
+  </tbody>
+</table>
+<div class="footer">
+  <p>This is a system-generated statement of account. No signature required.</p>
+  ${status === 'paid' ? '<p style="color:#10b981;font-weight:bold;">This bill has been fully settled. Thank you for your payment!</p>' : '<p>Please pay on or before the due date to avoid service disconnection.</p>'}
+</div>
+</body>
+</html>`;
+
+        const frame = document.getElementById('receiptFrame');
+        const receiptModal = document.getElementById('receiptModal');
+        receiptModal.style.display = 'flex';
+        frame.srcdoc = html;
     }
 
     async function recordOfficePaymentFromModal(id, resident, totalAmount) {

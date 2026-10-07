@@ -71,6 +71,45 @@ class Graph {
         }
         return path;
     }
+
+    removeEdge(source, dest) {
+        if (this.nodes.has(source)) {
+            let nodeData = this.nodes.get(source);
+            nodeData.edges = nodeData.edges.filter(e => e.node !== dest);
+        }
+        if (this.nodes.has(dest)) {
+            let nodeData = this.nodes.get(dest);
+            nodeData.edges = nodeData.edges.filter(e => e.node !== source);
+        }
+    }
+
+    alternativePath(start, end) {
+        const primaryPath = this.dijkstra(start, end);
+        if (primaryPath.length <= 2) return []; // Not enough edges to find a meaningful alternative
+
+        // Try removing the middle edge to force a significant detour
+        const midIndex = Math.floor(primaryPath.length / 2);
+        const nodeA = primaryPath[midIndex - 1];
+        const nodeB = primaryPath[midIndex];
+
+        let tempGraph = this.clone();
+        tempGraph.removeEdge(nodeA, nodeB);
+        
+        let altPath = tempGraph.dijkstra(start, end);
+        
+        // If disconnected, try removing the first edge instead
+        if (altPath.length === 0 || altPath[altPath.length - 1] !== end) {
+            let tempGraph2 = this.clone();
+            tempGraph2.removeEdge(primaryPath[0], primaryPath[1]);
+            altPath = tempGraph2.dijkstra(start, end);
+            if (altPath.length === 0 || altPath[altPath.length - 1] !== end) return [];
+        }
+        
+        // Ensure it's actually different (sometimes graphs have only 1 path)
+        if (altPath.join(',') === primaryPath.join(',')) return [];
+        
+        return altPath;
+    }
 }
 
 window.DijkstraGraph = Graph;

@@ -100,10 +100,14 @@ class FinancingRecordController extends Controller
         $data['total_consideration'] = $contractPrice + $mbrdcAddFees + $otherExp + $improvementsFee;
         $data['mbrdc_amt_due_for_financing'] = $data['total_consideration'] - $record->paid_by_vendee_equity;
 
+        // Retention/Conversion is only deducted while it is on hold (Pag-IBIG/bank hold)
+        $retentionOnHold = filter_var($request->input('retention_on_hold', $record->retention_on_hold), FILTER_VALIDATE_BOOLEAN);
+        $data['retention_on_hold'] = $retentionOnHold;
+
         // Auto Calculate Totals
         $totalDeductions = 
             ($data['inspection_fee'] ?? 0) + 
-            ($data['retention_fee'] ?? 0) +
+            ($retentionOnHold ? ($data['retention_fee'] ?? 0) : 0) +
             ($data['sri_mri'] ?? 0) +
             ($data['pag_ibig_non_life'] ?? 0) +
             ($data['interim_mri'] ?? 0);
@@ -112,7 +116,8 @@ class FinancingRecordController extends Controller
         
         if (isset($data['loan_release'])) {
             $data['net_loan_proceeds'] = $data['loan_release'] - $totalDeductions;
-            $data['receivables'] = $data['mbrdc_amt_due_for_financing'] - $data['net_loan_proceeds'] + ($data['additional_bill_of_materials'] ?? 0) + ($data['mbrdc_turn_over_fee'] ?? 0);
+            // Balance = total amount for financing minus gross loan released by Pag-IBIG/bank
+            $data['receivables'] = max(0, $data['mbrdc_amt_due_for_financing'] - $data['loan_release'] + ($data['additional_bill_of_materials'] ?? 0) + ($data['mbrdc_turn_over_fee'] ?? 0));
             $data['balance'] = max(0, $data['receivables'] - $record->amount_paid);
         }
 

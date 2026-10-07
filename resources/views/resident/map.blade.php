@@ -7,7 +7,7 @@
     <div style="margin-bottom: 32px; display: flex; justify-content: space-between; align-items: flex-end;">
         <div>
             <h1 style="font-size: 32px; font-weight: 800; color: #0f172a; margin: 0;">Interactive Map</h1>
-            <p style="color: #64748b; margin-top: 8px; font-size: 15px;">Click on any two houses to calculate the shortest path between them.</p>
+            <p style="color: #64748b; margin-top: 8px; font-size: 15px;">Click on any two houses to calculate the shortest path (blue) and an alternative route (red).</p>
         </div>
         <div style="display: flex; gap: 16px; align-items: flex-end;">
             <div style="background: white; padding: 10px 16px; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; min-width: 200px;">

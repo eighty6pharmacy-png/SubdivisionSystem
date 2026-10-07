@@ -33,6 +33,10 @@
             <div style="width: 18px; height: 3px; background: #2563eb; border-radius: 2px; opacity: 0.8; border-bottom: 2px dashed #fff;"></div>
             Suggested Route
         </div>
+        <div class="legend-row">
+            <div style="width: 18px; height: 3px; background: #ef4444; border-radius: 2px; opacity: 0.8; border-bottom: 2px dashed #fff;"></div>
+            Alternative Route
+        </div>
     </div>
 </div>
 @endsection

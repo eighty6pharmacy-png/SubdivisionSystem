@@ -119,6 +119,9 @@ class SyncPaymongoCheckouts
                         $dp->paymongo_checkout_id = null;
                         $dp->save();
 
+                        $sourceType = $paidPayment['attributes']['source']['type'] ?? '';
+                        $method = $sourceType === 'gcash' ? 'GCash' : ($sourceType ? ucfirst($sourceType) : 'Online Payment');
+
                         $trn = 'PM-' . strtoupper(\Illuminate\Support\Str::random(8)) . '-' . substr($dp->id, 0, 8);
                         \Illuminate\Support\Facades\DB::table('downpayment_histories')->insert([
                             'id' => (string) \Illuminate\Support\Str::uuid(),
@@ -126,6 +129,7 @@ class SyncPaymongoCheckouts
                             'amount' => $exactAmount,
                             'payment_date' => now(),
                             'trn' => $trn,
+                            'payment_method' => $method,
                             'status' => 'Paid',
                             'created_at' => now(),
                             'updated_at' => now()

@@ -56,6 +56,11 @@
                         </select>
                     </div>
                 </div>
+                <div class="form-row" style="margin-top: 16px;">
+                    <div class="form-group" style="margin-top: 8px;">
+                        <div class="g-recaptcha" data-sitekey="{{ env('RECAPTCHA_SITE_KEY') }}"></div>
+                    </div>
+                </div>
 
                 <div class="form-submit-row">
                     <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; justify-content: center;">
@@ -189,7 +194,8 @@
                             date: selectedDate,
                             time: selectedTime,
                             type: 'Site Visit / Lot Viewing',
-                            notes: ''
+                            notes: '',
+                            recaptcha_token: grecaptcha.getResponse()
                         })
                     }).then(() => {
                         // Send notification email
@@ -218,10 +224,12 @@
                             submitBtn.disabled = false;
                             submitBtn.innerHTML = 'Confirm Appointment';
                         }
+                        grecaptcha.reset();
                     });
                 });
             })
             .catch(err => console.error('Failed to load availability', err));
     });
 </script>
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
 @endsection

@@ -189,7 +189,7 @@
                                 <td>
                                     <div style="display: flex; gap: 8px;">
                                         <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;"
-                                            onclick="viewDetail('{{ $bill['id'] }}')">Manage</button>
+                                            onclick="viewDetail('{{ $bill['id'] }}')">Edit</button>
                                     </div>
                                 </td>
                             </tr>
@@ -244,13 +244,7 @@
                             style="font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 16px; text-transform: uppercase;">
                             Log Installment Payment</h4>
                         <div style="display: flex; gap: 12px; align-items: flex-end;">
-                            <div style="flex: 1;">
-                                <label
-                                    style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Payment
-                                    Date</label>
-                                <input type="date" id="directPaymentDate" class="filter-select"
-                                    style="width: 100%; font-size: 16px; padding: 12px;" value="{{ date('Y-m-d') }}">
-                            </div>
+                            <!-- Date input removed per user request -->
                             <div style="flex: 1;">
                                 <label
                                     style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Amount
@@ -266,9 +260,6 @@
 
                     <div
                         style="display: flex; gap: 16px; margin-top: 40px; border-top: 1px solid var(--bill-border); padding-top: 32px;">
-                        <button class="btn btn-outline"
-                            style="color: var(--bill-primary); border-color: var(--bill-primary);"
-                            onclick="Swal.fire('Creating receipt...')">Create Receipt</button>
                         <button class="btn btn-outline" onclick="viewHistory()">View History</button>
                     </div>
                 </div>
@@ -467,11 +458,26 @@
             if (!currentModalId) return;
             const amountStr = document.getElementById('directPaymentAmount').value.replace(/,/g, '');
             const amount = parseFloat(amountStr);
-            const paymentDate = document.getElementById('directPaymentDate').value || new Date().toISOString().split('T')[0];
+            const now = new Date();
+            const paymentDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
 
             if (!amount || amount <= 0) return Swal.fire('Enter valid amount');
 
+            const result = await Swal.fire({
+                title: 'Confirm Payment',
+                text: `Are you sure you want to log a payment of ₱${amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#10b981',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Yes, log payment!'
+            });
+
+            if (!result.isConfirmed) return;
+
             try {
+                Swal.fire({ title: 'Logging payment...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+
                 const res = await fetch('/admin/downpayment-fee/pay', {
                     method: 'POST',
                     headers: {
@@ -482,12 +488,14 @@
                 });
 
                 const data = await res.json();
+                Swal.close();
 
                 if (res.ok && data.success) {
                     const bill = allBillsRaw.find(b => b.id === currentModalId);
                     if (bill) {
                         bill.paid_amount += amount;
                         bill.months_paid += 1;
+                        let oldNextDue = bill.next_due;
                         if (data.next_due) bill.next_due = data.next_due;
 
                         let progress = (bill.paid_amount / bill.total_dp) * 100;
@@ -524,11 +532,13 @@
 
                         if (!bill.history) bill.history = [];
                         bill.history.unshift({
+                            id: data.id || '',
                             trn: data.trn || 'NEW-PAYMENT',
-                            month: new Date(paymentDate).toLocaleString('default', { month: 'short', year: 'numeric' }),
+                            payment_method: 'Office Payment',
+                            month: oldNextDue ? new Date(oldNextDue).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A',
                             amount: amount,
                             status: 'Paid',
-                            date: paymentDate
+                            date: new Date(paymentDate).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
                         });
 
                         viewDetail(currentModalId);
@@ -577,7 +587,9 @@
             }
 
             document.getElementById('directPaymentAmount').value = bill.monthly_amortization ? bill.monthly_amortization.toLocaleString('en-US') : '';
-            document.getElementById('directPaymentDate').value = new Date().toISOString().split('T')[0];
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('directPaymentDate').value = now.toISOString().slice(0,16);
 
             document.getElementById('billModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
@@ -781,7 +793,7 @@
             if (!tbody) {
                 const historyHtml = `
                 <div id="historyModal" class="bill-modal" style="display: flex; align-items: center; justify-content: center; z-index: 4000;">
-                    <div class="bill-modal-content" style="max-width: 600px; padding: 24px; border-radius: 20px;">
+                    <div class="bill-modal-content" style="max-width: 1000px; padding: 24px; border-radius: 20px; width: 90%;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                             <h3 style="font-size: 18px; font-weight: 800;">Payment History</h3>
                             <button onclick="document.getElementById('historyModal').remove()" style="background:none;border:none;font-size:24px;cursor:pointer;">&times;</button>
@@ -791,9 +803,12 @@
                                 <thead>
                                     <tr style="border-bottom: 2px solid #e2e8f0; color: #64748b;">
                                         <th style="padding: 12px; text-align: left;">Date</th>
+                                        <th style="padding: 12px; text-align: left;">Due Date</th>
                                         <th style="padding: 12px; text-align: left;">TRN</th>
+                                        <th style="padding: 12px; text-align: left;">Payment Method</th>
                                         <th style="padding: 12px; text-align: right;">Amount</th>
                                         <th style="padding: 12px; text-align: center;">Status</th>
+                                        <th style="padding: 12px; text-align: right;">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -808,16 +823,25 @@
             }
 
             if (bill.history && bill.history.length > 0) {
-                tbody.innerHTML = bill.history.map(h => `
+                tbody.innerHTML = bill.history.map(h => {
+                    const mop = h.payment_method || 'Office Payment';
+                    return `
                     <tr style="border-bottom: 1px solid #f1f5f9;">
                         <td style="padding: 12px; font-weight: 600;">${h.date}</td>
-                        <td style="padding: 12px; color: #64748b; font-family: monospace;">${h.trn}</td>
-                          <td style="padding: 12px; text-align: right; font-weight: 700; color: #0f172a;">₱${h.amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td style="padding: 12px; font-weight: 700; color: #3b82f6;">${h.month}</td>
+                        <td style="padding: 12px; color: #64748b; font-family: monospace;">${h.trn || 'Manual'}</td>
+                        <td style="padding: 12px; color: #0f172a;">${mop}</td>
+                        <td style="padding: 12px; text-align: right; font-weight: 700; color: #0f172a;">₱${h.amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                         <td style="padding: 12px; text-align: center;"><span class="trend-chip trend-early" style="font-size:11px;">Paid</span></td>
+                        <td style="padding: 12px; text-align: right;">
+                            <a href="/buyer/payments/downpayment/receipt/${h.id}" target="_blank" class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; display: inline-block;">
+                                View Receipt
+                            </a>
+                        </td>
                     </tr>
-                `).join('');
+                `}).join('');
             } else {
-                tbody.innerHTML = `<tr><td colspan="4" style="padding: 24px; text-align: center; color: #64748b;">No payments recorded yet.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="6" style="padding: 24px; text-align: center; color: #64748b;">No payments recorded yet.</td></tr>`;
             }
         }
 

@@ -11,10 +11,14 @@
             <h1>Identity & Access Management</h1>
             <p>Control system access for Residents, Security Personnel, and Finance Officers.</p>
         </div>
-        <div class="bill-actions">
+        <div class="bill-actions" style="display: flex; gap: 8px;">
             <button class="btn btn-primary" onclick="openAddUserModal()">
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
                 Register New User
+            </button>
+            <button class="btn btn-outline" style="background: #fff;" onclick="openImportModal()">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                Import CSV
             </button>
         </div>
     </div>
@@ -67,6 +71,30 @@
                 <option value="Archived">Archived</option>
             </select>
         </div>
+        <div id="blockFilterContainer" style="width: 150px; display: none;">
+            <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 8px; display: block;">Filter by Block</label>
+            <select id="blockFilter" class="filter-select" onchange="applyUserFilters()" style="width: 100%;">
+                <option value="all">All Blocks</option>
+                <option value="1">Block 1</option>
+                <option value="2">Block 2</option>
+                <option value="3">Block 3</option>
+                <option value="4">Block 4</option>
+                <option value="5">Block 5</option>
+                <option value="6">Block 6</option>
+                <option value="7">Block 7</option>
+                <option value="8">Block 8</option>
+                <option value="9">Block 9</option>
+                <option value="10">Block 10</option>
+                <option value="11">Block 11</option>
+                <option value="12">Block 12</option>
+                <option value="13">Block 13</option>
+                <option value="14">Block 14</option>
+                <option value="15">Block 15</option>
+                <option value="16">Block 16</option>
+                <option value="17">Block 17</option>
+                <option value="18">Block 18</option>
+            </select>
+        </div>
     </div>
 
     <!-- User Table -->
@@ -85,7 +113,7 @@
                 </thead>
                 <tbody id="userTableBody">
                     @foreach($users as $user)
-                    <tr class="user-row" data-dbid="{{ $user['db_id'] }}" data-name="{{ strtolower($user['name']) }}" data-email="{{ strtolower($user['email']) }}" data-role="{{ $user['role'] }}" data-status="{{ $user['status'] }}">
+                    <tr class="user-row" data-dbid="{{ $user['db_id'] }}" data-name="{{ strtolower($user['name']) }}" data-email="{{ strtolower($user['email']) }}" data-role="{{ $user['role'] }}" data-status="{{ $user['status'] }}" data-block="{{ $user['block'] ?? '' }}">
                         <td style="font-family: monospace; font-weight: 700; color: #64748b;">{{ $user['id'] }}</td>
                         <td>
                             <div style="display: flex; align-items: center; gap: 12px;">
@@ -182,7 +210,7 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                         <div>
                             <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Block</label>
-                            <select id="resBlock" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px;"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option></select>
+                            <select id="resBlock" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px;"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option></select>
                         </div>
                         <div>
                             <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Lot</label>
@@ -251,7 +279,7 @@
                 <div>
                     <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Block</label>
                     <select id="editResBlock" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px;">
-                        @for($i=1; $i<=16; $i++) <option value="{{$i}}">{{$i}}</option> @endfor
+                        @for($i=1; $i<=18; $i++) <option value="{{$i}}">{{$i}}</option> @endfor
                     </select>
                 </div>
                 <div>
@@ -330,8 +358,36 @@
                 </div>
             </div>
         </div>
-
         <button class="btn btn-outline" style="width: 100%; justify-content: center; padding: 12px; margin-top: 24px; border-radius: 12px; font-weight: 700;" onclick="closeViewModal()">Close Profile</button>
+    </div>
+</div>
+
+<!-- Import Users Modal -->
+<div id="importUserModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2000; background: rgba(15,23,42,0.6); backdrop-filter: blur(8px);">
+    <div class="bill-modal-content" style="max-width: 500px; width: 90%; padding: 32px; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
+        <div class="modal-header" style="padding: 0; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <h2 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">Import Users from CSV</h2>
+                <p style="font-size: 13px; font-weight: 400; color: #64748b; margin-top: 4px;">Upload a CSV file to bulk create user accounts.</p>
+            </div>
+            <button class="ann-btn-icon" onclick="closeImportModal()" style="background: none; border: none; cursor: pointer; color: #64748b;">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+
+        <form id="importUserForm" onsubmit="submitImportUser(event)" style="display: flex; flex-direction: column; gap: 16px;" enctype="multipart/form-data">
+
+
+            <div>
+                <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Select CSV File</label>
+                <input type="file" id="importCsvFile" name="csv_file" accept=".csv" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px; background: #fff;">
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 14px; margin-top: 12px; border-radius: 12px; font-weight: 700;">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                Upload and Process
+            </button>
+        </form>
     </div>
 </div>
 
@@ -521,6 +577,11 @@
         const search = document.getElementById('userSearch').value.toLowerCase();
         const role = document.getElementById('roleFilter').value;
         const status = document.getElementById('statusFilter').value;
+        const block = document.getElementById('blockFilter').value;
+        
+        // Show/Hide block filter
+        document.getElementById('blockFilterContainer').style.display = (role === 'Resident') ? 'block' : 'none';
+
         const rows = document.querySelectorAll('.user-row');
 
         rows.forEach(row => {
@@ -528,12 +589,19 @@
             const email = row.dataset.email;
             const r = row.dataset.role;
             const s = row.dataset.status;
+            const b = row.dataset.block;
 
             const matchesSearch = name.includes(search) || email.includes(search);
             const matchesRole = role === 'all' || r === role;
             const matchesStatus = status === 'all' || s === status;
+            
+            // Only apply block filter if role is Resident and a specific block is selected
+            let matchesBlock = true;
+            if (role === 'Resident' && block !== 'all') {
+                matchesBlock = (b === block);
+            }
 
-            row.style.display = (matchesSearch && matchesRole && matchesStatus) ? '' : 'none';
+            row.style.display = (matchesSearch && matchesRole && matchesStatus && matchesBlock) ? '' : 'none';
         });
     }
 
@@ -594,6 +662,63 @@
 
     function resetPassword(id) {
         Swal.fire(`A secure password reset link has been dispatched to the registered email for user ${id}.`);
+    }
+
+    function openImportModal() {
+        document.getElementById('importUserModal').style.display = 'flex';
+    }
+
+    function closeImportModal() {
+        document.getElementById('importUserModal').style.display = 'none';
+        document.getElementById('importUserForm').reset();
+    }
+
+    async function submitImportUser(e) {
+        e.preventDefault();
+        
+        const fileInput = document.getElementById('importCsvFile');
+        if (!fileInput.files.length) {
+            Swal.fire('Please select a CSV file.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('csv_file', fileInput.files[0]);
+
+        try {
+            Swal.fire({ title: 'Processing...', text: 'Reading CSV and importing users. This may take a moment.', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+            
+            const res = await fetch('/admin/users/import', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                    'Accept': 'application/json'
+                },
+                body: formData
+            });
+
+            const data = await res.json().catch(() => null);
+            
+            if (!res.ok) {
+                const errorMsg = data && data.message ? data.message : 'Failed to import users.';
+                Swal.fire(`Error: ${errorMsg}`);
+                return;
+            }
+            
+            if(data && data.success) {
+                let msg = `Successfully processed ${data.processed} rows.\n\nCreated ${data.created} new users.`;
+                if (data.errors && data.errors.length > 0) {
+                    msg += `\n\nThere were ${data.errors.length} errors/skipped rows (e.g., duplicates or missing data).`;
+                    console.warn('Import errors:', data.errors);
+                }
+                Swal.fire(msg).then(() => window.location.reload());
+            } else {
+                Swal.fire('Failed to import users.');
+            }
+        } catch(err) {
+            console.error(err);
+            Swal.fire('An error occurred during import.');
+        }
     }
 
     function archiveUser(id, dbid, role, btnElement) {

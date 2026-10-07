@@ -507,17 +507,26 @@ if (!function_exists('getDownpaymentFees')) {
             if (\Illuminate\Support\Facades\Schema::hasTable('downpayments') && \App\Models\Downpayment::count() > 0) {
                 return \App\Models\Downpayment::with(['reservation.lot'])->get()->map(function ($dp) {
                     $res = $dp->reservation;
-                    $histories = \Illuminate\Support\Facades\DB::table('downpayment_histories')->where('downpayment_id', $dp->id)->orderBy('created_at', 'desc')->get();
+                    $histories = \Illuminate\Support\Facades\DB::table('downpayment_histories')->where('downpayment_id', $dp->id)->orderBy('created_at', 'asc')->get();
+                    $N = $histories->count();
+                    $currentDueDate = $dp->due_date ? \Carbon\Carbon::parse($dp->due_date) : null;
                     
-                    $historyData = $histories->map(function($h) {
+                    $historyData = $histories->map(function($h, $index) use ($N, $currentDueDate) {
+                        $dueDateStr = 'N/A';
+                        if ($currentDueDate) {
+                            $dueDateStr = $currentDueDate->copy()->subMonths($N - $index)->format('M d, Y');
+                        }
+                        
                         return [
+                            'id' => $h->id,
                             'trn' => $h->trn,
-                            'month' => \Carbon\Carbon::parse($h->payment_date)->format('M Y'),
+                            'payment_method' => $h->payment_method ?? 'Office Payment',
+                            'month' => $dueDateStr, // This is now accurately the Due Date
                             'amount' => (float)$h->amount,
                             'status' => $h->status,
-                            'date' => \Carbon\Carbon::parse($h->payment_date)->format('y-m-d')
+                            'date' => \Carbon\Carbon::parse($h->payment_date)->format('M d, Y h:i A')
                         ];
-                    })->toArray();
+                    })->reverse()->values()->toArray();
                     
                     $amortization = $dp->monthly_amortization ?? 15000;
                     $months_to_pay = $dp->months_to_pay ?? 24;

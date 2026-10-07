@@ -13,6 +13,12 @@
             <p>Broadcast important news, updates, and emergency alerts to residents.</p>
         </div>
         <div class="ann-header-actions">
+            <select id="annDateFilter" style="width: 160px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--ann-border); font-size: 14px; font-weight: 600; cursor: pointer; background: #fff;">
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="this_week">This Week</option>
+                <option value="last_month">Last Month</option>
+            </select>
             <div class="ann-search-wrapper" style="position: relative;">
                 <input type="text" id="annSearch" placeholder="Search announcements..." 
                        style="width: 100%; padding: 12px 16px 12px 42px; border-radius: 12px; border: 1px solid var(--ann-border); font-size: 14px; outline: none; transition: all 0.2s; box-shadow: var(--ann-shadow);">
@@ -59,7 +65,7 @@
     <!-- Grid -->
     <div class="ann-grid" id="annGrid">
         @foreach($announcements as $ann)
-        <div class="ann-card" data-title="{{ strtolower($ann['title']) }}" data-cat="{{ $ann['cat'] }}" data-status-val="{{ $ann['status'] }}" data-archived="false">
+        <div class="ann-card" data-title="{{ strtolower($ann['title']) }}" data-cat="{{ $ann['cat'] }}" data-status-val="{{ $ann['status'] }}" data-date="{{ date('Y-m-d', strtotime($ann['date'])) }}" data-archived="false">
             <div class="ann-card-header">
                 <span class="ann-category cat-{{ strtolower($ann['cat']) }}">{{ $ann['cat'] }}</span>
                 <span class="ann-status status-{{ $ann['status'] }}" title="{{ ucfirst($ann['status']) }}"></span>
@@ -85,6 +91,12 @@
             </div>
         </div>
         @endforeach
+    </div>
+
+    <div id="annPagination" style="display:none; margin-top:32px; justify-content:center; align-items:center;">
+        <button id="annPrev" type="button" class="btn btn-outline" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-weight: 600;">Previous</button>
+        <span id="annPageIndicator" style="font-size: 14px; font-weight: 700; color: #475569; margin: 0 16px;">Page 1 of 1</span>
+        <button id="annNext" type="button" class="btn btn-outline" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-weight: 600;">Next</button>
     </div>
 </div>
 
@@ -113,8 +125,7 @@
                 <textarea id="annContent" rows="4" placeholder="Describe the details of the announcement..." style="width: 100%; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--ann-border); font-size: 14px; font-family: inherit; resize: none;" required></textarea>
             </div>
             <div style="display: flex; gap: 12px; margin-top: 12px;">
-                <button type="button" id="btnDraft" class="btn btn-outline" style="flex: 1; padding: 14px;" onclick="createPost('draft')">Save Draft</button>
-                <button type="button" id="btnPublish" class="btn btn-primary" style="flex: 2; padding: 14px;" onclick="createPost('published')">Publish Now</button>
+                <button type="button" id="btnPublish" class="btn btn-primary" style="flex: 1; padding: 14px;" onclick="createPost('published')">Publish Now</button>
             </div>
         </form>
     </div>
@@ -190,9 +201,39 @@
             filterCards();
         }
 
-        window.filterCards = function() {
+        const ANN_PER_PAGE = 9;
+        let annPage = 1;
+        const dateSelect = document.getElementById('annDateFilter');
+
+        function matchesDate(dateStr, filter) {
+            if (filter === 'all') return true;
+            const d = new Date(dateStr + 'T00:00:00');
+            if (isNaN(d.getTime())) return true;
+            const now = new Date();
+            if (filter === 'today') return d.toDateString() === now.toDateString();
+            if (filter === 'this_week') {
+                const start = new Date(now);
+                start.setHours(0, 0, 0, 0);
+                start.setDate(now.getDate() - now.getDay());
+                const end = new Date(start);
+                end.setDate(start.getDate() + 6);
+                end.setHours(23, 59, 59, 999);
+                return d >= start && d <= end;
+            }
+            if (filter === 'last_month') {
+                const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+                return d >= start && d <= end;
+            }
+            return true;
+        }
+
+        window.filterCards = function(resetPage = true) {
+            if (resetPage) annPage = 1;
             const query = searchInput.value.toLowerCase();
+            const dateFilter = dateSelect.value;
             const cards = document.querySelectorAll('.ann-card');
+            const matched = [];
 
             cards.forEach(card => {
                 const title = card.getAttribute('data-title');
@@ -202,6 +243,7 @@
                 
                 const matchesSearch = title.includes(query);
                 const matchesCat = activeCat === 'all' || cat === activeCat;
+                const matchesDt = matchesDate(card.getAttribute('data-date'), dateFilter);
                 
                 // Filtering Logic
                 let matchesStatus = false;
@@ -216,13 +258,35 @@
                     }
                 }
 
-                if (matchesSearch && matchesCat && matchesStatus) {
-                    card.style.display = 'flex';
+                if (matchesSearch && matchesCat && matchesStatus && matchesDt) {
+                    matched.push(card);
                 } else {
                     card.style.display = 'none';
                 }
             });
+
+            const totalPages = Math.max(1, Math.ceil(matched.length / ANN_PER_PAGE));
+            if (annPage > totalPages) annPage = totalPages;
+            const startIdx = (annPage - 1) * ANN_PER_PAGE;
+            matched.forEach((card, i) => {
+                card.style.display = (i >= startIdx && i < startIdx + ANN_PER_PAGE) ? 'flex' : 'none';
+            });
+
+            const pag = document.getElementById('annPagination');
+            pag.style.display = totalPages > 1 ? 'flex' : 'none';
+            document.getElementById('annPageIndicator').textContent = `Page ${annPage} of ${totalPages}`;
+            const prev = document.getElementById('annPrev');
+            const next = document.getElementById('annNext');
+            prev.disabled = annPage === 1;
+            next.disabled = annPage === totalPages;
+            prev.style.opacity = annPage === 1 ? '0.5' : '1';
+            next.style.opacity = annPage === totalPages ? '0.5' : '1';
         }
+
+        dateSelect.addEventListener('change', () => filterCards());
+        document.getElementById('annPrev').addEventListener('click', () => { annPage--; filterCards(false); });
+        document.getElementById('annNext').addEventListener('click', () => { annPage++; filterCards(false); });
+        filterCards();
 
         window.updateStats = function() {
             const cards = document.querySelectorAll('.ann-card');
@@ -259,9 +323,7 @@
             if (isPublishing) return;
             isPublishing = true;
 
-            const btnDraft = document.getElementById('btnDraft');
             const btnPublish = document.getElementById('btnPublish');
-            btnDraft.disabled = true; btnDraft.style.opacity = '0.5'; btnDraft.style.pointerEvents = 'none';
             btnPublish.disabled = true; btnPublish.style.opacity = '0.5'; btnPublish.style.pointerEvents = 'none';
             btnPublish.textContent = 'Publishing...';
 
@@ -299,7 +361,6 @@
                 } else {
                     Swal.fire('Failed to post announcement.');
                     isPublishing = false;
-                    btnDraft.disabled = false; btnDraft.style.opacity = '1'; btnDraft.style.pointerEvents = 'auto';
                     btnPublish.disabled = false; btnPublish.style.opacity = '1'; btnPublish.style.pointerEvents = 'auto';
                     btnPublish.textContent = 'Publish Now';
                 }

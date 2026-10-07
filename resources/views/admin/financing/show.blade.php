@@ -131,6 +131,12 @@
                             <div class="form-group"><label>Gross Loan Released</label><input type="number" step="0.01" name="loan_release" class="form-control" style="border-color: #3b82f6;" value="{{ $record->loan_release }}"></div>
                             <div class="form-group"><label>Inspection/Processing Fee</label><input type="number" step="0.01" name="inspection_fee" class="form-control" style="color: #dc2626;" value="{{ $record->inspection_fee }}"></div>
                             <div class="form-group"><label>Retention/Conversion</label><input type="number" step="0.01" name="retention_fee" class="form-control" style="color: #dc2626;" value="{{ $record->retention_fee }}"></div>
+                            <div class="form-group"><label>Retention/Conversion Status</label>
+                                <select name="retention_on_hold" id="retentionOnHold" class="form-control">
+                                    <option value="1" {{ $record->retention_on_hold ?? true ? 'selected' : '' }}>On Hold (deducted from net proceeds)</option>
+                                    <option value="0" {{ ($record->retention_on_hold ?? true) ? '' : 'selected' }}>Unheld / Released (not deducted)</option>
+                                </select>
+                            </div>
                             <div class="form-group"><label>SRI/MRI</label><input type="number" step="0.01" name="sri_mri" class="form-control" style="color: #dc2626;" value="{{ $record->sri_mri }}"></div>
                             <div class="form-group"><label>Pag-Ibig Non Life</label><input type="number" step="0.01" name="pag_ibig_non_life" class="form-control" style="color: #dc2626;" value="{{ $record->pag_ibig_non_life }}"></div>
                             <div class="form-group"><label>Interim MRI</label><input type="number" step="0.01" name="interim_mri" class="form-control" style="color: #dc2626;" value="{{ $record->interim_mri }}"></div>
@@ -184,8 +190,11 @@
                     Receivables
                 </div>
                 <div class="card-section-body" style="text-align: center;">
-                    <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 4px;">Total Owed to Developer</div>
-                    <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-bottom: 16px;">₱{{ number_format($record->receivables, 2) }}</div>
+                    <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 4px;">Retention/Conversion Hold</div>
+                    <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">₱{{ number_format($record->retention_fee, 2) }}</div>
+                    @php $isHeld = $record->retention_on_hold ?? true; @endphp
+                    <div style="font-size: 12px; font-weight: 700; margin-bottom: 8px; color: {{ $isHeld ? '#b45309' : '#059669' }};">{{ $isHeld ? 'ON HOLD (Pag-IBIG/Bank)' : 'UNHELD / RELEASED' }}</div>
+                    <button type="button" onclick="toggleRetentionHold()" class="btn-submit" style="width: 100%; margin-bottom: 16px; background: {{ $isHeld ? '#059669' : '#b45309' }};">{{ $isHeld ? 'Unhold' : 'Hold Again' }}</button>
                     
                     <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 4px;">Remaining Balance</div>
                     <div style="font-size: 32px; font-weight: 800; margin-bottom: 24px; color: {{ $record->balance > 0 ? '#dc2626' : '#059669' }}">₱{{ number_format($record->balance, 2) }}</div>
@@ -267,6 +276,11 @@
             });
         });
     });
+    function toggleRetentionHold() {
+        const sel = document.getElementById('retentionOnHold');
+        sel.value = sel.value === '1' ? '0' : '1';
+        sel.form.requestSubmit();
+    }
 </script>
 @endsection
 

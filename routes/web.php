@@ -303,13 +303,23 @@ Route::post('/api/webhooks/paymongo', function (\Illuminate\Http\Request $reques
                 $dp->due_date = \Carbon\Carbon::parse($dp->due_date)->addMonth();
                 $dp->save();
 
-                $trn = 'PM-' . strtoupper(\Illuminate\Support\Str::random(8)) . '-' . substr($dp->id, 0, 8);
+                $payments = $paymentData['payments'] ?? [];
+                $paidPayment = collect($payments)->first(function ($payment) {
+                    return ($payment['attributes']['status'] ?? '') === 'paid';
+                });
+                
+                $sourceType = $paidPayment['attributes']['source']['type'] ?? ($paymentData['source']['type'] ?? '');
+                $method = $sourceType === 'gcash' ? 'GCash' : ($sourceType ? ucfirst($sourceType) : 'Online Payment');
+                $trn = $paidPayment['attributes']['payment_intent_id'] ?? ($paymentData['payment_intent_id'] ?? ('PM-' . strtoupper(\Illuminate\Support\Str::random(8))));
+                $trn .= '-' . substr($dp->id, 0, 8);
+
                 \Illuminate\Support\Facades\DB::table('downpayment_histories')->insert([
                     'id' => (string) \Illuminate\Support\Str::uuid(),
                     'downpayment_id' => $dp->id,
                     'amount' => $amountPaid,
                     'payment_date' => now(),
                     'trn' => $trn,
+                    'payment_method' => $method,
                     'status' => 'Paid',
                     'created_at' => now(),
                     'updated_at' => now()
@@ -386,17 +396,34 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::post('/api/appointments', function (\Illuminate\Http\Request $request) {
+    // ── Real reCAPTCHA v2 Server-Side Verification ──────────────────────────
+    $token = $request->input('recaptcha_token');
+    if (!$token) {
+        return response()->json(['success' => false, 'message' => 'Please complete the reCAPTCHA verification.'], 422);
+    }
+
+    $verify = \Illuminate\Support\Facades\Http::asForm()->post('https://www.google.com/recaptcha/api/siteverify', [
+        'secret'   => env('RECAPTCHA_SECRET_KEY'),
+        'response' => $token,
+        'remoteip' => $request->ip(),
+    ]);
+
+    if (!$verify->json('success')) {
+        return response()->json(['success' => false, 'message' => 'reCAPTCHA verification failed. Please try again.'], 422);
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     $apt = \App\Models\Appointment::create([
-        'first_name' => $request->input('first_name'),
-        'middle_name' => $request->input('middle_name'),
-        'last_name' => $request->input('last_name'),
+        'first_name'     => $request->input('first_name'),
+        'middle_name'    => $request->input('middle_name'),
+        'last_name'      => $request->input('last_name'),
         'contact_number' => $request->input('contact_number'),
-        'email' => $request->input('email'),
-        'type' => $request->input('type'),
-        'date' => \Carbon\Carbon::parse($request->input('date')),
-        'time' => $request->input('time'),
-        'status' => $request->input('status', 'Pending'),
-        'notes' => $request->input('notes'),
+        'email'          => $request->input('email'),
+        'type'           => $request->input('type'),
+        'date'           => \Carbon\Carbon::parse($request->input('date')),
+        'time'           => $request->input('time'),
+        'status'         => $request->input('status', 'Pending'),
+        'notes'          => $request->input('notes'),
     ]);
     
     $admins = \App\Models\User::role('Admin')->get();
@@ -409,7 +436,7 @@ Route::post('/api/appointments', function (\Illuminate\Http\Request $request) {
     }
     
     return response()->json(['success' => true]);
-});
+})->middleware('throttle:3,60');
 Route::put('/api/incidents/{id}/status', function (\Illuminate\Http\Request $request, $id) {
     $inc = \App\Models\Incident::whereRaw('id::text LIKE ?', [str_replace(['%', '_'], ['\%', '\_'], $id) . '%'])->first();
     if ($inc) {
@@ -842,12 +869,14 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
             // Record in downpayment_histories
             $trn = strtoupper(\Illuminate\Support\Str::random(10));
+            $history_id = (string) \Illuminate\Support\Str::uuid();
             \Illuminate\Support\Facades\DB::table('downpayment_histories')->insert([
-                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'id' => $history_id,
                 'downpayment_id' => $dp->id,
                 'amount' => $payment_amount,
                 'payment_date' => $request->input('payment_date') ? \Carbon\Carbon::parse($request->input('payment_date')) : now(),
                 'trn' => $trn,
+                'payment_method' => 'Office Payment',
                 'status' => 'Paid',
                 'created_at' => now(),
                 'updated_at' => now()
@@ -856,6 +885,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             return response()->json([
                 'success' => true,
                 'trn' => $trn,
+                'id' => $history_id,
                 'next_due' => $dp->due_date ? \Carbon\Carbon::parse($dp->due_date)->format('Y-m-d') : null
             ]);
         }
@@ -1001,6 +1031,8 @@ Route::post('/api/settings', function (\Illuminate\Http\Request $request) {
 Route::prefix('buyer')->middleware(['auth', 'role:Buyer', 'sync_paymongo'])->group(function () {
     Route::get('/dashboard', [\App\Http\Controllers\BuyerPortalController::class, 'index'])->name('buyer.dashboard');
     Route::get('/payments', [\App\Http\Controllers\BuyerPortalController::class, 'payments'])->name('buyer.payments');
+    Route::get('/payments/downpayment/history', [\App\Http\Controllers\BuyerPortalController::class, 'dpHistory'])->name('buyer.payments.dp.history');
+    Route::get('/payments/downpayment/receipt/{id}', [\App\Http\Controllers\BuyerPortalController::class, 'downloadDpReceipt'])->name('buyer.payments.dp.receipt');
     Route::post('/api/downpayment/pay', [\App\Http\Controllers\BuyerPortalController::class, 'payDownpayment']);
     Route::post('/api/financing/pay', [\App\Http\Controllers\BuyerPortalController::class, 'payFinancing']);
 });
@@ -1182,7 +1214,9 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
         $reports = \App\Models\Incident::where('user_id', $user->id)
             ->orderBy('created_at', 'desc')
             ->get();
-        return view('resident.incidents', ['incidents' => $reports]);
+        $admin = \App\Models\User::role('Admin')->whereNotNull('contact_number')->first();
+        $adminPhone = $admin?->contact_number ?? null;
+        return view('resident.incidents', ['incidents' => $reports, 'adminPhone' => $adminPhone]);
     });
     Route::post('/incidents', function (\Illuminate\Http\Request $request) {
         $photos = $request->input('photos');
@@ -1464,6 +1498,7 @@ Route::post('/resident/incidents', function (\Illuminate\Http\Request $request) 
 });
 
 // Admin User Management
+Route::post('/admin/users/import', [\App\Http\Controllers\Admin\UserImportController::class, 'import']);
 Route::post('/admin/users', function (\Illuminate\Http\Request $request) {
     $validated = $request->validate([
         'name' => 'required|string',

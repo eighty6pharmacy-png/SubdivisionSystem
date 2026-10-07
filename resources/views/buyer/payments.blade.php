@@ -20,9 +20,17 @@
 </style>
 
 <div class="fade-in">
-    <div style="margin-bottom: 32px;">
-        <h1 style="font-size: 28px; font-weight: 800; color: #0f172a; margin: 0;">Monthly Payments</h1>
-        <p style="color: #64748b; margin-top: 8px;">Monitor and settle your downpayment and financing obligations.</p>
+    <div style="margin-bottom: 32px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <h1 style="font-size: 28px; font-weight: 800; color: #0f172a; margin: 0;">Monthly Payments</h1>
+            <p style="color: #64748b; margin-top: 8px;">Monitor and settle your downpayment and financing obligations.</p>
+        </div>
+        <div>
+            <a href="{{ route('buyer.payments.dp.history') }}" class="btn btn-outline" style="border-radius: 12px; font-weight: 600; padding: 10px 20px; background: #fff;">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                View History
+            </a>
+        </div>
     </div>
 
     @if($downpayments->isEmpty() && !$financing)
@@ -119,34 +127,7 @@
             </div>
             @endforeach
 
-            <!-- Downpayment History -->
-            @if($dpHistories->isNotEmpty())
-            <div class="analytic-card" style="margin-bottom: 24px; padding: 0;">
-                <div style="padding: 16px 24px; border-bottom: 1px solid #e2e8f0;">
-                    <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;">Downpayment History</h4>
-                </div>
-                <div style="overflow-x: auto;">
-                    <table style="width: 100%; text-align: left; border-collapse: collapse; font-size: 14px;">
-                        <thead>
-                            <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
-                                <th style="padding: 12px 24px; font-weight: 600; color: #64748b;">Date</th>
-                                <th style="padding: 12px 24px; font-weight: 600; color: #64748b;">Reference</th>
-                                <th style="padding: 12px 24px; font-weight: 600; color: #64748b;">Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($dpHistories as $hist)
-                            <tr style="border-bottom: 1px solid #f1f5f9;">
-                                <td style="padding: 12px 24px; color: #0f172a;">{{ \Carbon\Carbon::parse($hist->created_at)->format('M d, Y h:i A') }}</td>
-                                <td style="padding: 12px 24px; color: #64748b; font-family: monospace;">{{ $hist->trn ?? 'Manual' }}</td>
-                                <td style="padding: 12px 24px; font-weight: 600; color: #10b981;">₱{{ number_format($hist->amount, 2) }}</td>
-                            </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            @endif
+
         @endif
 
         @if($financing)
@@ -175,7 +156,7 @@
                         @if($financing->status == 'Released' || $financing->status == 'Cleared')
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span style="color: #64748b; font-size: 14px; font-weight: 500;">Loan Released:</span>
-                            <strong style="color: #3b82f6; font-size: 15px;">₱{{ number_format($financing->pag_ibig_loan_release, 2) }}</strong>
+                            <strong style="color: #3b82f6; font-size: 15px;">₱{{ number_format($financing->loan_release, 2) }}</strong>
                         </div>
                         @endif
                         
@@ -183,16 +164,19 @@
                             <span style="color: #64748b; font-size: 14px; font-weight: 500;">Status:</span>
                             <span class="status-badge status-{{ strtolower(str_replace(' ', '-', $financing->status)) }}">{{ $financing->status }}</span>
                         </div>
+
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed #e2e8f0; padding-top: 16px;">
+                            <span style="color: #64748b; font-size: 14px; font-weight: 700;">Remaining Balance:</span>
+                            <strong style="color: {{ $financing->balance > 0 ? 'var(--bill-danger)' : '#10b981' }}; font-size: 18px;">₱{{ number_format($financing->balance, 2) }}</strong>
+                        </div>
                     </div>
 
-                    @if($financing->status == 'Released' || $financing->status == 'Cleared')
-                        @if($financing->balance > 0)
+                    @if($financing->balance > 0)
                         <div style="margin-top: 24px;">
                             <button id="payFinBtn_{{ $financing->id }}" class="btn btn-primary" style="width: 100%; padding: 14px; font-weight: 700; background: #10b981; cursor: pointer; border: none; border-radius: 8px; color: #fff; text-transform: uppercase; font-size: 14px; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'" onclick="payFinancing('{{ $financing->id }}')">
                                 📱 Pay Shortfall via GCash
                             </button>
                         </div>
-                        @endif
                     @endif
                 </div>
                 

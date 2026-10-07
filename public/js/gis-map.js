@@ -87,6 +87,13 @@ async function initGISMap(mapElementId, options = {}) {
             opacity: 0.8,
             dashArray: '10, 10',
             lineJoin: 'round'
+        },
+        altRoute: {
+            color: '#ef4444',
+            weight: 6,
+            opacity: 0.8,
+            dashArray: '10, 10',
+            lineJoin: 'round'
         }
     };
 
@@ -116,6 +123,7 @@ async function initGISMap(mapElementId, options = {}) {
     let routeStartHouse = null;
     let routeEndHouse = null;
     let currentRouteLine = null;
+    let currentAltRouteLine = null;
     let currentMarkers = [];
 
     function getHouseNodeCoord(block, lot) {
@@ -157,6 +165,7 @@ async function initGISMap(mapElementId, options = {}) {
                             // Reset
                             houseLayer.resetStyle();
                             if (currentRouteLine) map.removeLayer(currentRouteLine);
+                            if (currentAltRouteLine) map.removeLayer(currentAltRouteLine);
                             currentMarkers.forEach(m => map.removeLayer(m));
                             currentMarkers = [];
                             routeStartHouse = { id: houseId, coord: coord };
@@ -338,6 +347,13 @@ async function initGISMap(mapElementId, options = {}) {
 
                 // Run Dijkstra
                 const pathNodeIds = tempGraph.dijkstra(startNodeId, endNodeId);
+                const altPathNodeIds = tempGraph.alternativePath(startNodeId, endNodeId);
+
+                if (altPathNodeIds.length > 0) {
+                    const altLatlngs = altPathNodeIds.map(id => coordinatesMap.get(id));
+                    altLatlngs.push([destCoord.lat, destCoord.lng]);
+                    L.polyline(altLatlngs, styles.altRoute).addTo(map);
+                }
 
                 if (pathNodeIds.length > 0) {
                     const latlngs = pathNodeIds.map(id => coordinatesMap.get(id));
@@ -362,12 +378,21 @@ async function initGISMap(mapElementId, options = {}) {
             if (!routeStartHouse || !routeEndHouse || !network) return;
 
             if (currentRouteLine) map.removeLayer(currentRouteLine);
+            if (currentAltRouteLine) map.removeLayer(currentAltRouteLine);
             currentMarkers.forEach(m => map.removeLayer(m));
             currentMarkers = [];
 
             let tempGraph = graph.clone();
             let sNode = injectSnappedNode(routeStartHouse.coord.lat, routeStartHouse.coord.lng, 'dynamicStart', tempGraph);
             let eNode = injectSnappedNode(routeEndHouse.coord.lat, routeEndHouse.coord.lng, 'dynamicEnd', tempGraph);
+
+            const altPathNodeIds = tempGraph.alternativePath(sNode, eNode);
+            if (altPathNodeIds.length > 0) {
+                const altLatlngs = altPathNodeIds.map(id => coordinatesMap.get(id));
+                altLatlngs.unshift([routeStartHouse.coord.lat, routeStartHouse.coord.lng]);
+                altLatlngs.push([routeEndHouse.coord.lat, routeEndHouse.coord.lng]);
+                currentAltRouteLine = L.polyline(altLatlngs, styles.altRoute).addTo(map);
+            }
 
             const pathNodeIds = tempGraph.dijkstra(sNode, eNode);
             if (pathNodeIds.length > 0) {

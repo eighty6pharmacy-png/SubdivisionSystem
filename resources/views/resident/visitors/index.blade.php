@@ -30,9 +30,9 @@
                     <input type="date" id="visDate" class="filter-select" required style="width: 100%; margin-top: 4px;" value="{{ date('Y-m-d') }}">
                     <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">* Requires Admin Approval. Code will be generated upon approval.</div>
                 </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-weight: 700; margin-top: 8px;">
+                <button type="submit" id="submitRequestBtn" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-weight: 700; margin-top: 8px;">
                     <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M12 4v16m8-8H4"/></svg>
-                    Submit Access Request
+                    <span>Submit Access Request</span>
                 </button>
             </form>
 
@@ -136,6 +136,16 @@
     function generateNewPin(e) {
         e.preventDefault();
         
+        const submitBtn = document.getElementById('submitRequestBtn');
+        const originalBtnHtml = submitBtn.innerHTML;
+        
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.style.opacity = '0.7';
+            submitBtn.style.cursor = 'not-allowed';
+            submitBtn.innerHTML = '⏳ Submitting...';
+        }
+        
         const name = document.getElementById('visName').value;
         const purpose = document.getElementById('visPurpose').value;
         const visitDateStr = document.getElementById('visDate').value;
@@ -161,6 +171,13 @@
             },
             body: JSON.stringify(payload)
         }).then(res => res.json()).then(data => {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.style.opacity = '1';
+                submitBtn.style.cursor = 'pointer';
+                submitBtn.innerHTML = originalBtnHtml;
+            }
+
             if(data.success) {
                 document.getElementById('pinResultArea').style.display = 'block';
                 renderResidentVisitors();
@@ -176,6 +193,15 @@
             } else {
                 Swal.fire('Failed to submit request.');
             }
+        }).catch(err => {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.style.opacity = '1';
+                submitBtn.style.cursor = 'pointer';
+                submitBtn.innerHTML = originalBtnHtml;
+            }
+            console.error(err);
+            Swal.fire('An error occurred while submitting.');
         });
     }
 </script>

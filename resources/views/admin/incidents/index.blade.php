@@ -26,10 +26,11 @@
             <p>Monitor and resolve community concerns. Select a category to view its reports.</p>
         </div>
         <div class="incident-header-actions" style="display: flex; gap: 12px; align-items: center;">
-            <select id="incidentDateFilter" class="search-input" style="width: 150px; padding-left: 14px; border-radius: 12px; font-weight: 600; cursor: pointer;">
+            <select id="incidentDateFilter" class="search-input" style="width: 160px; padding-left: 14px; border-radius: 12px; font-weight: 600; cursor: pointer;">
                 <option value="all">All Time</option>
-                <option value="30days">Last 30 Days</option>
-                <option value="this_month">This Month</option>
+                <option value="today">Today</option>
+                <option value="this_week">This Week</option>
+                <option value="last_month">Last Month</option>
             </select>
             <div class="incident-search-wrapper">
                 <input type="text" id="incidentSearch" placeholder="Search reports..." class="search-input">
@@ -226,15 +227,24 @@
         incidents = incidents.filter(d => {
             if (dateFilter === 'all') return true;
             let incDate = new Date(d.date);
-            if (isNaN(incDate.getTime())) incDate = new Date(); 
-            
-            if (dateFilter === '30days') {
-                const diffTime = Math.abs(now - incDate);
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-                return diffDays <= 30;
+            if (isNaN(incDate.getTime())) incDate = new Date();
+
+            if (dateFilter === 'today') {
+                return incDate.toDateString() === now.toDateString();
             }
-            if (dateFilter === 'this_month') {
-                return incDate.getMonth() === now.getMonth() && incDate.getFullYear() === now.getFullYear();
+            if (dateFilter === 'this_week') {
+                const startOfWeek = new Date(now);
+                startOfWeek.setHours(0, 0, 0, 0);
+                startOfWeek.setDate(now.getDate() - now.getDay());
+                const endOfWeek = new Date(startOfWeek);
+                endOfWeek.setDate(startOfWeek.getDate() + 6);
+                endOfWeek.setHours(23, 59, 59, 999);
+                return incDate >= startOfWeek && incDate <= endOfWeek;
+            }
+            if (dateFilter === 'last_month') {
+                const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+                return incDate >= lastMonth && incDate <= endOfLastMonth;
             }
             return true;
         });
@@ -294,15 +304,24 @@
         let filtered = dataArr.filter(d => {
             if (dateFilter === 'all') return true;
             let incDate = new Date(d.date);
-            if (isNaN(incDate.getTime())) incDate = new Date(); 
-            
-            if (dateFilter === '30days') {
-                const diffTime = Math.abs(now - incDate);
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-                return diffDays <= 30;
+            if (isNaN(incDate.getTime())) incDate = new Date();
+
+            if (dateFilter === 'today') {
+                return incDate.toDateString() === now.toDateString();
             }
-            if (dateFilter === 'this_month') {
-                return incDate.getMonth() === now.getMonth() && incDate.getFullYear() === now.getFullYear();
+            if (dateFilter === 'this_week') {
+                const startOfWeek = new Date(now);
+                startOfWeek.setHours(0, 0, 0, 0);
+                startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
+                const endOfWeek = new Date(startOfWeek);
+                endOfWeek.setDate(startOfWeek.getDate() + 6);
+                endOfWeek.setHours(23, 59, 59, 999);
+                return incDate >= startOfWeek && incDate <= endOfWeek;
+            }
+            if (dateFilter === 'last_month') {
+                const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+                return incDate >= lastMonth && incDate <= endOfLastMonth;
             }
             return true;
         });

@@ -709,27 +709,36 @@
             }
         }
 
-        async function deleteBuyer(id) {
-            if (!confirm("Are you sure you want to archive this buyer? The buyer account and related reservations will also be archived.")) return;
+        function deleteBuyer(id) {
+            Swal.fire({
+                title: 'Archive Buyer?',
+                text: "Are you sure you want to archive this buyer? The buyer account and related reservations will also be archived.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Yes, archive it!'
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    try {
+                        const response = await fetch('/admin/buyer-master-list/' + id, {
+                            method: 'DELETE',
+                            headers: {
+                                'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value
+                            }
+                        });
+                        const resJson = await response.json();
 
-            try {
-                const response = await fetch('/admin/buyer-master-list/' + id, {
-                    method: 'DELETE',
-                    headers: {
-                        'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value
+                        if (resJson.success) {
+                            Swal.fire('Archived successfully.', '', 'success').then(() => window.location.reload());
+                        } else {
+                            Swal.fire('Failed', resJson.message, 'error');
+                        }
+                    } catch (err) {
+                        Swal.fire('Error', 'Error communicating with server.', 'error');
                     }
-                });
-                const result = await response.json();
-
-                if (result.success) {
-                    Swal.fire('Archived successfully.');
-                    window.location.reload();
-                } else {
-                    Swal.fire(result.message);
                 }
-            } catch (err) {
-                Swal.fire('Error communicating with server.');
-            }
+            });
         }
 
         document.addEventListener('DOMContentLoaded', () => {
