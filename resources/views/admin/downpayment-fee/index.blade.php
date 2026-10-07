@@ -589,7 +589,10 @@
             document.getElementById('directPaymentAmount').value = bill.monthly_amortization ? bill.monthly_amortization.toLocaleString('en-US') : '';
             const now = new Date();
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            document.getElementById('directPaymentDate').value = now.toISOString().slice(0,16);
+            const dateInput = document.getElementById('directPaymentDate');
+            if (dateInput) {
+                dateInput.value = now.toISOString().slice(0,16);
+            }
 
             document.getElementById('billModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';

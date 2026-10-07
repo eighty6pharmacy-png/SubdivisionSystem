@@ -26,6 +26,7 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => 'System Admin',
                 'password' => Hash::make('password123'),
+                'contact_number' => '09123456789',
                 'status' => 'Active',
                 'joined_at' => now(),
             ]

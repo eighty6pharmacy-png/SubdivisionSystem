@@ -166,6 +166,16 @@
                 document.getElementById('appointmentForm').addEventListener('submit', function(e) {
                     e.preventDefault();
 
+                    const recaptchaResponse = grecaptcha.getResponse();
+                    if (!recaptchaResponse) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Please check the Recaptcha!',
+                            text: 'You must complete the recaptcha to submit this form.'
+                        });
+                        return;
+                    }
+
                     const submitBtn = this.querySelector('button[type="submit"]');
                     submitBtn.disabled = true;
                     submitBtn.innerHTML = 'Submitting...';
@@ -193,7 +203,7 @@
                             email: email,
                             date: selectedDate,
                             time: selectedTime,
-                            type: 'Site Visit / Lot Viewing',
+                            type: 'Office Appointment',
                             notes: '',
                             recaptcha_token: grecaptcha.getResponse()
                         })
@@ -210,7 +220,7 @@
                                 name: firstName + ' ' + (middleName ? middleName + ' ' : '') + lastName,
                                 date: selectedDate,
                                 time: selectedTime,
-                                type: 'Site Visit / Lot Viewing',
+                                type: 'Office Appointment',
                                 notes: ''
                             })
                         }).catch(err => console.error("Email dispatch error:", err));

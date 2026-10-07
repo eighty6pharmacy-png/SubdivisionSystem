@@ -306,11 +306,7 @@
 
                 <div id="appointmentWrapper" style="display: ${type === 'Appointment' ? 'block' : 'none'}; background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
                     <div style="font-size: 14px; font-weight: 700; color: #334155; margin-bottom: 12px;">Appointment Details</div>
-                    <div class="responsive-grid" style="gap: 12px;">
-                        <div>
-                            <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Type</span>
-                            <div style="font-size: 13px; font-weight: 600; color: #0f172a;">${record.appointment_type || 'General'}</div>
-                        </div>
+                    <div class="responsive-grid" style="gap: 12px; grid-template-columns: 1fr;">
                         <div>
                             <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Time</span>
                             <div style="font-size: 13px; font-weight: 600; color: #0f172a;">${record.appointment_time || 'N/A'}</div>

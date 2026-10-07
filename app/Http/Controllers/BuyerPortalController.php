@@ -19,8 +19,8 @@ class BuyerPortalController extends Controller
             abort(403, 'No buyer record found for your account.');
         }
 
-        // Fetch downpayments for Reserved/Active reservations
-        $reservations = $buyer->reservations()->whereIn('status', ['Reserved', 'Pending'])->with('downpayments')->get();
+        // Fetch downpayments for Reserved/Active/Converted reservations
+        $reservations = $buyer->reservations()->whereIn('status', ['Reserved', 'Pending', 'Converted'])->with('downpayments')->get();
         $downpayments = collect();
         foreach ($reservations as $res) {
             foreach ($res->downpayments as $dp) {
@@ -43,7 +43,7 @@ class BuyerPortalController extends Controller
             abort(403, 'No buyer record found for your account.');
         }
 
-        $reservations = $buyer->reservations()->whereIn('status', ['Reserved', 'Pending'])->with('downpayments')->get();
+        $reservations = $buyer->reservations()->whereIn('status', ['Reserved', 'Pending', 'Converted'])->with('downpayments')->get();
         $downpayments = collect();
         foreach ($reservations as $res) {
             foreach ($res->downpayments as $dp) {
@@ -73,7 +73,7 @@ class BuyerPortalController extends Controller
             abort(403, 'No buyer record found for your account.');
         }
 
-        $reservations = $buyer->reservations()->whereIn('status', ['Reserved', 'Pending'])->with('downpayments')->get();
+        $reservations = $buyer->reservations()->whereIn('status', ['Reserved', 'Pending', 'Converted'])->with('downpayments')->get();
         $downpayments = collect();
         foreach ($reservations as $res) {
             foreach ($res->downpayments as $dp) {
