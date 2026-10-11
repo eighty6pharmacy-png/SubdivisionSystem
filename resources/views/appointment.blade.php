@@ -36,7 +36,7 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label class="form-label" for="email">Email Address</label>
-                        <input type="email" class="form-input" id="email" placeholder="you@email.com" required>
+                        <input type="email" class="form-input" id="email" placeholder="you@email.com" required pattern="[^@\s]{2,}@[^@\s]+\.[^@\s]{2,}" title="Enter an email with at least 2 characters before @, such as you@email.com.">
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="contact">Contact / Mobile Number</label>
@@ -177,6 +177,7 @@
                     }
 
                     const submitBtn = this.querySelector('button[type="submit"]');
+                    const submitBtnHtml = submitBtn.innerHTML;
                     submitBtn.disabled = true;
                     submitBtn.innerHTML = 'Submitting...';
                     
@@ -193,6 +194,7 @@
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
+                            'Accept': 'application/json',
                             'X-CSRF-TOKEN': '{{ csrf_token() }}'
                         },
                         body: JSON.stringify({
@@ -207,12 +209,20 @@
                             notes: '',
                             recaptcha_token: grecaptcha.getResponse()
                         })
+                    }).then(async (response) => {
+                        const data = await response.json().catch(() => ({}));
+                        if (!response.ok || data.success === false) {
+                            const emailError = data.errors && data.errors.email && data.errors.email[0];
+                            throw new Error(emailError || data.message || 'Please enter a valid email address.');
+                        }
+                        return data;
                     }).then(() => {
                         // Send notification email
                         fetch('/api/send-appointment-email', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
+                                'Accept': 'application/json',
                                 'X-CSRF-TOKEN': '{{ csrf_token() }}'
                             },
                             body: JSON.stringify({
@@ -229,12 +239,16 @@
                         document.getElementById('appointmentSuccess').style.display = 'block';
                     }).catch(err => {
                         console.error("Database save error:", err);
-                        const submitBtn = document.getElementById('appointmentForm').querySelector('button[type="submit"]');
-                        if (submitBtn) {
-                            submitBtn.disabled = false;
-                            submitBtn.innerHTML = 'Confirm Appointment';
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = submitBtnHtml;
+                        if (typeof grecaptcha !== 'undefined') {
+                            grecaptcha.reset();
                         }
-                        grecaptcha.reset();
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Could not book appointment',
+                            text: err.message || 'Please enter a valid email address.'
+                        });
                     });
                 });
             })

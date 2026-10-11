@@ -219,7 +219,7 @@
                 </div>
                 <div style="flex: 1;">
                     <label style="font-size: 12px; font-weight: 700; color: #64748b;">Email Address</label>
-                    <input type="email" id="addAptEmail" class="filter-select" style="width: 100%; margin-top: 4px;">
+                    <input type="email" id="addAptEmail" class="filter-select" style="width: 100%; margin-top: 4px;" pattern="[^@\s]{2,}@[^@\s]+\.[^@\s]{2,}" title="Enter an email with at least 2 characters before @, such as you@email.com.">
                 </div>
             </div>
             <div style="display: flex; gap: 12px;">
