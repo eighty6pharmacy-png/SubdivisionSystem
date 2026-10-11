@@ -505,53 +505,251 @@ if (!function_exists('getDownpaymentFees')) {
     function getDownpaymentFees() {
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('downpayments') && \App\Models\Downpayment::count() > 0) {
-                return \App\Models\Downpayment::with(['reservation.lot'])->get()->map(function ($dp) {
+                return \App\Models\Downpayment::with(['reservation.lot', 'reservation.buyerMasterList'])->get()->map(function ($dp) {
                     $res = $dp->reservation;
+                    $bml = $res?->buyerMasterList;
                     $histories = \Illuminate\Support\Facades\DB::table('downpayment_histories')->where('downpayment_id', $dp->id)->orderBy('created_at', 'asc')->get();
                     $N = $histories->count();
-                    $currentDueDate = $dp->due_date ? \Carbon\Carbon::parse($dp->due_date) : null;
-                    
-                    $historyData = $histories->map(function($h, $index) use ($N, $currentDueDate) {
+                    $currentDueDate = $dp->due_date ? \Carbon\Carbon::parse($dp->due_date)->startOfDay() : null;
+                    $today = now()->startOfDay();
+                    $fullyPaid = $dp->status === 'Fully Paid';
+
+                    $classify = function ($paidAt, $dueAt) {
+                        if (!$paidAt || !$dueAt) {
+                            return 'Not available yet';
+                        }
+                        $paid = \Carbon\Carbon::parse($paidAt)->startOfDay();
+                        $due = \Carbon\Carbon::parse($dueAt)->startOfDay();
+                        if ($paid->lt($due)) {
+                            return 'Early';
+                        }
+                        if ($paid->equalTo($due)) {
+                            return 'On-Time';
+                        }
+                        return 'Late';
+                    };
+
+                    $historyData = $histories->map(function ($h, $index) use ($N, $currentDueDate, $classify) {
+                        $dueAt = null;
                         $dueDateStr = 'N/A';
                         if ($currentDueDate) {
-                            $dueDateStr = $currentDueDate->copy()->subMonths($N - $index)->format('M d, Y');
+                            $dueAt = $currentDueDate->copy()->subMonths($N - $index);
+                            $dueDateStr = $dueAt->format('M d, Y');
                         }
-                        
+
                         return [
                             'id' => $h->id,
                             'trn' => $h->trn,
                             'payment_method' => $h->payment_method ?? 'Office Payment',
-                            'month' => $dueDateStr, // This is now accurately the Due Date
-                            'amount' => (float)$h->amount,
+                            'month' => $dueDateStr,
+                            'amount' => (float) $h->amount,
                             'status' => $h->status,
-                            'date' => \Carbon\Carbon::parse($h->payment_date)->format('M d, Y h:i A')
+                            'behavior' => $classify($h->payment_date, $dueAt),
+                            'date' => \Carbon\Carbon::parse($h->payment_date)->format('M d, Y h:i A'),
                         ];
                     })->reverse()->values()->toArray();
-                    
-                    $amortization = $dp->monthly_amortization ?? 15000;
-                    $months_to_pay = $dp->months_to_pay ?? 24;
-                    
-                    $buyerName = $res->first_name && $res->last_name ? trim($res->first_name . ' ' . $res->last_name) : ($res->notes ?? 'Guest');
+
+                    $amortization = (float) ($dp->monthly_amortization ?? 15000);
+                    $months_to_pay = (int) ($dp->months_to_pay ?? 24);
+                    $monthsPaid = $histories->count();
+                    $remainingMonths = max(0, $months_to_pay - $monthsPaid);
+
+                    $missed = 0;
+                    $unpaidSchedule = [];
+                    if (!$fullyPaid && $currentDueDate && $currentDueDate->lt($today) && $remainingMonths > 0) {
+                        $cursor = $currentDueDate->copy();
+                        $leftover = (float) $dp->balance;
+                        while ($cursor->lt($today) && $missed < $remainingMonths && $leftover > 0) {
+                            $expected = min($amortization, $leftover);
+                            $penaltyAmt = $dp->latePenaltyAmount($expected, $cursor);
+                            $unpaidSchedule[] = [
+                                'due' => $cursor->format('M d, Y'),
+                                'due_iso' => $cursor->format('Y-m-d'),
+                                'amount' => round($expected + $penaltyAmt, 2),
+                                'principal' => round($expected, 2),
+                                'penalty' => $penaltyAmt,
+                                'status' => 'Unpaid',
+                                'behavior' => 'Late',
+                            ];
+                            $leftover -= $expected;
+                            $missed++;
+                            $cursor->addMonth();
+                        }
+                    }
+
+                    $overdueDays = 0;
+                    if ($missed > 0 && $currentDueDate) {
+                        $overdueDays = (int) $currentDueDate->diffInDays($today);
+                    }
+
+                    $scores = [];
+                    foreach ($historyData as $row) {
+                        if ($row['behavior'] === 'Early') {
+                            $scores[] = 3;
+                        } elseif ($row['behavior'] === 'On-Time') {
+                            $scores[] = 2;
+                        } elseif ($row['behavior'] === 'Late') {
+                            $scores[] = 1;
+                        }
+                    }
+                    for ($i = 0; $i < $missed; $i++) {
+                        $scores[] = 1;
+                    }
+                    if (count($scores) === 0) {
+                        $paymentBehavior = 'Not available yet';
+                    } else {
+                        $avg = array_sum($scores) / count($scores);
+                        if ($avg > 2.5) {
+                            $paymentBehavior = 'Early';
+                        } elseif ($avg >= 1.5) {
+                            $paymentBehavior = 'On-Time';
+                        } else {
+                            $paymentBehavior = 'Late';
+                        }
+                    }
+
+                    if ($bml) {
+                        $buyerName = trim(implode(' ', array_filter([
+                            $bml->first_name,
+                            $bml->middle_name,
+                            $bml->last_name,
+                        ])));
+                    } elseif ($res && $res->first_name && $res->last_name) {
+                        $buyerName = trim($res->first_name . ' ' . $res->last_name);
+                    } else {
+                        $buyerName = $res?->notes ?? 'Guest';
+                    }
+
+                    $balanceLeft = (float) $dp->balance;
+                    $histArray = $histories->values()->all();
+                    $firstInstallmentDue = null;
+                    if ($currentDueDate) {
+                        $firstInstallmentDue = $currentDueDate->copy()->subMonths($monthsPaid);
+                    } elseif ($dp->contract_date) {
+                        $firstInstallmentDue = \Carbon\Carbon::parse($dp->contract_date)->startOfDay()->addMonth();
+                    }
+
+                    $installmentLedger = [];
+                    $nextPayable = null;
+                    if ($firstInstallmentDue) {
+                        $runningBalance = $balanceLeft;
+                        for ($i = 0; $i < $months_to_pay; $i++) {
+                            $dueAt = $firstInstallmentDue->copy()->addMonths($i);
+                            $dueIso = $dueAt->format('Y-m-d');
+                            $dueLabel = $dueAt->format('M d, Y');
+
+                            if ($i < $monthsPaid) {
+                                $h = $histArray[$i] ?? null;
+                                $dueAtForBehavior = $currentDueDate
+                                    ? $currentDueDate->copy()->subMonths($N - $i)
+                                    : $dueAt;
+                                $paidAmount = $h ? (float) $h->amount : $amortization;
+                                $principalPaid = $paidAmount > ($amortization + 0.009)
+                                    ? round($amortization, 2)
+                                    : round($paidAmount, 2);
+                                $penaltyPaid = round($paidAmount - $principalPaid, 2);
+                                $installmentLedger[] = [
+                                    'index' => $i + 1,
+                                    'due_iso' => $dueIso,
+                                    'due_label' => $dueLabel,
+                                    'amount' => $paidAmount,
+                                    'principal' => $principalPaid,
+                                    'penalty' => $penaltyPaid,
+                                    'status' => 'Paid',
+                                    'behavior' => $h ? $classify($h->payment_date, $dueAtForBehavior) : 'Not available yet',
+                                    'history_id' => $h->id ?? null,
+                                    'trn' => $h->trn ?? null,
+                                    'payment_method' => $h->payment_method ?? 'Office Payment',
+                                    'paid_at' => $h ? \Carbon\Carbon::parse($h->payment_date)->format('M d, Y h:i A') : null,
+                                    'is_next' => false,
+                                ];
+                                continue;
+                            }
+
+                            if ($fullyPaid || $runningBalance <= 0) {
+                                continue;
+                            }
+
+                            $slotsLeft = $months_to_pay - $i;
+                            $expected = $slotsLeft === 1
+                                ? round($runningBalance, 2)
+                                : round(min($amortization, $runningBalance), 2);
+
+                            $status = $dueAt->lt($today) ? 'Unpaid' : 'Upcoming';
+                            $penaltyAmt = $status === 'Unpaid' ? $dp->latePenaltyAmount($expected, $dueAt) : 0;
+                            $totalDue = round($expected + $penaltyAmt, 2);
+                            $isNext = $nextPayable === null;
+                            if ($isNext) {
+                                $nextPayable = [
+                                    'index' => $i + 1,
+                                    'due_iso' => $dueIso,
+                                    'due_label' => $dueLabel,
+                                    'amount' => $totalDue,
+                                    'principal' => $expected,
+                                    'penalty' => $penaltyAmt,
+                                ];
+                            }
+
+                            $installmentLedger[] = [
+                                'index' => $i + 1,
+                                'due_iso' => $dueIso,
+                                'due_label' => $dueLabel,
+                                'amount' => $totalDue,
+                                'principal' => $expected,
+                                'penalty' => $penaltyAmt,
+                                'status' => $status,
+                                'behavior' => $status === 'Unpaid' ? 'Late' : null,
+                                'history_id' => null,
+                                'trn' => null,
+                                'payment_method' => null,
+                                'paid_at' => null,
+                                'is_next' => $isNext,
+                            ];
+                            $runningBalance -= $expected;
+                        }
+                    }
+
+                    if (!$fullyPaid && $nextPayable === null && $currentDueDate && $balanceLeft > 0) {
+                        $principalDue = round(min($amortization, $balanceLeft), 2);
+                        $penaltyAmt = $dp->latePenaltyAmount($principalDue, $currentDueDate);
+                        $nextPayable = [
+                            'index' => $monthsPaid + 1,
+                            'due_iso' => $currentDueDate->format('Y-m-d'),
+                            'due_label' => $currentDueDate->format('M d, Y'),
+                            'amount' => round($principalDue + $penaltyAmt, 2),
+                            'principal' => $principalDue,
+                            'penalty' => $penaltyAmt,
+                        ];
+                    }
 
                     return [
                         'id' => substr($dp->id, 0, 8),
-                        'buyer' => $buyerName,
-                        'block' => $res->lot->block ?? 'N/A',
-                        'lot' => $res->lot->lot_number ?? 'N/A',
-                        'total_dp' => (float)($dp->amount + $dp->balance),
-                        'paid_amount' => (float)$dp->amount,
-                        'monthly_amortization' => (float)$amortization,
-                        'months_paid' => $histories->count(),
+                        'buyer' => $buyerName !== '' ? $buyerName : 'Guest',
+                        'contact' => $bml?->contact_number ?? 'N/A',
+                        'tcp' => (float) ($bml?->contract_amount ?? 0),
+                        'penalty_percentage' => (float) ($dp->penalty_percentage ?? 0),
+                        'block' => $res?->lot?->block ?? 'N/A',
+                        'lot' => $res?->lot?->lot_number ?? 'N/A',
+                        'total_dp' => (float) ($dp->amount + $dp->balance),
+                        'paid_amount' => (float) $dp->amount,
+                        'monthly_amortization' => $amortization,
+                        'months_paid' => $monthsPaid,
                         'total_months' => $months_to_pay,
                         'status' => $dp->status,
+                        'payment_behavior' => $paymentBehavior,
+                        'missed_months' => $missed,
+                        'overdue_days' => $overdueDays,
+                        'unpaid_schedule' => $unpaidSchedule,
                         'next_due' => $dp->due_date ? \Carbon\Carbon::parse($dp->due_date)->format('Y-m-d') : 'N/A',
                         'last_payment' => $dp->updated_at ? \Carbon\Carbon::parse($dp->updated_at)->format('Y-m-d') : 'N/A',
                         'contract_date' => $dp->contract_date ? \Carbon\Carbon::parse($dp->contract_date)->format('Y-m-d') : 'N/A',
-                        'history' => $historyData
+                        'history' => $historyData,
+                        'installment_ledger' => $installmentLedger,
+                        'next_payable' => $nextPayable,
                     ];
                 })->toArray();
             }
-        } catch (\Exception $e) {} 
+        } catch (\Exception $e) {}
         return [];
     }
 }

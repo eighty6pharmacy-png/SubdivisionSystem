@@ -78,6 +78,8 @@
 
                 <div class="login-forgot" onclick="openForgotModal()">Forgot your password?</div>
 
+                <p style="font-size: 12px; color: #64748b; line-height: 1.45; margin: 0;">After 5 incorrect sign-in attempts, this sign-in is paused for 15 minutes.</p>
+
                 <button class="login-submit" id="login-btn" onclick="doLogin()">
                     <span id="login-btn-text">Sign In →</span>
                 </button>
@@ -95,12 +97,51 @@
 </div>
 
 <script>
+    let loginLockTimer = null;
+
+    function releaseLoginButton() {
+        const btn = document.getElementById('login-btn');
+        const btnText = document.getElementById('login-btn-text');
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btnText.textContent = 'Sign In →';
+    }
+
+    function holdLoginButton(seconds, message) {
+        const errEl = document.getElementById('login-error');
+        const btn = document.getElementById('login-btn');
+        const btnText = document.getElementById('login-btn-text');
+        const unlockAt = Date.now() + (Math.max(1, seconds) * 1000);
+
+        errEl.textContent = message;
+        errEl.style.display = 'block';
+        btn.disabled = true;
+        btn.style.opacity = '0.75';
+        clearTimeout(loginLockTimer);
+
+        const tick = () => {
+            const left = Math.ceil((unlockAt - Date.now()) / 1000);
+            if (left <= 0) {
+                releaseLoginButton();
+                return;
+            }
+            const mins = Math.ceil(left / 60);
+            btnText.textContent = mins <= 1 ? 'Try again in 1 min' : `Try again in ${mins} min`;
+            loginLockTimer = setTimeout(tick, 1000);
+        };
+        tick();
+    }
+
     async function doLogin() {
         const email = document.getElementById('email-input').value.trim();
         const password = document.getElementById('password-input').value;
         const errEl = document.getElementById('login-error');
         const btnText = document.getElementById('login-btn-text');
         const btn = document.getElementById('login-btn');
+
+        if (btn.disabled && btnText.textContent.startsWith('Try again')) {
+            return;
+        }
 
         errEl.style.display = 'none';
 
@@ -133,13 +174,17 @@
                 body: JSON.stringify({ email, password })
             });
 
-            // Prevent crash if server returns HTML (e.g. 500 error or 419 Page Expired)
             const contentType = response.headers.get("content-type");
             if (!contentType || !contentType.includes("application/json")) {
                 throw new Error("Server configuration error. Please try refreshing the page.");
             }
 
             const data = await response.json();
+
+            if (response.status === 429) {
+                holdLoginButton(data.retry_after_seconds || 900, data.message || 'Too many attempts. Please wait and try again.');
+                return;
+            }
 
             if (response.ok && data.success) {
                 btnText.textContent = 'Success! Redirecting...';
@@ -150,9 +195,7 @@
         } catch (error) {
             errEl.textContent = error.message;
             errEl.style.display = 'block';
-            btnText.textContent = 'Sign In →';
-            btn.disabled = false;
-            btn.style.opacity = '1';
+            releaseLoginButton();
         }
     }
 
@@ -173,6 +216,9 @@
     // Enter key support
     document.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
+            if (document.getElementById('forgotPwModal').style.display === 'flex') {
+                return;
+            }
             if (document.activeElement.id === 'email-input') {
                 document.getElementById('password-input').focus();
             } else {
@@ -191,19 +237,19 @@
         </div>
         
         <div id="fp-step-1">
-            <p style="font-size: 14px; color: var(--text-mid); margin-bottom: 16px;">Enter your email address and we'll send you a 6-digit OTP to reset your password.</p>
+            <p style="font-size: 14px; color: var(--text-mid); margin-bottom: 16px;">Enter your email. If it is registered, we send a 6-digit code that expires in 15 minutes. You can request a code up to 3 times per hour.</p>
             <input type="email" id="fp-email" class="form-input" placeholder="you@example.com" style="width: 100%; box-sizing: border-box; margin-bottom: 16px; padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
             <button class="login-submit" onclick="sendOtp()" id="fp-btn-send">Send OTP</button>
         </div>
         
         <div id="fp-step-2" style="display: none;">
-            <p style="font-size: 14px; color: var(--text-mid); margin-bottom: 16px;">Enter the 6-digit OTP sent to your email.</p>
+            <p style="font-size: 14px; color: var(--text-mid); margin-bottom: 16px;">Enter the 6-digit code from your email. Five wrong codes pause reset for 15 minutes.</p>
             <input type="text" id="fp-otp" class="form-input" placeholder="123456" style="width: 100%; box-sizing: border-box; margin-bottom: 16px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; text-align: center; letter-spacing: 4px; font-weight: bold;">
             <button class="login-submit" onclick="verifyOtp()" id="fp-btn-verify">Verify OTP</button>
         </div>
         
         <div id="fp-step-3" style="display: none;">
-            <p style="font-size: 14px; color: var(--text-mid); margin-bottom: 16px;">Set your new password.</p>
+            <p style="font-size: 14px; color: var(--text-mid); margin-bottom: 16px;">Set a new password of at least 8 characters.</p>
             <div class="input-icon-wrap" style="margin-bottom: 12px;">
                 <input type="password" id="fp-new-pw" class="form-input" placeholder="New Password" style="width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--border); border-radius: 8px; padding-right: 40px;">
                 <button type="button" class="input-show-pw" onclick="toggleFpPw('fp-new-pw', this)" style="right: 12px;">
@@ -254,7 +300,7 @@
         try {
             const res = await fetch('/forgot-password', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') },
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') },
                 body: JSON.stringify({ email })
             });
             const data = await res.json();
@@ -285,7 +331,7 @@
         try {
             const res = await fetch('/verify-otp', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') },
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') },
                 body: JSON.stringify({ email, otp })
             });
             const data = await res.json();
@@ -319,7 +365,7 @@
         try {
             const res = await fetch('/reset-password', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') },
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') },
                 body: JSON.stringify({ email, otp, password })
             });
             const data = await res.json();

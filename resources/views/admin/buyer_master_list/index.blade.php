@@ -154,6 +154,12 @@
                                     <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="viewBuyer('{{ $buyer->id }}')">
                                         View
                                     </button>
+                                    @if($buyer->trashed())
+                                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #059669; border-color: #bbf7d0;" onclick="restoreBuyer('{{ $buyer->id }}')" title="Restore this buyer">
+                                        Restore
+                                    </button>
+                                    @endif
+                                    @unless($buyer->trashed())
                                     <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="editBuyer('{{ $buyer->id }}')">
                                         Edit
                                     </button>
@@ -172,12 +178,13 @@
                                     <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="deleteBuyer('{{ $buyer->id }}')">
                                         Archive
                                     </button>
+                                    @endunless
                                 </td>
                             </tr>
                         @empty
                             <tr>
                                 <td colspan="10" style="text-align: center; padding: 40px; color: #64748b;">
-                                    No buyers in the Master List yet.
+                                    {{ request('status') === 'cancelled' ? 'No cancelled buyers.' : 'No buyers in the Master List yet.' }}
                                 </td>
                             </tr>
                         @endforelse
@@ -244,7 +251,7 @@
                                 class="view-readonly"></div>
                         <div><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Middle
-                                Name</label><input type="text" name="middle_name" id="inp_middle_name"
+                                Name *</label><input type="text" name="middle_name" id="inp_middle_name" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
                         <div><label class="form-label"
@@ -254,42 +261,51 @@
                                 class="view-readonly"></div>
                         <div><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Civil
-                                Status</label><input type="text" name="civil_status" id="inp_civil_status"
+                                Status *</label>
+                            <select name="civil_status" id="inp_civil_status" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly"></div>
+                                class="view-readonly" onchange="syncSpouseField()">
+                                <option value="">-- Select Civil Status --</option>
+                                <option value="Single">Single</option>
+                                <option value="Married">Married</option>
+                                <option value="Widowed">Widowed</option>
+                                <option value="Separated">Separated</option>
+                                <option value="Annulled">Annulled</option>
+                            </select>
+                        </div>
                         <div><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Spouse
                                 Name</label><input type="text" name="spouse_name" id="inp_spouse_name"
-                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly"></div>
+                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; background:#f1f5f9;"
+                                class="view-readonly" disabled></div>
                         <div><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Contact
-                                Number</label><input type="text" name="contact_number" id="inp_contact_number"
+                                Number *</label><input type="text" name="contact_number" id="inp_contact_number" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
                         <div><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Email Address</label><input type="email" name="email" id="inp_email"
+                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Email Address *</label><input type="email" name="email" id="inp_email" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
                         <div style="grid-column: span 3;"><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Present
-                                Address</label><input type="text" name="present_address" id="inp_present_address"
+                                Address *</label><input type="text" name="present_address" id="inp_present_address" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
                         <div style="grid-column: span 3;"><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Postal
-                                Address</label><input type="text" name="postal_address" id="inp_postal_address"
+                                Address *</label><input type="text" name="postal_address" id="inp_postal_address" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
                         <div style="grid-column: span 2;"><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Proof of
-                                Identification (ID Type/No)</label><input type="text" name="proof_of_id"
-                                id="inp_proof_of_id"
+                                Identification (ID Type/No) *</label><input type="text" name="proof_of_id"
+                                id="inp_proof_of_id" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
                         <div><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Pag-IBIG
-                                No.</label><input type="text" name="pagibig_number" id="inp_pagibig_number"
+                                No. *</label><input type="text" name="pagibig_number" id="inp_pagibig_number" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
                     </div>
@@ -298,35 +314,33 @@
                     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
                         <div>
                             <label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Block No.</label>
-                            <select name="block_no" id="inp_block_no" class="view-readonly"
+                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Block No. *</label>
+                            <select name="block_no" id="inp_block_no" class="view-readonly" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;">
-                                @for($i = 1; $i <= 16; $i++)
-                                <option value="{{$i}}">{{$i}}</option> @endfor
+                                <option value="">-- Select Block --</option>
                             </select>
                         </div>
                         <div>
                             <label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Lot No.</label>
-                            <select name="lot_no" id="inp_lot_no" class="view-readonly"
+                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Lot No. *</label>
+                            <select name="lot_no" id="inp_lot_no" class="view-readonly" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;">
-                                @for($i = 1; $i <= 15; $i++)
-                                <option value="{{$i}}">{{$i}}</option> @endfor
+                                <option value="">-- Select Lot --</option>
                             </select>
                         </div>
                         <div><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Lot Area
-                                (sqm)</label><input type="number" step="0.01" name="lot_area" id="inp_lot_area"
+                                (sqm) *</label><input type="number" step="0.01" min="0" name="lot_area" id="inp_lot_area" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
                         <div><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Floor Area
-                                (sqm)</label><input type="number" step="0.01" name="floor_area" id="inp_floor_area"
+                                (sqm) *</label><input type="number" step="0.01" min="0" name="floor_area" id="inp_floor_area" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
                         <div style="grid-column: span 2;"><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Description</label><textarea
-                                name="description" id="inp_description" rows="4"
+                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Description *</label><textarea
+                                name="description" id="inp_description" rows="4" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; resize:vertical; font-family:inherit;"
                                 class="view-readonly"></textarea></div>
                     </div>
@@ -507,6 +521,7 @@
         let currentExportBuyerId = null;
 
         function openExportModal(buyerId) {
+            if (blockIfArchived(buyerId)) return;
             currentExportBuyerId = buyerId;
             updateExportAction();
             document.getElementById('exportModal').style.display = 'flex';
@@ -536,12 +551,77 @@
     <script src="{{ asset('js/gis-dropdowns.js') }}"></script>
     <script>
         const buyersData = @json($buyers);
+        function isArchivedBuyer(id) {
+            const buyer = buyersData.find(b => b.id == id);
+            return !!(buyer && buyer.deleted_at);
+        }
+        function blockIfArchived(id) {
+            if (!isArchivedBuyer(id)) return false;
+            Swal.fire({
+                icon: 'info',
+                title: 'Archived buyer',
+                text: 'This record is cancelled. Only viewing is allowed.'
+            });
+            return true;
+        }
+        const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
+        const PH_MOBILE_PATTERN = /^(09\d{9}|\+639\d{9}|639\d{9})$/;
+
+        function normalizePhone(raw) {
+            return String(raw || '').replace(/[\s\-().]/g, '');
+        }
+
+        function validateBuyerEmailAndContact(emailRaw, contactRaw) {
+            const email = emailRaw.trim();
+            const contact = normalizePhone(contactRaw);
+            if (!EMAIL_PATTERN.test(email)) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Invalid email',
+                    text: 'Please enter a real email address (any domain is fine, e.g. you@gmail.com or you@company.com).'
+                });
+                return null;
+            }
+            if (!PH_MOBILE_PATTERN.test(contact)) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Invalid mobile number',
+                    text: 'Use a Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX.'
+                });
+                return null;
+            }
+            return { email, contact_number: contact };
+        }
+
+        function apiErrorMessage(payload, fallback) {
+            if (payload?.message) return payload.message;
+            if (payload?.errors) {
+                const first = Object.values(payload.errors).flat()[0];
+                if (first) return first;
+            }
+            return fallback;
+        }
 
         function switchTab(tabId, btnElement) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
             btnElement.classList.add('active');
+        }
+
+        function syncSpouseField() {
+            const status = document.getElementById('inp_civil_status').value;
+            const spouse = document.getElementById('inp_spouse_name');
+            const isMarried = status === 'Married';
+            const isView = document.getElementById('saveButton').style.display === 'none';
+
+            spouse.disabled = !isMarried || isView;
+            spouse.required = isMarried && !isView;
+            if (!isMarried) {
+                spouse.value = '';
+            }
+            spouse.style.backgroundColor = isMarried ? '#fff' : '#f1f5f9';
+            spouse.style.cursor = isMarried ? '' : 'not-allowed';
         }
 
         function toggleFinancingFields() {
@@ -586,7 +666,8 @@
                 readOnlyElements.forEach(el => el.removeAttribute('disabled'));
                 readOnlyElements.forEach(el => el.removeAttribute('readonly'));
 
-                bindGisDropdowns('inp_block_no', 'inp_lot_no');
+                bindGisDropdowns('inp_block_no', 'inp_lot_no', { includePlaceholder: true });
+                syncSpouseField();
             } else {
                 const buyer = buyersData.find(b => b.id == id);
                 if (!buyer) return;
@@ -598,12 +679,14 @@
                 document.getElementById('inp_civil_status').value = buyer.civil_status || '';
                 document.getElementById('inp_spouse_name').value = buyer.spouse_name || '';
                 document.getElementById('inp_contact_number').value = buyer.contact_number || '';
+                document.getElementById('inp_email').value = buyer.email || '';
                 document.getElementById('inp_present_address').value = buyer.present_address || '';
                 document.getElementById('inp_postal_address').value = buyer.postal_address || '';
                 document.getElementById('inp_proof_of_id').value = buyer.proof_of_id || '';
                 document.getElementById('inp_pagibig_number').value = buyer.pagibig_number || '';
 
                 bindGisDropdowns('inp_block_no', 'inp_lot_no', { currentBlock: buyer.block_no, currentLot: buyer.lot_no });
+                syncSpouseField();
 
                 document.getElementById('inp_lot_area').value = buyer.lot_area || '';
                 document.getElementById('inp_floor_area').value = buyer.floor_area || '';
@@ -637,6 +720,8 @@
                     document.getElementById('inp_block_no').setAttribute('disabled', true);
                     document.getElementById('inp_lot_no').setAttribute('disabled', true);
                     document.getElementById('inp_financing_method').setAttribute('disabled', true);
+                    document.getElementById('inp_civil_status').setAttribute('disabled', true);
+                    syncSpouseField();
                 } else if (mode === 'edit') {
                     document.getElementById('modalTitle').textContent = 'Edit Buyer Details';
                     document.getElementById('formMethod').value = 'PUT';
@@ -646,6 +731,8 @@
                     document.getElementById('inp_block_no').removeAttribute('disabled');
                     document.getElementById('inp_lot_no').removeAttribute('disabled');
                     document.getElementById('inp_financing_method').removeAttribute('disabled');
+                    document.getElementById('inp_civil_status').removeAttribute('disabled');
+                    syncSpouseField();
                 }
             }
 
@@ -657,6 +744,7 @@
         }
 
         function editBuyer(id) {
+            if (blockIfArchived(id)) return;
             openModal('edit', id);
         }
 
@@ -666,8 +754,24 @@
 
         async function submitBuyerForm(e) {
             e.preventDefault();
+
+            if (!e.target.reportValidity()) {
+                return;
+            }
+
+            const validatedContact = validateBuyerEmailAndContact(
+                document.getElementById('inp_email').value,
+                document.getElementById('inp_contact_number').value
+            );
+            if (!validatedContact) {
+                switchTab('tab-profile', document.querySelector('.tab-btn'));
+                return;
+            }
+
             const formData = new FormData(e.target);
             const data = Object.fromEntries(formData.entries());
+            data.email = validatedContact.email;
+            data.contact_number = validatedContact.contact_number;
 
             Object.keys(data).forEach(key => {
                 if (data[key] === '') delete data[key];
@@ -692,13 +796,13 @@
                     body: JSON.stringify(data)
                 });
 
-                const result = await response.json();
+                const result = await response.json().catch(() => ({}));
 
-                if (result.success) {
+                if (response.ok && result.success) {
                     Swal.fire(result.message);
                     window.location.reload();
                 } else {
-                    Swal.fire(result.message || 'Validation error. Please check your inputs.');
+                    Swal.fire(apiErrorMessage(result, 'Validation error. Please check your inputs.'));
                     submitBtn.disabled = false;
                     submitBtn.textContent = originalBtnText;
                 }
@@ -709,7 +813,43 @@
             }
         }
 
+        function restoreBuyer(id) {
+            if (!isArchivedBuyer(id)) {
+                Swal.fire({ icon: 'info', title: 'Already active', text: 'This buyer is not cancelled.' });
+                return;
+            }
+            Swal.fire({
+                title: 'Restore Buyer?',
+                text: 'This brings the buyer back to the active list. The lot is restored only if it is still free. A lapsed reservation deadline will be extended 30 days so they are not auto-cancelled again.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#059669',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Yes, restore'
+            }).then(async (result) => {
+                if (!result.isConfirmed) return;
+                try {
+                    const response = await fetch('/admin/buyer-master-list/' + id + '/restore', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value,
+                            'Accept': 'application/json'
+                        }
+                    });
+                    const resJson = await response.json().catch(() => ({}));
+                    if (response.ok && resJson.success) {
+                        Swal.fire('Restored', resJson.message, 'success').then(() => window.location.reload());
+                    } else {
+                        Swal.fire('Cannot restore', resJson.message || 'Restore failed.', 'error');
+                    }
+                } catch (err) {
+                    Swal.fire('Error', 'Error communicating with server.', 'error');
+                }
+            });
+        }
+
         function deleteBuyer(id) {
+            if (blockIfArchived(id)) return;
             Swal.fire({
                 title: 'Archive Buyer?',
                 text: "Are you sure you want to archive this buyer? The buyer account and related reservations will also be archived.",
@@ -757,6 +897,7 @@
         });
 
         function confirmGenerateAccount(id, defaultEmail, hasAccount) {
+            if (blockIfArchived(id)) return;
             if (hasAccount) {
                 Swal.fire({
                     icon: 'info',

@@ -60,6 +60,7 @@
                 <option value="Resident">Residents</option>
                 <option value="Security Guard">Security Guard</option>
                 <option value="Finance Officer">Finance Officer</option>
+                <option value="Admin">Admin</option>
                 <option value="Buyer">Buyer</option>
             </select>
         </div>
@@ -242,7 +243,7 @@
     <div class="bill-modal-content" style="max-width: 500px; width: 90%; padding: 32px; border-radius: 24px;">
         <div class="modal-header" style="padding: 0; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center;">
             <div>
-                <h2 style="font-size: 24px; font-weight: 800; color: #0f172a;">Manage Account</h2>
+                <h2 style="font-size: 24px; font-weight: 800; color: #0f172a;">Edit Account</h2>
                 <p style="font-size: 13px; color: #64748b; margin-top: 4px;" id="editUserIdLabel">Updating USR-XXXX</p>
             </div>
             <button class="ann-btn-icon" onclick="closeEditModal()" style="background: none; border: none; cursor: pointer;">
@@ -368,7 +369,7 @@
         <div class="modal-header" style="padding: 0; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start;">
             <div>
                 <h2 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">Import Users from CSV</h2>
-                <p style="font-size: 13px; font-weight: 400; color: #64748b; margin-top: 4px;">Upload a CSV file to bulk create user accounts.</p>
+                <p style="font-size: 13px; font-weight: 400; color: #64748b; margin-top: 4px;">Upload a CSV to create or update users by <strong>external_id</strong> (your spreadsheet primary key). Internal system IDs stay UUIDs.</p>
             </div>
             <button class="ann-btn-icon" onclick="closeImportModal()" style="background: none; border: none; cursor: pointer; color: #64748b;">
                 <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
@@ -377,6 +378,14 @@
 
         <form id="importUserForm" onsubmit="submitImportUser(event)" style="display: flex; flex-direction: column; gap: 16px;" enctype="multipart/form-data">
 
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; font-size: 12px; color: #475569; line-height: 1.5;">
+                <div style="font-weight: 700; color: #334155; margin-bottom: 6px;">Required columns</div>
+                <code style="font-size: 11px;">external_id, first_name, last_name, email, contact_number, role</code>
+                <div style="margin-top: 8px;"><strong>Residents:</strong> include <code>block</code> and <code>lot</code>.</div>
+                <div><strong>Buyers:</strong> use role <code>Buyer</code> and either <code>buyer_master_list_id</code> or <code>block</code> + <code>lot</code> to match the master list (links portal account to financing/reservation data).</div>
+                <div><strong>Staff:</strong> <code>Security Guard</code> or <code>Finance Officer</code> — block/lot optional.</div>
+                <a href="/admin/users/import/template" class="btn btn-outline" style="margin-top: 12px; width: 100%; justify-content: center; padding: 10px; border-radius: 10px; font-size: 12px; font-weight: 700; text-decoration: none;">Download CSV template</a>
+            </div>
 
             <div>
                 <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Select CSV File</label>
@@ -393,6 +402,44 @@
 
 <script src="{{ asset('js/gis-dropdowns.js') }}"></script>
 <script>
+    const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
+    const PH_MOBILE_PATTERN = /^(09\d{9}|\+639\d{9}|639\d{9})$/;
+
+    function normalizePhone(raw) {
+        return String(raw || '').replace(/[\s\-().]/g, '');
+    }
+
+    function validateUserEmailAndContact(emailRaw, contactRaw) {
+        const email = emailRaw.trim();
+        const contact = normalizePhone(contactRaw);
+        if (!EMAIL_PATTERN.test(email)) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Invalid email',
+                text: 'Please enter a real email address (any domain is fine, e.g. you@gmail.com or you@company.com).'
+            });
+            return null;
+        }
+        if (!PH_MOBILE_PATTERN.test(contact)) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Invalid mobile number',
+                text: 'Use a Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX.'
+            });
+            return null;
+        }
+        return { email, contact_number: contact };
+    }
+
+    function apiErrorMessage(errorData, fallback) {
+        if (errorData?.message) return errorData.message;
+        if (errorData?.errors) {
+            const first = Object.values(errorData.errors).flat()[0];
+            if (first) return first;
+        }
+        return fallback;
+    }
+
     function generateRandomEditPass() {
         const pass = 'AL' + Math.random().toString(36).slice(-5).toUpperCase() + '!';
         document.getElementById('editUserPassword').value = pass;
@@ -469,11 +516,14 @@
         const dbid = document.getElementById('editUserDbId').value;
         const firstName = document.getElementById('editUserFirstName').value.trim();
         const lastName = document.getElementById('editUserLastName').value.trim();
-        const email = document.getElementById('editUserEmail').value.trim();
-        const contact_number = document.getElementById('editUserContact').value.trim();
+        const emailRaw = document.getElementById('editUserEmail').value;
+        const contactRaw = document.getElementById('editUserContact').value;
+        const validatedContact = validateUserEmailAndContact(emailRaw, contactRaw);
+        if (!validatedContact) return;
+
         const newPass = document.getElementById('editUserPassword').value;
         const name = `${firstName} ${lastName}`.trim();
-        const payload = { name, email, contact_number, password: newPass };
+        const payload = { name, email: validatedContact.email, contact_number: validatedContact.contact_number, password: newPass };
         
         const resFields = document.getElementById('editResidentFields');
         if (resFields.style.display !== 'none') {
@@ -499,7 +549,7 @@
             
             if (!res.ok) {
                 const errorData = await res.json().catch(() => null);
-                const errorMsg = errorData && errorData.message ? errorData.message : 'Failed to update user.';
+                const errorMsg = apiErrorMessage(errorData, 'Failed to update user.');
                 Swal.fire(`Error: ${errorMsg}`);
                 return;
             }
@@ -511,9 +561,9 @@
                 rows.forEach(row => {
                     if (row.querySelector('td').innerText === id) {
                         row.querySelector('div[style*="font-weight: 700; color: #0f172a;"]').innerText = name;
-                        row.querySelector('div[style*="font-size: 12px; color: #64748b;"]').innerText = email;
+                        row.querySelector('div[style*="font-size: 12px; color: #64748b;"]').innerText = validatedContact.email;
                         row.dataset.name = name.toLowerCase();
-                        row.dataset.email = email.toLowerCase();
+                        row.dataset.email = validatedContact.email.toLowerCase();
                     }
                 });
 
@@ -611,10 +661,13 @@
         const firstName = document.getElementById('userFirstName').value.trim();
         const lastName = document.getElementById('userLastName').value.trim();
         const role = document.getElementById('newRole').value;
-        const email = document.getElementById('userEmail').value.trim();
-        const contact_number = document.getElementById('userContact').value.trim();
+        const emailRaw = document.getElementById('userEmail').value;
+        const contactRaw = document.getElementById('userContact').value;
+        const validatedContact = validateUserEmailAndContact(emailRaw, contactRaw);
+        if (!validatedContact) return;
+
         const name = `${firstName} ${lastName}`.trim();
-        const payload = { name, email, contact_number, role, status: 'Active' };
+        const payload = { name, email: validatedContact.email, contact_number: validatedContact.contact_number, role, status: 'Active' };
         
         if (role === 'Resident') {
             payload.block = document.getElementById('resBlock').value;
@@ -643,14 +696,14 @@
             
             if (!res.ok) {
                 const errorData = await res.json().catch(() => null);
-                const errorMsg = errorData && errorData.message ? errorData.message : 'Failed to create account.';
+                const errorMsg = apiErrorMessage(errorData, 'Failed to create account.');
                 Swal.fire(`Error: ${errorMsg}`);
                 return;
             }
             
             const data = await res.json();
             if(data.success) {
-                Swal.fire(`Account created successfully!\n\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nPlease provide this password to the user.`).then(() => window.location.reload());
+                Swal.fire(`Account created successfully!\n\nEmail: ${validatedContact.email}\nTemporary Password: ${tempPassword}\n\nPlease provide this password to the user.`).then(() => window.location.reload());
             } else {
                 Swal.fire('Failed to create account. Email may already be in use.');
             }
@@ -707,6 +760,9 @@
             
             if(data && data.success) {
                 let msg = `Successfully processed ${data.processed} rows.\n\nCreated ${data.created} new users.`;
+                if (typeof data.updated === 'number' && data.updated > 0) {
+                    msg += `\nUpdated ${data.updated} existing users (matched by external_id).`;
+                }
                 if (data.errors && data.errors.length > 0) {
                     msg += `\n\nThere were ${data.errors.length} errors/skipped rows (e.g., duplicates or missing data).`;
                     console.warn('Import errors:', data.errors);

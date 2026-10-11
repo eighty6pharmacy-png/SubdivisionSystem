@@ -379,9 +379,66 @@
     animation: modalFadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Compact scrollable "Create New Billing Cycle" modal */
+.reset-cycle-modal {
+    max-width: 450px !important;
+    width: 90%;
+    max-height: min(90vh, 680px);
+    padding: 0;
+    border-radius: 24px;
+}
+
+.reset-cycle-modal-header {
+    text-align: center;
+    padding: 16px 24px 8px;
+    flex-shrink: 0;
+}
+
+.reset-cycle-modal-icon {
+    width: 40px;
+    height: 40px;
+    background: #e0f2fe;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 8px;
+}
+
+.reset-cycle-modal-header h3 {
+    font-size: 17px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+    line-height: 1.3;
+}
+
+.reset-cycle-modal-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 8px 24px 16px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.reset-cycle-modal-footer {
+    flex-shrink: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 14px 24px 18px;
+    border-top: 1px solid #e2e8f0;
+    background: #fff;
+}
+
 @keyframes modalFadeUp {
     from { opacity: 0; transform: translateY(40px); }
     to { opacity: 1; transform: translateY(0); }
+}
+
+/* SweetAlert2 above bill modals (e.g. reservation z-index 3000) */
+.swal2-container {
+    z-index: 99999 !important;
 }
 
 .modal-header {
@@ -523,6 +580,22 @@ input:checked + .switch-inner::after {
 }
 
 @media (max-width: 768px) {
+    .bill-modal.dp-contract-modal {
+        padding: 0;
+        align-items: stretch;
+    }
+
+    .bill-modal.dp-contract-modal .bill-modal-content {
+        max-width: 100%;
+        max-height: 100%;
+        height: 100%;
+        border-radius: 0;
+        padding: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
     .bill-header { flex-direction: column; align-items: stretch; gap: 16px; }
     .usage-trend { height: 120px; }
     .usage-label { transform: rotate(-45deg); margin-top: 10px; }
@@ -566,6 +639,18 @@ input:checked + .switch-inner::after {
         width: 100%;
         max-width: 100vw;
         overflow-x: hidden;
+    }
+
+    .bill-modal.dp-contract-modal .bill-modal-content {
+        padding: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .bill-modal.dp-contract-modal .modal-body {
+        flex: 1;
+        min-height: 0;
     }
 
     #modalResident {

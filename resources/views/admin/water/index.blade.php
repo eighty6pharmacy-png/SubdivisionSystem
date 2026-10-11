@@ -428,14 +428,15 @@
 
 <!-- New Cycle Modal -->
 <div id="resetCycleModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 3000;">
-    <div class="bill-modal-content" style="max-width: 450px; padding: 32px; border-radius: 24px;">
-        <div style="text-align: center;">
-            <div style="width: 64px; height: 64px; background: #e0f2fe; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
-                <svg width="32" height="32" fill="none" stroke="#0284c7" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+    <div class="bill-modal-content reset-cycle-modal">
+        <div class="reset-cycle-modal-header">
+            <div class="reset-cycle-modal-icon">
+                <svg width="20" height="20" fill="none" stroke="#0284c7" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
             </div>
-            <h3 style="font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 12px;">Create New Billing Cycle</h3>
+            <h3>Create New Billing Cycle</h3>
         </div>
-        <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
+        <div class="reset-cycle-modal-body">
+        <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 16px;">
             <div style="background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0;">
                 <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;"><i class="fas fa-calendar-alt" style="margin-right: 6px; color: #0284c7;"></i>Previous Reading Date</label>
                 <input type="date" id="newCyclePrev" onclick="autoFillDates()" class="filter-select" style="width: 100%; box-sizing: border-box; background: white; border-color: #cbd5e1; cursor: pointer;">
@@ -465,14 +466,16 @@
             </div>
         </div>
         
-        <div style="display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 32px;">
+        <div style="display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 8px;">
             <div>
                 <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 6px;">Penalty Past Due (%)</label>
                 <input type="number" id="newCyclePenalty" class="filter-select" value="5" style="width: 100%; box-sizing: border-box;">
             </div>
         </div>
+        <p id="cycleDateHint" style="font-size: 11px; color: #64748b; line-height: 1.45; margin: 0 0 4px;"></p>
+        </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="reset-cycle-modal-footer">
             <button class="btn btn-outline" style="justify-content: center; padding: 12px;" onclick="closeResetCycleModal()">Cancel</button>
             <button class="btn btn-primary" style="justify-content: center; padding: 12px;" onclick="executeResetCycle()">Create Cycle</button>
         </div>
@@ -669,38 +672,103 @@
     let smartPrevDate = '';
     let smartCurrDate = '';
     let smartDueDate = '';
+    let minCycleCurrYmd = '';
+
+    function formatLocalYmd(date) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    function computeBillingCycleDates() {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        let minCurr = new Date(today.getFullYear(), today.getMonth(), 1);
+
+        smartPrevDate = '';
+        smartCurrDate = '';
+        smartDueDate = '';
+
+        if (allBillsRaw && allBillsRaw.length > 0 && allBillsRaw[0].current_reading_date) {
+            const lastCurr = new Date(allBillsRaw[0].current_reading_date + 'T00:00:00');
+            const nextMonthStart = new Date(lastCurr.getFullYear(), lastCurr.getMonth() + 1, 1);
+            if (nextMonthStart > minCurr) {
+                minCurr = nextMonthStart;
+            }
+
+            let nextCurr = new Date(lastCurr.getFullYear(), lastCurr.getMonth() + 1, lastCurr.getDate());
+            if (nextCurr < minCurr) {
+                nextCurr = new Date(minCurr);
+            }
+            const dueDay = new Date(nextCurr);
+            dueDay.setDate(dueDay.getDate() + 15);
+
+            smartPrevDate = formatLocalYmd(lastCurr);
+            smartCurrDate = formatLocalYmd(nextCurr);
+            smartDueDate = formatLocalYmd(dueDay);
+        }
+
+        minCycleCurrYmd = formatLocalYmd(minCurr);
+        return minCycleCurrYmd;
+    }
+
+    function applyCycleDateConstraints() {
+        const minCurr = minCycleCurrYmd || computeBillingCycleDates();
+        document.getElementById('newCycleCurr').min = minCurr;
+        document.getElementById('newCycleDue').min = document.getElementById('newCycleCurr').value || minCurr;
+        const hint = document.getElementById('cycleDateHint');
+        if (hint) {
+            hint.textContent = `Current reading must be on or after ${minCurr} (no backdated or previous-month cycles).`;
+        }
+        syncCycleDateBounds();
+    }
+
+    function syncCycleDateBounds() {
+        const curr = document.getElementById('newCycleCurr').value;
+        const minCurr = minCycleCurrYmd || computeBillingCycleDates();
+        document.getElementById('newCycleDue').min = curr || minCurr;
+        if (curr) {
+            document.getElementById('newCyclePrev').max = curr;
+        } else {
+            document.getElementById('newCyclePrev').removeAttribute('max');
+        }
+    }
+
+    function validateCycleDates(prevDate, currDate, dueDate) {
+        if (!minCycleCurrYmd) {
+            computeBillingCycleDates();
+        }
+        if (currDate < minCycleCurrYmd) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Invalid current reading date',
+                text: `You cannot create a cycle for a past month. Use ${minCycleCurrYmd} or later.`
+            });
+            return false;
+        }
+        if (prevDate >= currDate) {
+            Swal.fire('Previous reading date must be before the current reading date.');
+            return false;
+        }
+        if (dueDate < currDate) {
+            Swal.fire('Due date must be on or after the current reading date.');
+            return false;
+        }
+        return true;
+    }
 
     function resetBillingCycle() {
         if (new URLSearchParams(window.location.search).get('action') !== 'reset') {
             window.history.pushState(null, '', '?action=reset');
         }
         document.getElementById('newCycleRate').value = currentRate;
+        computeBillingCycleDates();
 
-        // Auto-fill dates based on next month if a cycle already exists
-        if (allBillsRaw && allBillsRaw.length > 0 && allBillsRaw[0].current_reading_date) {
-            const lastCurr = new Date(allBillsRaw[0].current_reading_date);
-            const nextCurr = new Date(lastCurr);
-            nextCurr.setMonth(nextCurr.getMonth() + 1);
-            const dueDay = new Date(nextCurr);
-            dueDay.setDate(dueDay.getDate() + 15); // e.g. 15 days after current reading
-
-            const fDate = new Date(lastCurr.getTime() - (lastCurr.getTimezoneOffset() * 60000));
-            const lDate = new Date(nextCurr.getTime() - (nextCurr.getTimezoneOffset() * 60000));
-            const dDate = new Date(dueDay.getTime() - (dueDay.getTimezoneOffset() * 60000));
-
-            smartPrevDate = fDate.toISOString().split('T')[0];
-            smartCurrDate = lDate.toISOString().split('T')[0];
-            smartDueDate = dDate.toISOString().split('T')[0];
-        } else {
-            smartPrevDate = '';
-            smartCurrDate = '';
-            smartDueDate = '';
-        }
-
-        // Always start blank to force user action, they can click to auto-fill
         document.getElementById('newCyclePrev').value = '';
         document.getElementById('newCycleCurr').value = '';
         document.getElementById('newCycleDue').value = '';
+        applyCycleDateConstraints();
 
         document.getElementById('resetCycleModal').style.display = 'flex';
     }
@@ -715,6 +783,7 @@
         if (!document.getElementById('newCycleDue').value && smartDueDate) {
             document.getElementById('newCycleDue').value = smartDueDate;
         }
+        syncCycleDateBounds();
     }
 
     function closeResetCycleModal() {
@@ -736,6 +805,9 @@
             Swal.fire('Please select all dates.');
             return;
         }
+        if (!validateCycleDates(prevDate, currDate, dueDate)) {
+            return;
+        }
 
         closeResetCycleModal();
         try {
@@ -747,16 +819,25 @@
                 },
                 body: JSON.stringify({ type: 'water', rate: rate, penalty: penalty, prev_date: prevDate, curr_date: currDate, due_date: dueDate, water_min_m3: minM3, water_min_rate: minRate })
             });
-            const data = await res.json();
-            if(data.success) {
+            const data = await res.json().catch(() => ({}));
+            if (data.success) {
                 Swal.fire(`New billing cycle generated successfully with base rate ₱${rate}.`);
                 setTimeout(() => window.location.reload(), 500);
+            } else {
+                Swal.fire(data.message || 'Failed to reset billing cycle.');
             }
         } catch(e) {
             console.error(e);
             Swal.fire('Failed to reset billing cycle.');
         }
     }
+
+    ['newCycleCurr', 'newCyclePrev', 'newCycleDue'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', syncCycleDateBounds);
+        }
+    });
 
     async function addPreviousBalanceFromModal(id, resident) {
         const inputAmount = await promptAsync(

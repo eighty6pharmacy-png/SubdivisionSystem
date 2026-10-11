@@ -29,6 +29,7 @@ class UtilityBill extends Model
         'is_at_risk',
         'paymongo_checkout_id',
         'paymongo_checkout_url',
+        'billing_period',
     ];
 
     protected function casts(): array
@@ -38,6 +39,7 @@ class UtilityBill extends Model
             'due_date' => 'date',
             'previous_reading_date' => 'date',
             'current_reading_date' => 'date',
+            'billing_period' => 'date',
         ];
     }
 

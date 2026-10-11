@@ -17,7 +17,7 @@
                 ⚠️ CONFLICT: An appointment is already scheduled on this time and day. Please select a different date or time slot.
             </div>
 
-            <form id="appointmentForm">
+            <form id="appointmentForm" novalidate>
                 <div class="form-row" style="display: flex; gap: 12px; flex-wrap: nowrap; margin-bottom: 16px;">
                     <div class="form-group" style="flex: 1; min-width: 0; margin-bottom: 0;">
                         <label class="form-label" for="firstName">First Name</label>
@@ -25,7 +25,7 @@
                     </div>
                     <div class="form-group" style="flex: 1; min-width: 0; margin-bottom: 0;">
                         <label class="form-label" for="middleName">Middle Name</label>
-                        <input type="text" class="form-input" id="middleName" placeholder="e.g. Santos">
+                        <input type="text" class="form-input" id="middleName" placeholder="e.g. Santos" required>
                     </div>
                     <div class="form-group" style="flex: 1; min-width: 0; margin-bottom: 0;">
                         <label class="form-label" for="lastName">Last Name</label>
@@ -36,11 +36,11 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label class="form-label" for="email">Email Address</label>
-                        <input type="email" class="form-input" id="email" placeholder="you@email.com" required>
+                        <input type="email" class="form-input" id="email" placeholder="you@email.com" required autocomplete="email">
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="contact">Contact / Mobile Number</label>
-                        <input type="tel" class="form-input" id="contact" placeholder="+63 9XX XXX XXXX" required>
+                        <input type="tel" class="form-input" id="contact" placeholder="09XXXXXXXXX or +639XXXXXXXXX" required autocomplete="tel" inputmode="tel">
                     </div>
                 </div>
 
@@ -90,14 +90,85 @@
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
+        const PH_MOBILE_PATTERN = /^(09\d{9}|\+639\d{9}|639\d{9})$/;
+        const availableHours = [
+            "09:00 AM", "10:00 AM", "11:00 AM", "01:00 PM",
+            "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM"
+        ];
+        const submitBtnDefaultHtml = document.querySelector('#appointmentForm button[type="submit"]').innerHTML;
+
+        function manilaNow() {
+            return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+        }
+
+        function todayYmd() {
+            const n = manilaNow();
+            const y = n.getFullYear();
+            const m = String(n.getMonth() + 1).padStart(2, '0');
+            const d = String(n.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function slotDateTime(dateRaw, hour) {
+            const parts = hour.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+            if (!parts) return null;
+            let h = parseInt(parts[1], 10);
+            const min = parseInt(parts[2], 10);
+            const mer = parts[3].toUpperCase();
+            if (mer === 'PM' && h !== 12) h += 12;
+            if (mer === 'AM' && h === 12) h = 0;
+            return new Date(`${dateRaw}T${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}:00`);
+        }
+
+        function isPastDate(dateRaw) {
+            return dateRaw < todayYmd();
+        }
+
+        function isPastSlot(dateRaw, hour) {
+            const slot = slotDateTime(dateRaw, hour);
+            if (!slot) return true;
+            return slot.getTime() <= manilaNow().getTime();
+        }
+
+        function normalizePhone(raw) {
+            return String(raw || '').replace(/[\s\-().]/g, '');
+        }
+
+        function showFormError(title, text) {
+            Swal.fire({ icon: 'error', title, text });
+        }
+
+        function showFormWarning(title, text) {
+            Swal.fire({ icon: 'warning', title, text });
+        }
+
+        function listFields(fields) {
+            if (fields.length === 1) return fields[0];
+            if (fields.length === 2) return fields[0] + ' and ' + fields[1];
+            return fields.slice(0, -1).join(', ') + ', and ' + fields[fields.length - 1];
+        }
+
+        function resetSubmitButton() {
+            const submitBtn = document.getElementById('appointmentForm').querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = submitBtnDefaultHtml;
+            }
+            if (typeof grecaptcha !== 'undefined') {
+                grecaptcha.reset();
+            }
+        }
+
         fetch('/api/appointments/availability')
             .then(res => res.json())
             .then(data => {
                 const blackouts = data.unavailable_dates || [];
                 const takenTimeslots = data.taken_timeslots || [];
-
                 flatpickr("#date", {
                     minDate: "today",
+                    dateFormat: "Y-m-d",
+                    allowInput: false,
                     disableMobile: true,
                     onDayCreate: function(dObj, dStr, fp, dayElem) {
                         const dateRaw = fp.formatDate(dayElem.dateObj, "Y-m-d");
@@ -117,7 +188,14 @@
                         }
                         const formattedDate = selectedDates[0].toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
                         const dateRaw = instance.formatDate(selectedDates[0], "Y-m-d");
-                        
+
+                        if (isPastDate(dateRaw)) {
+                            Swal.fire("Please select today or a future date.");
+                            instance.clear();
+                            resetTimeDropdown();
+                            return;
+                        }
+
                         if (blackouts.includes(dateRaw) || blackouts.includes(formattedDate)) {
                             Swal.fire("This date is unavailable. Please select another date.");
                             instance.clear();
@@ -129,14 +207,17 @@
                 });
 
                 const timeSelect = document.getElementById('time');
-                const availableHours = [
-                    "09:00 AM", "10:00 AM", "11:00 AM", "01:00 PM", 
-                    "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM"
-                ];
 
                 function resetTimeDropdown() {
                     timeSelect.innerHTML = '<option value="">Select Date First</option>';
                     timeSelect.disabled = true;
+                }
+
+                function isTakenSlot(dateRaw, hour) {
+                    return takenTimeslots.some(apt =>
+                        (String(apt.date).split('T')[0] === dateRaw) &&
+                        apt.time === hour
+                    );
                 }
 
                 function populateTimeDropdown(dateRaw, formattedDate) {
@@ -144,10 +225,8 @@
                     timeSelect.disabled = false;
 
                     availableHours.forEach(hour => {
-                        const isTaken = takenTimeslots.some(apt => 
-                            (apt.date.split('T')[0] === dateRaw) && 
-                            apt.time === hour
-                        );
+                        const isTaken = isTakenSlot(dateRaw, hour);
+                        const past = isPastSlot(dateRaw, hour);
 
                         const option = document.createElement('option');
                         option.value = hour;
@@ -156,15 +235,84 @@
                             option.disabled = true;
                             option.style.color = '#dc2626';
                             option.style.backgroundColor = '#fef2f2';
+                        } else if (past) {
+                            option.textContent = `${hour} (Past)`;
+                            option.disabled = true;
+                            option.style.color = '#6b7280';
+                            option.style.backgroundColor = '#f3f4f6';
                         } else {
                             option.textContent = hour;
                         }
                         timeSelect.appendChild(option);
                     });
                 }
-                
+
                 document.getElementById('appointmentForm').addEventListener('submit', function(e) {
                     e.preventDefault();
+
+                    const firstName = document.getElementById('firstName').value.trim();
+                    const middleName = document.getElementById('middleName').value.trim();
+                    const lastName = document.getElementById('lastName').value.trim();
+                    const email = document.getElementById('email').value.trim();
+                    const contactRaw = document.getElementById('contact').value.trim();
+                    const contact = normalizePhone(contactRaw);
+                    const selectedDate = document.getElementById('date').value;
+                    const selectedTime = document.getElementById('time').value;
+                    const formattedDate = selectedDate
+                        ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'})
+                        : '';
+
+                    const missing = [];
+                    if (!firstName) missing.push('First Name');
+                    if (!middleName) missing.push('Middle Name');
+                    if (!lastName) missing.push('Last Name');
+                    if (!email) missing.push('Email Address');
+                    if (!contactRaw) missing.push('Contact / Mobile Number');
+                    if (!selectedDate) missing.push('Preferred Date');
+                    if (!selectedTime) missing.push('Preferred Time');
+
+                    if (missing.length) {
+                        showFormWarning(
+                            missing.length === 1 ? 'Missing ' + missing[0] : 'Missing required fields',
+                            'Please fill in ' + listFields(missing) + '.'
+                        );
+                        return;
+                    }
+
+                    if (!EMAIL_PATTERN.test(email)) {
+                        showFormError('Invalid email', 'Please enter a real email address (any domain is fine, e.g. you@gmail.com or you@company.com).');
+                        return;
+                    }
+
+                    if (!PH_MOBILE_PATTERN.test(contact)) {
+                        showFormError('Invalid mobile number', 'Use a Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX.');
+                        return;
+                    }
+
+                    if (isPastDate(selectedDate)) {
+                        showFormError('Invalid date', 'Preferred date cannot be in the past. Please select today or a later date.');
+                        return;
+                    }
+
+                    if (blackouts.includes(selectedDate) || blackouts.includes(formattedDate)) {
+                        showFormError('Unavailable date', 'This date is blocked by the office. Please choose another day.');
+                        return;
+                    }
+
+                    if (!selectedTime || !availableHours.includes(selectedTime)) {
+                        showFormError('Invalid time', 'Please select an available time slot.');
+                        return;
+                    }
+
+                    if (isPastSlot(selectedDate, selectedTime)) {
+                        showFormError('Invalid time', 'That time slot has already passed. Please choose a later time.');
+                        return;
+                    }
+
+                    if (isTakenSlot(selectedDate, selectedTime)) {
+                        showFormError('Time already taken', 'An appointment is already scheduled for this date and time.');
+                        return;
+                    }
 
                     const recaptchaResponse = grecaptcha.getResponse();
                     if (!recaptchaResponse) {
@@ -179,16 +327,7 @@
                     const submitBtn = this.querySelector('button[type="submit"]');
                     submitBtn.disabled = true;
                     submitBtn.innerHTML = 'Submitting...';
-                    
-                    const firstName = document.getElementById('firstName').value;
-                    const middleName = document.getElementById('middleName').value;
-                    const lastName = document.getElementById('lastName').value;
-                    const email = document.getElementById('email').value;
-                    const contact = document.getElementById('contact').value;
-                    const selectedDate = document.getElementById('date').value;
-                    const selectedTime = document.getElementById('time').value;
 
-                    // Save to PostgreSQL backend
                     fetch('/api/appointments', {
                         method: 'POST',
                         headers: {
@@ -207,8 +346,17 @@
                             notes: '',
                             recaptcha_token: grecaptcha.getResponse()
                         })
-                    }).then(() => {
-                        // Send notification email
+                    }).then(async (res) => {
+                        const payload = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                            const message = payload.message
+                                || (payload.errors && Object.values(payload.errors).flat()[0])
+                                || 'Please check the form and try again.';
+                            showFormError('Could not book appointment', message);
+                            resetSubmitButton();
+                            return;
+                        }
+
                         fetch('/api/send-appointment-email', {
                             method: 'POST',
                             headers: {
@@ -229,12 +377,8 @@
                         document.getElementById('appointmentSuccess').style.display = 'block';
                     }).catch(err => {
                         console.error("Database save error:", err);
-                        const submitBtn = document.getElementById('appointmentForm').querySelector('button[type="submit"]');
-                        if (submitBtn) {
-                            submitBtn.disabled = false;
-                            submitBtn.innerHTML = 'Confirm Appointment';
-                        }
-                        grecaptcha.reset();
+                        showFormError('Could not book appointment', 'A network error occurred. Please try again.');
+                        resetSubmitButton();
                     });
                 });
             })

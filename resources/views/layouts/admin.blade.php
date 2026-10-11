@@ -46,93 +46,89 @@
                 <p>Admin Portal</p>
             </div>
 
-            <nav class="sidebar-nav">
-                <div class="nav-section-label">Main</div>
-                <a href="/admin/dashboard" class="nav-item {{ request()->is('admin/dashboard') ? 'active' : '' }}">
+            <nav class="sidebar-nav" aria-label="Admin navigation">
+                <div class="nav-section">
+                    <div class="nav-section-label">Main</div>
+                    <a href="/admin/dashboard" class="nav-item {{ request()->is('admin/dashboard') ? 'active' : '' }}">
+                        <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+                        <span class="nav-item-text">Dashboard Overview</span>
+                    </a>
+                    <a href="/admin/users" class="nav-item {{ request()->is('admin/users*') ? 'active' : '' }}">
+                        <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                        <span class="nav-item-text">User Management</span>
+                    </a>
+                    <a href="/admin/buyer-master-list" class="nav-item {{ request()->is('admin/buyer-master-list*') ? 'active' : '' }}">
+                        <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+                        <span class="nav-item-text">Buyer Master List</span>
+                    </a>
+                </div>
 
-                    <span>Dashboard Overview</span>
-                </a>
-                <a href="/admin/users" class="nav-item {{ request()->is('admin/users*') ? 'active' : '' }}">
+                <div class="nav-section">
+                    <div class="nav-section-label">Finance &amp; Utilities</div>
+                    <a href="/admin/reservation-fee" class="nav-item {{ request()->is('admin/reservation-fee*') ? 'active' : '' }}">
+                        <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        <span class="nav-item-text">Reservation Fee</span>
+                    </a>
+                    <a href="/admin/downpayment-fee" class="nav-item {{ request()->is('admin/downpayment-fee*') ? 'active' : '' }}">
+                        <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                        <span class="nav-item-text">Downpayment</span>
+                    </a>
+                    <a href="/admin/financing" class="nav-item {{ request()->is('admin/financing*') ? 'active' : '' }}">
+                        <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                        <span class="nav-item-text">Finance</span>
+                    </a>
+                    <a href="/admin/billing" class="nav-item {{ request()->is('admin/billing*') ? 'active' : '' }}">
+                        <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        <span class="nav-item-text">Electricity</span>
+                    </a>
+                    <a href="/admin/water" class="nav-item {{ request()->is('admin/water*') ? 'active' : '' }}">
+                        <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3c-4 6-6 9-6 12a6 6 0 1012 0c0-3-2-6-6-12z"/></svg>
+                        <span class="nav-item-text">Water</span>
+                    </a>
+                </div>
 
-                    <span>User Management</span>
-                </a>
+                <div class="nav-section">
+                    <div class="nav-section-label">Property Management</div>
+                    <a href="/admin/gis" class="nav-item {{ request()->is('admin/gis*') ? 'active' : '' }}">
+                        <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                        <span class="nav-item-text">Property GIS Monitoring</span>
+                    </a>
+                </div>
 
-                <a href="/admin/buyer-master-list"
-                    class="nav-item {{ request()->is('admin/buyer-master-list*') ? 'active' : '' }}">
-
-                    <span>Buyer Master List</span>
-                </a>
-
-                <div class="nav-section-label">Finance & Utilities</div>
-                <a href="/admin/billing" class="nav-item {{ request()->is('admin/billing*') ? 'active' : '' }}">
-
-                    <span>Billing with Electricity</span>
-                </a>
-                <a href="/admin/water" class="nav-item {{ request()->is('admin/water*') ? 'active' : '' }}">
-
-                    <span>Water</span>
-                </a>
-                <a href="/admin/reservation-fee"
-                    class="nav-item {{ request()->is('admin/reservation-fee*') ? 'active' : '' }}">
-
-                    <span>Reservation Fee</span>
-                </a>
-                <a href="/admin/downpayment-fee"
-                    class="nav-item {{ request()->is('admin/downpayment-fee*') ? 'active' : '' }}">
-
-                    <span>Downpayment Fee</span>
-                </a>
-                <a href="/admin/financing"
-                    class="nav-item {{ request()->is('admin/financing*') ? 'active' : '' }}">
-
-                    <span>Loans & Addt'l Fees</span>
-                </a>
-                <div class="nav-section-label">Property Management</div>
-                <a href="/admin/gis" class="nav-item {{ request()->is('admin/gis*') ? 'active' : '' }}">
-
-                    <span>Property GIS Monitoring</span>
-                </a>
-
-                <div class="nav-section-label">Community</div>
-                <a href="/admin/incidents" class="nav-item {{ request()->is('admin/incidents*') ? 'active' : '' }}" style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-
-                        <span>Incident Reporting</span>
-                    </div>
-                    @if(isset($sidebarCounts) && $sidebarCounts['incidents'] > 0)
-                        <span style="background: var(--danger); color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">{{ $sidebarCounts['incidents'] }}</span>
-                    @endif
-                </a>
-                <a href="/admin/announcements"
-                    class="nav-item {{ request()->is('admin/announcements*') ? 'active' : '' }}">
-
-                    <span>Announcements</span>
-                </a>
-                <a href="/admin/appointments"
-                    class="nav-item {{ request()->is('admin/appointments*') ? 'active' : '' }}" style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-
-                        <span>Appointment Management</span>
-                    </div>
-                    @if(isset($sidebarCounts) && $sidebarCounts['appointments'] > 0)
-                        <span style="background: var(--danger); color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">{{ $sidebarCounts['appointments'] }}</span>
-                    @endif
-                </a>
-                <a href="/admin/visitors" class="nav-item {{ request()->is('admin/visitors*') ? 'active' : '' }}" style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-
-                        <span>Visitor Approvals</span>
-                    </div>
-                    @if(isset($sidebarCounts) && $sidebarCounts['visitors'] > 0)
-                        <span style="background: var(--danger); color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">{{ $sidebarCounts['visitors'] }}</span>
-                    @endif
-                </a>
+                <div class="nav-section nav-section--last">
+                    <div class="nav-section-label">Community</div>
+                    <a href="/admin/incidents" class="nav-item nav-item--badge {{ request()->is('admin/incidents*') ? 'active' : '' }}">
+                        <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        <span class="nav-item-text">Incident Reporting</span>
+                        @if(isset($sidebarCounts) && $sidebarCounts['incidents'] > 0)
+                            <span class="nav-badge">{{ $sidebarCounts['incidents'] }}</span>
+                        @endif
+                    </a>
+                    <a href="/admin/announcements" class="nav-item {{ request()->is('admin/announcements*') ? 'active' : '' }}">
+                        <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
+                        <span class="nav-item-text">Announcements</span>
+                    </a>
+                    <a href="/admin/appointments" class="nav-item nav-item--badge {{ request()->is('admin/appointments*') ? 'active' : '' }}">
+                        <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        <span class="nav-item-text">Appointment Management</span>
+                        @if(isset($sidebarCounts) && $sidebarCounts['appointments'] > 0)
+                            <span class="nav-badge">{{ $sidebarCounts['appointments'] }}</span>
+                        @endif
+                    </a>
+                    <a href="/admin/visitors" class="nav-item nav-item--badge {{ request()->is('admin/visitors*') ? 'active' : '' }}">
+                        <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+                        <span class="nav-item-text">Visitor Approvals</span>
+                        @if(isset($sidebarCounts) && $sidebarCounts['visitors'] > 0)
+                            <span class="nav-badge">{{ $sidebarCounts['visitors'] }}</span>
+                        @endif
+                    </a>
+                </div>
             </nav>
 
             <div class="sidebar-footer">
-                <a href="#" class="nav-item" onclick="openLogoutModal(); return false;">
-
-                    <span>Logout</span>
+                <a href="#" class="nav-item nav-item--logout" onclick="openLogoutModal(); return false;">
+                    <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                    <span class="nav-item-text">Logout</span>
                 </a>
                 <form id="logout-form" action="/logout" method="POST" style="display: none;">
                     @csrf

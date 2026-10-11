@@ -4,6 +4,172 @@
 
 @section('content')
     <link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
+    <style>
+        .dp-contract-modal .modal-header { padding: 24px 32px; }
+        .dp-contract-modal .modal-body {
+            grid-template-columns: 1fr 300px;
+            gap: 24px;
+            padding: 24px 32px;
+            align-items: start;
+        }
+        .dp-contract-modal .dp-pay-sidebar {
+            border-left: 1px solid var(--bill-border);
+            padding-left: 24px;
+            position: sticky;
+            top: 0;
+        }
+        .dp-contract-modal .dp-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .dp-contract-modal .dp-summary-card {
+            background: var(--bill-bg-soft);
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+        .dp-contract-modal .dp-ledger-scroll {
+            max-height: 360px;
+            overflow-y: auto;
+            border: 1px solid var(--bill-border);
+            border-radius: 16px;
+        }
+        .dp-contract-modal .dp-ledger-row-next {
+            background: #eff6ff !important;
+            box-shadow: inset 3px 0 0 var(--bill-primary);
+        }
+        .dp-contract-modal .dp-ledger-row-unpaid td {
+            background: #fff7ed;
+        }
+        .dp-contract-modal details.dp-contract-details summary {
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+            list-style: none;
+        }
+        .dp-contract-modal details.dp-contract-details summary::-webkit-details-marker { display: none; }
+        @media (max-width: 1024px) {
+            .dp-contract-modal .modal-body { grid-template-columns: 1fr !important; }
+            .dp-contract-modal .dp-pay-sidebar {
+                border-left: none;
+                padding-left: 0;
+                border-top: 1px solid var(--bill-border);
+                padding-top: 24px;
+            }
+            .dp-contract-modal .dp-summary-grid { grid-template-columns: repeat(2, 1fr); }
+            .dp-contract-modal .dp-ledger-scroll {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+        @media (max-width: 768px) {
+            .bill-modal.dp-contract-modal {
+                padding: 0;
+                align-items: stretch;
+            }
+            .dp-contract-modal .bill-modal-content {
+                max-width: 100%;
+                max-height: 100%;
+                height: 100%;
+                border-radius: 0;
+            }
+            .dp-contract-modal .modal-header {
+                padding: 16px 20px;
+                gap: 12px;
+                flex-shrink: 0;
+            }
+            .dp-contract-modal .modal-header h2 {
+                font-size: 22px !important;
+            }
+            .dp-contract-modal .modal-body {
+                padding: 16px 20px 24px !important;
+                gap: 20px !important;
+                flex: 1;
+                min-height: 0;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .dp-contract-modal .dp-summary-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+            .dp-contract-modal .dp-summary-card {
+                padding: 12px;
+            }
+            .dp-contract-modal .dp-summary-card div[id^="modal"] {
+                font-size: 18px !important;
+            }
+            .dp-contract-modal .dp-ledger-scroll {
+                max-height: none;
+                overflow: visible;
+                border: none;
+                border-radius: 0;
+            }
+            .dp-contract-modal .dp-ledger-table thead {
+                display: none;
+            }
+            .dp-contract-modal .dp-ledger-table,
+            .dp-contract-modal .dp-ledger-table tbody,
+            .dp-contract-modal .dp-ledger-table tr {
+                display: block;
+                width: 100%;
+            }
+            .dp-contract-modal .dp-ledger-table tr {
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                padding: 12px 14px;
+                margin-bottom: 10px;
+            }
+            .dp-contract-modal .dp-ledger-table tr.dp-ledger-row-next {
+                border-color: #bfdbfe;
+            }
+            .dp-contract-modal .dp-ledger-table tr.dp-ledger-row-unpaid td {
+                background: transparent;
+            }
+            .dp-contract-modal .dp-ledger-table td {
+                display: flex !important;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 12px;
+                padding: 8px 0 !important;
+                border: none !important;
+                text-align: right !important;
+                white-space: normal !important;
+            }
+            .dp-contract-modal .dp-ledger-table td::before {
+                content: attr(data-label);
+                font-weight: 700;
+                font-size: 10px;
+                text-transform: uppercase;
+                color: #94a3b8;
+                text-align: left;
+                flex-shrink: 0;
+            }
+            .dp-contract-modal .dp-ledger-table td:first-child {
+                font-size: 12px;
+                padding-bottom: 4px !important;
+                border-bottom: 1px solid #e2e8f0 !important;
+                margin-bottom: 4px;
+            }
+            .dp-contract-modal .dp-ledger-table td:first-child::before {
+                content: 'Installment';
+            }
+        }
+        @media (max-width: 480px) {
+            .dp-contract-modal .dp-summary-grid {
+                grid-template-columns: 1fr;
+            }
+            .dp-contract-modal .modal-header h2 {
+                font-size: 20px !important;
+            }
+        }
+    </style>
 
     <div class="bill-container fade-in">
         <div class="bill-header">
@@ -69,10 +235,10 @@
                 </div>
                 <div
                     style="background: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid var(--bill-danger);">
-                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Delinquent
+                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Late
                     </div>
                     <div style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">
-                        {{ collect($bills)->where('status', 'Delinquent')->count() }}
+                        {{ collect($bills)->where('payment_behavior', 'Late')->count() }}
                     </div>
                 </div>
             </div>
@@ -101,12 +267,13 @@
                 <input type="text" id="billingSearch" class="filter-select" placeholder="Client or Lot..." style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;">
             </div>
             <div class="filter-group">
-                <span class="filter-label" style="display: block; font-size: 12px; color: #64748b; margin-bottom: 4px;">Status</span>
-                <select id="statusFilter" class="filter-select" style="padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;">
-                    <option value="all">All Statuses</option>
-                    <option value="active">Active</option>
-                    <option value="completed">Completed</option>
-                    <option value="delinquent">Delinquent</option>
+                <span class="filter-label" style="display: block; font-size: 12px; color: #64748b; margin-bottom: 4px;">Payment Behavior</span>
+                <select id="behaviorFilter" class="filter-select" style="padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                    <option value="all">All Behaviors</option>
+                    <option value="Early">Early</option>
+                    <option value="On-Time">On-Time</option>
+                    <option value="Late">Late</option>
+                    <option value="Not available yet">N/A</option>
                 </select>
             </div>
             <div class="filter-group">
@@ -132,40 +299,50 @@
                 <table class="bill-table">
                     <thead>
                         <tr>
-                            <th>Client Details</th>
+                            <th>Client / Lot</th>
                             <th>Progress</th>
-                            <th>Monthly Amortization</th>
+                            <th>Monthly Payments</th>
                             <th>Next Due</th>
-                            <th>Status</th>
+                            <th>Payment Behavior</th>
                             <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="dpTableBody">
-                        @foreach($bills as $bill)
+                        @forelse($bills as $bill)
                             @php
                                 $progress = $bill['total_dp'] > 0 ? ($bill['paid_amount'] / $bill['total_dp']) * 100 : 0;
+                                $behavior = $bill['payment_behavior'] ?? 'Not available yet';
                             @endphp
-                            <tr class="bill-row" id="row-{{ $bill['id'] }}">
+                            <tr class="bill-row" id="row-{{ $bill['id'] }}"
+                                data-resident="{{ strtolower($bill['buyer']) }}"
+                                data-behavior="{{ $behavior }}"
+                                data-block="{{ $bill['block'] }}">
                                 <td>
                                     <div style="font-weight: 700;">{{ $bill['buyer'] }}</div>
-                                    <div style="font-size: 12px; color: #64748b;">ID: {{ strtoupper($bill['id']) }} &bull; Block
-                                        {{ $bill['block'] }} Lot {{ $bill['lot'] }}</div>
+                                    <div style="font-size: 12px; color: #64748b;">{{ $bill['contact'] ?? 'N/A' }}</div>
+                                    <div style="font-size: 12px; color: #94a3b8;">Block {{ $bill['block'] }} Lot {{ $bill['lot'] }}</div>
                                 </td>
-                                <td style="min-width: 200px;" id="progress-cell-{{ $bill['id'] }}">
+                                <td style="min-width: 200px;">
                                     <div
                                         style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; font-weight: 700; color: #64748b;">
-                                        <span class="paid-label">₱{{ number_format($bill['paid_amount']) }} Paid</span>
-                                        <span>₱{{ number_format($bill['total_dp']) }} Total</span>
+                                        <span>₱{{ number_format($bill['paid_amount'], 2) }} Paid</span>
+                                        <span>₱{{ number_format($bill['total_dp'], 2) }} Total</span>
                                     </div>
                                     <div
                                         style="width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
-                                        <div class="progress-fill"
-                                            style="height: 100%; width: {{ $progress }}%; background: var(--bill-primary); transition: width 0.5s ease;">
+                                        <div
+                                            style="height: 100%; width: {{ $progress }}%; background: var(--bill-primary);">
                                         </div>
                                     </div>
-                                    <div class="months-label"
-                                        style="font-size: 10px; color: #94a3b8; margin-top: 4px; text-align: right;">
-                                        {{ $bill['months_paid'] }} of {{ $bill['total_months'] }} mos</div>
+                                    <div style="font-size: 10px; color: #94a3b8; margin-top: 4px; text-align: right;">
+                                        {{ $bill['months_paid'] }} of {{ $bill['total_months'] }} mos
+                                        @if(($bill['missed_months'] ?? 0) > 0)
+                                            <span style="color: var(--bill-danger); font-weight: 700;"> · {{ $bill['missed_months'] }} missed</span>
+                                        @endif
+                                        @if($bill['status'] === 'Fully Paid')
+                                            <span style="color: #166534; font-weight: 700;"> · Fully Paid</span>
+                                        @endif
+                                    </div>
                                 </td>
                                 <td>
                                     <div style="font-weight: 700;">₱{{ number_format($bill['monthly_amortization'], 2) }}</div>
@@ -174,26 +351,33 @@
                                     <div style="font-size: 13px;">
                                         {{ $bill['next_due'] != 'N/A' ? date('M d, Y', strtotime($bill['next_due'])) : 'N/A' }}
                                     </div>
-                                </td>
-                                <td id="status-cell-{{ $bill['id'] }}">
-                                    @if($bill['status'] == 'Good Standing')
-                                        <span class="badge badge-success">Good Standing</span>
-                                    @elseif($bill['status'] == 'Fully Paid')
-                                        <span class="badge badge-success"
-                                            style="background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;">Fully Paid
-                                            🎉</span>
-                                    @else
-                                        <span class="badge badge-danger">Delinquent</span>
+                                    @if(($bill['overdue_days'] ?? 0) > 0)
+                                        <div style="font-size: 11px; color: var(--bill-danger); font-weight: 700; margin-top: 4px;">
+                                            Overdue {{ $bill['overdue_days'] }} {{ $bill['overdue_days'] == 1 ? 'day' : 'days' }}
+                                        </div>
                                     @endif
                                 </td>
                                 <td>
-                                    <div style="display: flex; gap: 8px;">
-                                        <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;"
-                                            onclick="viewDetail('{{ $bill['id'] }}')">Edit</button>
-                                    </div>
+                                    @if($behavior === 'Early')
+                                        <span class="trend-chip trend-early">Early</span>
+                                    @elseif($behavior === 'On-Time')
+                                        <span class="trend-chip trend-early" style="background: var(--bill-primary); color: #fff;">On-Time</span>
+                                    @elseif($behavior === 'Late')
+                                        <span class="trend-chip trend-late">Late</span>
+                                    @else
+                                        <span class="trend-chip" style="background: #e2e8f0; color: #475569;">N/A</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;"
+                                        onclick="viewDetail('{{ $bill['id'] }}')">View</button>
                                 </td>
                             </tr>
-                        @endforeach
+                        @empty
+                            <tr>
+                                <td colspan="6" style="padding: 32px; text-align: center; color: #64748b;">No downpayment contracts yet.</td>
+                            </tr>
+                        @endforelse
                     </tbody>
                 </table>
             </div>
@@ -201,16 +385,14 @@
     </div>
 
     <!-- Full Screen Immersive Modal -->
-    <div id="billModal" class="bill-modal">
+    <div id="billModal" class="bill-modal dp-contract-modal">
         <div class="bill-modal-content">
             <div class="modal-header">
                 <div>
                     <span id="modalLot"
                         style="font-size: 12px; font-weight: 700; color: var(--bill-primary); text-transform: uppercase; letter-spacing: 0.1em;"></span>
-                    <h2 id="modalResident" style="font-size: 32px; font-weight: 800; color: #0f172a; margin-top: 8px;"></h2>
-                    <div style="margin-top: 12px; display: flex; gap: 12px; align-items: center;">
-                        <span id="modalTrend" class="trend-chip trend-early"></span>
-                    </div>
+                    <h2 id="modalResident" style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 8px;"></h2>
+                    <div id="modalContact" style="font-size: 14px; color: #64748b; margin-top: 4px;"></div>
                 </div>
                 <button class="ann-btn-icon" onclick="closeModal()" style="padding: 12px; background: #f1f5f9;">
                     <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -220,54 +402,85 @@
             </div>
             <div class="modal-body">
                 <div id="modalMainContent">
-                    <h3
-                        style="font-size: 14px; font-weight: 700; text-transform: uppercase; margin-bottom: 20px; color: #64748b;">
-                        Contract Details</h3>
-                    <div class="modal-summary-grid"
-                        style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;">
-                        <div style="background: var(--bill-bg-soft); padding: 20px; border-radius: 16px;">
-                            <span style="font-size: 12px; color: #64748b;">Remaining Balance</span>
-                            <div id="modalAmount"
-                                style="font-size: 24px; font-weight: 700; color: #0f172a; margin-top: 4px;"></div>
+                    <div class="dp-summary-grid">
+                        <div class="dp-summary-card">
+                            <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Remaining Balance</span>
+                            <div id="modalAmount" style="font-size: 22px; font-weight: 800; color: #0f172a; margin-top: 6px;"></div>
                         </div>
-                        <div style="background: var(--bill-bg-soft); padding: 20px; border-radius: 16px;">
-                            <span style="font-size: 12px; color: #64748b;">Next Installment Due</span>
-                            <div id="modalDate"
-                                style="font-size: 24px; font-weight: 700; color: var(--bill-primary); margin-top: 4px;">
-                            </div>
+                        <div class="dp-summary-card">
+                            <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Next Due</span>
+                            <div id="modalDate" style="font-size: 18px; font-weight: 800; color: var(--bill-primary); margin-top: 6px;"></div>
+                            <div id="modalOverdue" style="font-size: 11px; font-weight: 700; color: var(--bill-danger); margin-top: 4px;"></div>
                         </div>
-                    </div>
-
-                    <div
-                        style="padding: 24px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; margin-bottom: 32px;">
-                        <h4
-                            style="font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 16px; text-transform: uppercase;">
-                            Log Installment Payment</h4>
-                        <div style="display: flex; gap: 12px; align-items: flex-end;">
-                            <!-- Date input removed per user request -->
-                            <div style="flex: 1;">
-                                <label
-                                    style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Amount
-                                    Paid (₱)</label>
-                                <input type="text" id="directPaymentAmount" class="filter-select"
-                                    style="width: 100%; font-size: 16px; padding: 12px;" placeholder="e.g. 15,000"
-                                    oninput="formatNumberInput(this)">
-                            </div>
-                            <button class="btn btn-primary" style="padding: 14px 24px;" onclick="submitPayment()">Submit
-                                Payment</button>
+                        <div class="dp-summary-card">
+                            <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Months Paid</span>
+                            <div id="modalMonthsPaid" style="font-size: 22px; font-weight: 800; color: #0f172a; margin-top: 6px;"></div>
+                        </div>
+                        <div class="dp-summary-card">
+                            <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Penalty Rate</span>
+                            <div id="modalPenaltyRate" style="font-size: 22px; font-weight: 800; color: #0f172a; margin-top: 6px;"></div>
+                            <div id="modalPenaltyDue" style="font-size: 11px; font-weight: 700; color: var(--bill-danger); margin-top: 4px;"></div>
                         </div>
                     </div>
 
-                    <div
-                        style="display: flex; gap: 16px; margin-top: 40px; border-top: 1px solid var(--bill-border); padding-top: 32px;">
-                        <button class="btn btn-outline" onclick="viewHistory()">View History</button>
+                    <details class="dp-contract-details" style="margin-bottom: 20px;">
+                        <summary>Contract details</summary>
+                        <div id="modalFacts" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 12px;"></div>
+                    </details>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                        <h3 style="font-size: 14px; font-weight: 700; text-transform: uppercase; margin: 0; color: #64748b;">Installment Schedule</h3>
+                        <button type="button" class="btn btn-outline" style="padding: 6px 12px; font-size: 11px;" onclick="scrollToNextPayableRow()">Go to next payment</button>
                     </div>
+                    <div class="dp-ledger-scroll">
+                        <table class="bill-table dp-ledger-table" style="margin: 0;">
+                            <thead style="position: sticky; top: 0; z-index: 2;">
+                                <tr>
+                                    <th style="width: 48px;">#</th>
+                                    <th>Due Date</th>
+                                    <th style="text-align: right;">Amount</th>
+                                    <th>Status</th>
+                                    <th style="text-align: right;">Receipt</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modalInstallmentLedger"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="modalPaySidebar" class="dp-pay-sidebar">
+                    <h3 style="font-size: 14px; font-weight: 700; text-transform: uppercase; margin: 0 0 16px; color: #64748b;">Log Payment</h3>
+                    <div id="modalNextPayableBox" style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+                        <div id="modalNextPayableHeading" style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Next installment</div>
+                        <div id="modalNextPayableLabel" style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 8px;">—</div>
+                        <div id="modalNextPayableAmount" style="font-size: 14px; font-weight: 700; color: var(--bill-primary); margin-top: 4px;"></div>
+                        <div id="modalNextPayablePenalty" style="font-size: 11px; font-weight: 700; color: var(--bill-danger); margin-top: 6px;"></div>
+                    </div>
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Amount Paid (₱)</label>
+                    <input type="text" id="directPaymentAmount" class="filter-select"
+                        style="width: 100%; font-size: 16px; padding: 12px; margin-bottom: 8px;" placeholder="e.g. 43,750"
+                        oninput="formatNumberInput(this)">
+                    <div style="font-size: 11px; color: #94a3b8; margin-bottom: 16px;">Method: Office Payment</div>
+                    <button class="btn btn-primary" id="submitPaymentBtn" style="width: 100%; justify-content: center; padding: 14px;" onclick="submitPayment()">Mark this month paid</button>
                 </div>
             </div>
         </div>
     </div>
 
-
+    <div id="receiptModal" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(15,23,42,0.75); backdrop-filter:blur(6px); align-items:center; justify-content:center; padding:24px; box-sizing:border-box;">
+        <div style="background:#fff; max-width:720px; width:100%; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35); overflow:hidden; display:flex; flex-direction:column; max-height:90vh;">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:20px 28px; border-bottom:1px solid #e2e8f0; background:#f8fafc;">
+                <span style="font-size:14px; font-weight:800; color:#047857; text-transform:uppercase; letter-spacing:0.05em;">Downpayment Receipt</span>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <button type="button" onclick="printReceiptFrame()" style="background:#047857; color:#fff; border:none; padding:8px 18px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;">Print</button>
+                    <button type="button" onclick="closeReceiptModal()" style="background:#f1f5f9; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; font-size:18px; line-height:1; color:#64748b;">✕</button>
+                </div>
+            </div>
+            <div style="overflow-y:auto; flex:1; padding:0;">
+                <iframe id="receiptFrame" style="width:100%; min-height:560px; border:none; display:block;"></iframe>
+            </div>
+        </div>
+    </div>
 
     <!-- Calculator & Create Contract Modal -->
     <div id="newContractModal" class="bill-modal"
@@ -424,6 +637,32 @@
 
         let currentModalId = null;
 
+        function peso(amount) {
+            return '₱' + Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function formatIsoDate(iso, longMonth) {
+            if (!iso || iso === 'N/A') return 'N/A';
+            const parts = String(iso).split('-');
+            if (parts.length < 3) return iso;
+            const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+            return date.toLocaleDateString('en-US', { month: longMonth ? 'long' : 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        function installmentStatusBadge(status) {
+            if (status === 'Paid') return '<span class="badge badge-success">Paid</span>';
+            if (status === 'Unpaid') return '<span class="badge badge-danger">Unpaid</span>';
+            if (status === 'Upcoming') return '<span class="badge" style="background:#e0e7ff;color:#4338ca;">Upcoming</span>';
+            return '<span class="badge">—</span>';
+        }
+
+        function scrollToNextPayableRow() {
+            const row = document.querySelector('#modalInstallmentLedger tr[data-next="true"]');
+            if (row) {
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
         function formatNumberInput(input) {
             let value = input.value.replace(/,/g, '');
             if (!isNaN(value) && value !== '') {
@@ -452,6 +691,147 @@
             document.body.style.overflow = 'auto';
         }
 
+        function closeReceiptModal() {
+            document.getElementById('receiptModal').style.display = 'none';
+            const frame = document.getElementById('receiptFrame');
+            if (frame) frame.srcdoc = '';
+        }
+
+        function printReceiptFrame() {
+            const frame = document.getElementById('receiptFrame');
+            frame.contentWindow.focus();
+            frame.contentWindow.print();
+        }
+
+        function printDpReceipt(historyId) {
+            const bill = allBillsRaw.find(b => b.id === currentModalId);
+            if (!bill) return;
+            const ledger = bill.installment_ledger || [];
+            const row = ledger.find(r => r.history_id === historyId)
+                || (bill.history || []).find(h => h.id === historyId);
+            if (!row) return;
+
+            const money = (n) => '₱' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const monthly = Number(bill.monthly_amortization || 0);
+            const amount = Number(row.amount || 0);
+            let principal = Number(row.principal || 0);
+            let penalty = Number(row.penalty || 0);
+            if (!principal && amount) {
+                principal = amount > monthly + 0.009 ? monthly : amount;
+                penalty = Math.max(0, amount - principal);
+            }
+            const penaltyRate = Number(bill.penalty_percentage || 0);
+            const trn = row.trn || 'N/A';
+            const mop = row.payment_method || 'Office Payment';
+            const paidDate = row.paid_at || row.date || 'N/A';
+            const dueDate = row.due_label || row.month || 'N/A';
+            const installmentNo = row.index || '—';
+            const behavior = row.behavior && row.behavior !== 'Not available yet' ? row.behavior : '—';
+            const totalDp = Number(bill.total_dp || 0);
+            let principalThroughThis = 0;
+            ledger.forEach((r) => {
+                if (r.status === 'Paid' && Number(r.index || 0) <= Number(installmentNo || 0)) {
+                    const p = Number(r.principal || 0) || (Number(r.amount || 0) > monthly + 0.009 ? monthly : Number(r.amount || 0));
+                    principalThroughThis += p;
+                }
+            });
+            if (principalThroughThis <= 0) principalThroughThis = principal;
+            const remainingAfter = Math.max(0, totalDp - principalThroughThis);
+            const monthsAfter = installmentNo !== '—' ? `${installmentNo} of ${bill.total_months}` : `${bill.months_paid} of ${bill.total_months}`;
+
+            const penaltyRow = penalty > 0
+                ? `<tr><td>Late payment penalty (${penaltyRate}%)</td><td class="text-right">${money(penalty)}</td></tr>`
+                : `<tr><td>Late payment penalty (${penaltyRate}%)</td><td class="text-right">${money(0)}</td></tr>`;
+
+            const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Downpayment Receipt</title>
+<style>
+  body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#333;font-size:14px;margin:0;padding:24px;}
+  .header{text-align:center;border-bottom:2px solid #047857;padding-bottom:12px;margin-bottom:20px;position:relative;}
+  .header h1{color:#047857;margin:0;font-size:22px;text-transform:uppercase;}
+  .header p{margin:4px 0 0;color:#666;font-size:12px;}
+  .watermark{position:absolute;top:8px;right:12px;border:4px solid #10b981;color:#10b981;padding:6px 14px;font-size:26px;font-weight:bold;border-radius:8px;transform:rotate(15deg);opacity:0.75;}
+  .row{width:100%;margin-bottom:20px;}
+  .col-half{width:48%;display:inline-block;vertical-align:top;}
+  .box{border:1px solid #ddd;padding:14px;border-radius:6px;background:#f9f9f9;}
+  .box h3{margin-top:0;border-bottom:1px solid #ddd;padding-bottom:5px;font-size:15px;color:#047857;}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+  th,td{padding:9px;border-bottom:1px solid #eee;}
+  th{text-align:left;color:#555;background:#f0f0f0;}
+  .text-right{text-align:right;}
+  .total-row td{border-top:2px solid #047857;font-size:15px;font-weight:bold;color:#047857;}
+  .note{font-size:12px;color:#64748b;margin:0 0 16px;}
+  .footer{margin-top:24px;text-align:center;font-size:12px;color:#888;border-top:1px solid #eee;padding-top:16px;}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Althesa Subdivision</h1>
+  <p>Z1, Tagbong, Pili, Camarines Sur</p>
+  <p><strong>OFFICIAL DOWNPAYMENT RECEIPT</strong></p>
+  <div class="watermark">PAID</div>
+</div>
+<div class="row">
+  <div class="col-half box" style="margin-right:2%;">
+    <h3>Buyer Details</h3>
+    <table style="border:none;margin-bottom:0;">
+      <tr><td style="padding:5px;border:none;width:42%;"><strong>Name:</strong></td><td style="padding:5px;border:none;">${bill.buyer}</td></tr>
+      <tr><td style="padding:5px;border:none;"><strong>Contact:</strong></td><td style="padding:5px;border:none;">${bill.contact || 'N/A'}</td></tr>
+      <tr><td style="padding:5px;border:none;"><strong>Address:</strong></td><td style="padding:5px;border:none;">Block ${bill.block} Lot ${bill.lot}</td></tr>
+      <tr><td style="padding:5px;border:none;"><strong>Contract date:</strong></td><td style="padding:5px;border:none;">${formatIsoDate(bill.contract_date, true)}</td></tr>
+    </table>
+  </div>
+  <div class="col-half box">
+    <h3>Payment Details</h3>
+    <table style="border:none;margin-bottom:0;">
+      <tr><td style="padding:5px;border:none;width:48%;"><strong>Installment:</strong></td><td style="padding:5px;border:none;">${installmentNo} of ${bill.total_months}</td></tr>
+      <tr><td style="padding:5px;border:none;"><strong>Due date:</strong></td><td style="padding:5px;border:none;color:#dc2626;">${dueDate}</td></tr>
+      <tr><td style="padding:5px;border:none;"><strong>Date paid:</strong></td><td style="padding:5px;border:none;">${paidDate}</td></tr>
+      <tr><td style="padding:5px;border:none;"><strong>Method:</strong></td><td style="padding:5px;border:none;">${mop}</td></tr>
+      <tr><td style="padding:5px;border:none;"><strong>Reference (TRN):</strong></td><td style="padding:5px;border:none;font-family:monospace;font-size:11px;">${trn}</td></tr>
+      <tr><td style="padding:5px;border:none;"><strong>Timing:</strong></td><td style="padding:5px;border:none;">${behavior}</td></tr>
+    </table>
+  </div>
+</div>
+<h3 style="color:#047857;border-bottom:1px solid #ddd;padding-bottom:5px;">Contract Snapshot</h3>
+<table>
+  <tbody>
+    <tr><td>Total contract price (TCP)</td><td class="text-right">${money(bill.tcp)}</td></tr>
+    <tr><td>Total downpayment</td><td class="text-right">${money(totalDp)}</td></tr>
+    <tr><td>Monthly installment</td><td class="text-right">${money(monthly)}</td></tr>
+    <tr><td>Penalty rate</td><td class="text-right">${penaltyRate}%</td></tr>
+    <tr><td>Term</td><td class="text-right">${bill.total_months} months</td></tr>
+  </tbody>
+</table>
+<h3 style="color:#047857;border-bottom:1px solid #ddd;padding-bottom:5px;">This Payment Breakdown</h3>
+<p class="note">Penalty is charged only when the installment is paid after its due date. It is collected in addition to the installment and is not applied to the remaining downpayment balance.</p>
+<table>
+  <thead><tr><th>Description</th><th class="text-right">Amount (PHP)</th></tr></thead>
+  <tbody>
+    <tr><td>Installment principal (month ${installmentNo})</td><td class="text-right">${money(principal)}</td></tr>
+    ${penaltyRow}
+    <tr class="total-row"><td>Total amount received</td><td class="text-right">${money(amount)}</td></tr>
+    <tr><td style="color:#10b981;font-weight:700;">Applied to downpayment</td><td class="text-right" style="color:#10b981;font-weight:700;">${money(principal)}</td></tr>
+    <tr><td>Remaining downpayment after this payment</td><td class="text-right">${money(remainingAfter)}</td></tr>
+    <tr><td>Months paid after this payment</td><td class="text-right">${monthsAfter}</td></tr>
+  </tbody>
+</table>
+<div class="footer">
+  <p>This is a system-generated receipt. No signature required.</p>
+  <p style="color:#10b981;font-weight:bold;">This installment has been settled. Thank you for your payment.</p>
+</div>
+</body>
+</html>`;
+
+            const frame = document.getElementById('receiptFrame');
+            const receiptModal = document.getElementById('receiptModal');
+            receiptModal.style.display = 'flex';
+            frame.srcdoc = html;
+        }
+
 
 
         async function submitPayment() {
@@ -463,9 +843,13 @@
 
             if (!amount || amount <= 0) return Swal.fire('Enter valid amount');
 
+            const bill = allBillsRaw.find(b => b.id === currentModalId);
+            const np = bill?.next_payable;
+            const dueLabel = np?.due_label ? ` for ${np.due_label}` : '';
+
             const result = await Swal.fire({
                 title: 'Confirm Payment',
-                text: `Are you sure you want to log a payment of ₱${amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}?`,
+                text: `Log ₱${amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}${dueLabel}?`,
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#10b981',
@@ -492,63 +876,10 @@
 
                 if (res.ok && data.success) {
                     const bill = allBillsRaw.find(b => b.id === currentModalId);
-                    if (bill) {
-                        bill.paid_amount += amount;
-                        bill.months_paid += 1;
-                        let oldNextDue = bill.next_due;
-                        if (data.next_due) bill.next_due = data.next_due;
-
-                        let progress = (bill.paid_amount / bill.total_dp) * 100;
-                        if (progress > 100) progress = 100;
-                        if (bill.paid_amount >= bill.total_dp) {
-                            bill.status = 'Fully Paid';
-                            bill.paid_amount = bill.total_dp;
-                        } else {
-                            bill.status = 'Good Standing';
-                        }
-
-                        const cell = document.getElementById('progress-cell-' + currentModalId);
-                        if (cell) {
-                            cell.querySelector('.paid-label').textContent = `₱${bill.paid_amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Paid`;
-                            cell.querySelector('.progress-fill').style.width = `${progress}%`;
-                            cell.querySelector('.months-label').textContent = `${bill.months_paid} of ${bill.total_months} mos`;
-                        }
-
-                        const statusCell = document.getElementById('status-cell-' + currentModalId);
-                        if (statusCell) {
-                            if (bill.status === 'Fully Paid') {
-                                statusCell.innerHTML = `<span class="badge badge-success" style="background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;">Fully Paid 🎉</span>`;
-                            } else {
-                                statusCell.innerHTML = `<span class="badge badge-success">Good Standing</span>`;
-                            }
-                        }
-
-                        const row = document.getElementById('row-' + currentModalId);
-                        if (row && data.next_due) {
-                            const dateObj = new Date(data.next_due);
-                            const dueCell = row.cells[3]; // Next due is 4th column (index 3)
-                            if (dueCell) dueCell.innerHTML = `<div style="font-size: 13px;">${dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>`;
-                        }
-
-                        if (!bill.history) bill.history = [];
-                        bill.history.unshift({
-                            id: data.id || '',
-                            trn: data.trn || 'NEW-PAYMENT',
-                            payment_method: 'Office Payment',
-                            month: oldNextDue ? new Date(oldNextDue).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A',
-                            amount: amount,
-                            status: 'Paid',
-                            date: new Date(paymentDate).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                        });
-
-                        viewDetail(currentModalId);
-                    }
-
-                    document.getElementById('directPaymentAmount').value = '';
-
-                    if (window.pushSystemNotification) {
+                    if (window.pushSystemNotification && bill) {
                         window.pushSystemNotification("Payment Logged", `₱${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} posted to ${bill.buyer}'s contract.`, "System");
                     }
+                    window.location.reload();
                 } else {
                     Swal.fire('Failed to save payment');
                 }
@@ -563,36 +894,93 @@
             if (!bill) return;
 
             currentModalId = id;
-
             const balance = bill.total_dp - bill.paid_amount;
+            const np = bill.next_payable;
 
             document.getElementById('modalResident').textContent = bill.buyer;
+            document.getElementById('modalContact').textContent = bill.contact || 'N/A';
             document.getElementById('modalLot').textContent = `Block ${bill.block} - Lot ${bill.lot}`;
-            document.getElementById('modalAmount').textContent = `₱${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            document.getElementById('modalAmount').textContent = peso(balance);
+            document.getElementById('modalMonthsPaid').textContent = `${bill.months_paid} of ${bill.total_months}`;
+            document.getElementById('modalPenaltyRate').textContent = `${Number(bill.penalty_percentage || 0)}%`;
+            document.getElementById('modalDate').textContent = np ? np.due_label : formatIsoDate(bill.next_due, true);
 
-            if (bill.next_due !== 'N/A') {
-                const dateObj = new Date(bill.next_due);
-                document.getElementById('modalDate').textContent = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            const overdueEl = document.getElementById('modalOverdue');
+            if ((bill.overdue_days || 0) > 0) {
+                overdueEl.textContent = `Overdue ${bill.overdue_days} ${bill.overdue_days === 1 ? 'day' : 'days'}`;
             } else {
-                document.getElementById('modalDate').textContent = 'N/A';
+                overdueEl.textContent = '';
             }
 
-            const trendEl = document.getElementById('modalTrend');
-            trendEl.textContent = bill.status;
-            trendEl.className = 'trend-chip ' + (bill.status === 'Good Standing' || bill.status === 'Fully Paid' ? 'trend-early' : 'trend-late');
-            if (bill.status === 'Fully Paid') {
-                trendEl.style.background = '#dcfce7';
-                trendEl.style.color = '#166534';
-                trendEl.style.border = '1px solid #bbf7d0';
+            const fact = (label, value) => `<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px;"><div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">${label}</div><div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">${value}</div></div>`;
+            document.getElementById('modalFacts').innerHTML = [
+                fact('TCP', peso(bill.tcp)),
+                fact('Total DP', peso(bill.total_dp)),
+                fact('Monthly Payment', peso(bill.monthly_amortization)),
+                fact('Term', `${bill.total_months} months`),
+                fact('Contract Date', formatIsoDate(bill.contract_date, true)),
+                fact('Missed Months', String(bill.missed_months || 0))
+            ].join('');
+
+            const ledger = bill.installment_ledger || [];
+            const ledgerBody = document.getElementById('modalInstallmentLedger');
+            if (ledger.length === 0) {
+                ledgerBody.innerHTML = `<tr><td colspan="5" style="padding: 24px; text-align: center; color: #64748b;">No installment schedule available.</td></tr>`;
+            } else {
+                ledgerBody.innerHTML = ledger.map(row => {
+                    const rowClass = [
+                        row.is_next ? 'dp-ledger-row-next' : '',
+                        row.status === 'Unpaid' ? 'dp-ledger-row-unpaid' : ''
+                    ].filter(Boolean).join(' ');
+                    const receipt = row.history_id
+                        ? `<button type="button" onclick="printDpReceipt('${row.history_id}')" style="background:#047857; color:#fff; border:none; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;">Receipt</button>`
+                        : '';
+                    const penaltyNote = row.status !== 'Paid' && Number(row.penalty || 0) > 0
+                        ? `<div style="font-size:10px;color:var(--bill-danger);font-weight:700;">incl. ${peso(row.penalty)} penalty</div>`
+                        : '';
+                    return `
+                    <tr class="${rowClass}" data-due="${row.due_iso}" data-next="${row.is_next ? 'true' : 'false'}">
+                        <td data-label="#">${row.index}</td>
+                        <td data-label="Due Date" style="font-weight: ${row.is_next ? '800' : '600'}; color: ${row.is_next ? 'var(--bill-primary)' : '#0f172a'};">${row.due_label}</td>
+                        <td data-label="Amount" style="font-weight: 700;">${peso(row.amount)}${penaltyNote}</td>
+                        <td data-label="Status">${installmentStatusBadge(row.status)}</td>
+                        <td data-label="Receipt">${receipt || '—'}</td>
+                    </tr>`;
+                }).join('');
             }
 
-            document.getElementById('directPaymentAmount').value = bill.monthly_amortization ? bill.monthly_amortization.toLocaleString('en-US') : '';
-            const now = new Date();
-            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            const dateInput = document.getElementById('directPaymentDate');
-            if (dateInput) {
-                dateInput.value = now.toISOString().slice(0,16);
+            const fullyPaid = bill.status === 'Fully Paid' || balance <= 0;
+            const nextHeading = document.getElementById('modalNextPayableHeading');
+            if (nextHeading) nextHeading.textContent = 'Next installment';
+            const nextLabel = document.getElementById('modalNextPayableLabel');
+            const nextAmount = document.getElementById('modalNextPayableAmount');
+            const nextBox = document.getElementById('modalNextPayableBox');
+            const nextPenalty = document.getElementById('modalNextPayablePenalty');
+            const penaltyDueEl = document.getElementById('modalPenaltyDue');
+            if (fullyPaid || !np) {
+                nextLabel.textContent = fullyPaid ? 'Contract fully paid' : 'No payment due yet';
+                nextAmount.textContent = '';
+                nextPenalty.textContent = '';
+                penaltyDueEl.textContent = '';
+                nextBox.style.opacity = fullyPaid ? '0.7' : '1';
+            } else {
+                nextLabel.textContent = `Month ${np.index} · ${np.due_label}`;
+                nextAmount.textContent = peso(np.amount);
+                if (Number(np.penalty || 0) > 0) {
+                    nextPenalty.textContent = `Includes ${peso(np.penalty)} late penalty`;
+                    penaltyDueEl.textContent = `Due now: ${peso(np.penalty)}`;
+                } else {
+                    nextPenalty.textContent = '';
+                    penaltyDueEl.textContent = '';
+                }
+                nextBox.style.opacity = '1';
             }
+
+            const payAmount = np ? np.amount : bill.monthly_amortization;
+            document.getElementById('directPaymentAmount').value = payAmount ? Number(payAmount).toLocaleString('en-US') : '';
+            document.getElementById('directPaymentAmount').disabled = fullyPaid || !np;
+            document.getElementById('submitPaymentBtn').disabled = fullyPaid || !np;
+            document.getElementById('submitPaymentBtn').textContent = fullyPaid ? 'Fully Paid' : 'Mark this month paid';
 
             document.getElementById('billModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
@@ -788,66 +1176,6 @@
                 });
             }
         });
-        function viewHistory() {
-            const bill = allBillsRaw.find(b => b.id === currentModalId);
-            if (!bill) return;
-
-            let tbody = document.querySelector('#historyModal tbody');
-            if (!tbody) {
-                const historyHtml = `
-                <div id="historyModal" class="bill-modal" style="display: flex; align-items: center; justify-content: center; z-index: 4000;">
-                    <div class="bill-modal-content" style="max-width: 1000px; padding: 24px; border-radius: 20px; width: 90%;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                            <h3 style="font-size: 18px; font-weight: 800;">Payment History</h3>
-                            <button onclick="document.getElementById('historyModal').remove()" style="background:none;border:none;font-size:24px;cursor:pointer;">&times;</button>
-                        </div>
-                        <div style="max-height: 400px; overflow-y: auto;">
-                            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-                                <thead>
-                                    <tr style="border-bottom: 2px solid #e2e8f0; color: #64748b;">
-                                        <th style="padding: 12px; text-align: left;">Date</th>
-                                        <th style="padding: 12px; text-align: left;">Due Date</th>
-                                        <th style="padding: 12px; text-align: left;">TRN</th>
-                                        <th style="padding: 12px; text-align: left;">Payment Method</th>
-                                        <th style="padding: 12px; text-align: right;">Amount</th>
-                                        <th style="padding: 12px; text-align: center;">Status</th>
-                                        <th style="padding: 12px; text-align: right;">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>`;
-                document.body.insertAdjacentHTML('beforeend', historyHtml);
-                tbody = document.querySelector('#historyModal tbody');
-            } else {
-                document.getElementById('historyModal').style.display = 'flex';
-            }
-
-            if (bill.history && bill.history.length > 0) {
-                tbody.innerHTML = bill.history.map(h => {
-                    const mop = h.payment_method || 'Office Payment';
-                    return `
-                    <tr style="border-bottom: 1px solid #f1f5f9;">
-                        <td style="padding: 12px; font-weight: 600;">${h.date}</td>
-                        <td style="padding: 12px; font-weight: 700; color: #3b82f6;">${h.month}</td>
-                        <td style="padding: 12px; color: #64748b; font-family: monospace;">${h.trn || 'Manual'}</td>
-                        <td style="padding: 12px; color: #0f172a;">${mop}</td>
-                        <td style="padding: 12px; text-align: right; font-weight: 700; color: #0f172a;">₱${h.amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                        <td style="padding: 12px; text-align: center;"><span class="trend-chip trend-early" style="font-size:11px;">Paid</span></td>
-                        <td style="padding: 12px; text-align: right;">
-                            <a href="/buyer/payments/downpayment/receipt/${h.id}" target="_blank" class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; display: inline-block;">
-                                View Receipt
-                            </a>
-                        </td>
-                    </tr>
-                `}).join('');
-            } else {
-                tbody.innerHTML = `<tr><td colspan="6" style="padding: 24px; text-align: center; color: #64748b;">No payments recorded yet.</td></tr>`;
-            }
-        }
-
         window.addEventListener('DOMContentLoaded', () => {
             bindGisDropdowns('calcBlk', 'calcLot');
 
@@ -855,7 +1183,7 @@
                 openContractModal();
             }
 
-            if ($.fn.select2) {
+            if (window.jQuery && $.fn.select2) {
                 $('#dpBuyerMasterList').select2({
                     placeholder: "-- Choose Buyer --",
                     allowClear: true,
@@ -863,28 +1191,22 @@
                 });
             }
 
-            // Bind filter events
             document.getElementById('billingSearch')?.addEventListener('input', filterTable);
-            document.getElementById('statusFilter')?.addEventListener('change', filterTable);
+            document.getElementById('behaviorFilter')?.addEventListener('change', filterTable);
             document.getElementById('blockFilter')?.addEventListener('change', filterTable);
         });
 
         function filterTable() {
             const search = document.getElementById('billingSearch').value.toLowerCase();
-            const status = document.getElementById('statusFilter').value.toLowerCase();
+            const behavior = document.getElementById('behaviorFilter').value;
             const block = document.getElementById('blockFilter').value;
-            
+
             document.querySelectorAll('.bill-row').forEach(row => {
                 const text = row.innerText.toLowerCase();
-                const rowStatusElem = row.querySelector('.status-badge');
-                const rowStatus = rowStatusElem ? rowStatusElem.innerText.toLowerCase() : text;
-                const rowBlock = text; // Block is embedded in the text
-                
                 const matchesSearch = text.includes(search);
-                const matchesStatus = status === 'all' || rowStatus.includes(status);
-                const matchesBlock = block === 'all' || rowBlock.includes('block ' + block.toLowerCase());
-                
-                row.style.display = (matchesSearch && matchesStatus && matchesBlock) ? '' : 'none';
+                const matchesBehavior = behavior === 'all' || row.dataset.behavior === behavior;
+                const matchesBlock = block === 'all' || row.dataset.block === block;
+                row.style.display = (matchesSearch && matchesBehavior && matchesBlock) ? '' : 'none';
             });
         }
     </script>

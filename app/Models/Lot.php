@@ -34,4 +34,14 @@ class Lot extends Model
     {
         return $this->hasMany(UtilityBill::class, 'lot_id');
     }
+
+    public function reservations(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Reservation::class, 'lot_id');
+    }
+
+    public function financingRecord(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(FinancingRecord::class, 'lot_id');
+    }
 }

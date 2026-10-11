@@ -14,10 +14,13 @@ return new class extends Migration
         Schema::create('users', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('name');
-            $table->string('email')->unique();
+            // Unique among non-deleted users only; partial index lives in add_integrity_constraints.
+            $table->string('email');
+            $table->string('contact_number')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->string('status')->default('Active'); // Active, Archived
+            $table->string('payment_behavior')->default('Not available yet');
             $table->date('joined_at')->nullable();
             $table->rememberToken();
             $table->timestamps();

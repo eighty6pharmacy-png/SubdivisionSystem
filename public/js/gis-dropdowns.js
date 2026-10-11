@@ -91,14 +91,22 @@ async function bindGisDropdowns(blockSelectId, lotSelectId, options = {}) {
     const lotPrefix = options.lotPrefix || '';
     const currentBlock = options.currentBlock;
     const currentLot = options.currentLot;
+    const includePlaceholder = !!options.includePlaceholder;
+    const blockPlaceholder = `<option value="">${options.blockPlaceholderLabel || '-- Select Block --'}</option>`;
+    const lotPlaceholder = `<option value="">${options.lotPlaceholderLabel || '-- Select Lot --'}</option>`;
 
     // Populate Blocks
-    blockSelect.innerHTML = Object.keys(map).map(b => `<option value="${b}">${blockPrefix}${b}</option>`).join('');
+    blockSelect.innerHTML = (includePlaceholder ? blockPlaceholder : '') +
+        Object.keys(map).map(b => `<option value="${b}">${blockPrefix}${b}</option>`).join('');
 
     const updateLots = () => {
         const b = blockSelect.value;
+        if (!b) {
+            lotSelect.innerHTML = includePlaceholder ? lotPlaceholder : '';
+            return;
+        }
         const lots = map[b] || [];
-        lotSelect.innerHTML = lots.map(lObj => {
+        lotSelect.innerHTML = (includePlaceholder ? lotPlaceholder : '') + lots.map(lObj => {
             // Is it the currently selected lot for this existing resident/reservation?
             const isCurrent = (currentLot == lObj.lot);
             // It's selectable if it's available or if it's the current lot being edited
@@ -113,6 +121,8 @@ async function bindGisDropdowns(blockSelectId, lotSelectId, options = {}) {
 
     if (currentBlock && map[currentBlock]) {
         blockSelect.value = currentBlock;
+    } else if (includePlaceholder) {
+        blockSelect.value = '';
     } else {
         blockSelect.selectedIndex = 0;
     }

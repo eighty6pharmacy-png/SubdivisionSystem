@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\FinancingRecord;
 use App\Models\BuyerMasterList;
+use App\Enums\FinancingStatus;
+use App\Services\PaymentRecorder;
 use Illuminate\Http\Request;
 
 class FinancingRecordController extends Controller
@@ -73,7 +75,7 @@ class FinancingRecordController extends Controller
             'total_consideration' => $buyer->contract_amount ?? 0,
             'paid_by_vendee_equity' => $buyer->equity ?? 0,
             'mbrdc_amt_due_for_financing' => ($buyer->contract_amount ?? 0) - ($buyer->equity ?? 0),
-            'status' => 'Pending'
+            'status' => FinancingStatus::Pending->value
         ]);
 
         return redirect()->route('financing.index')->with('success', 'Financing Record Created.');
@@ -88,6 +90,10 @@ class FinancingRecordController extends Controller
     public function update(Request $request, $id)
     {
         $record = FinancingRecord::findOrFail($id);
+
+        $request->validate([
+            'status' => ['nullable', \Illuminate\Validation\Rule::in(FinancingStatus::values())],
+        ]);
         
         $data = $request->all();
         
@@ -121,7 +127,7 @@ class FinancingRecordController extends Controller
             $data['balance'] = max(0, $data['receivables'] - $record->amount_paid);
         }
 
-        if (isset($data['status']) && $data['status'] == 'Released' && !$record->loan_release_date) {
+        if (isset($data['status']) && $data['status'] == FinancingStatus::Released->value && !$record->loan_release_date) {
             $data['loan_release_date'] = now();
         }
 
@@ -129,19 +135,13 @@ class FinancingRecordController extends Controller
         return redirect()->route('financing.show', $id)->with('success', 'Updated Successfully');
     }
     
-    public function recordPayment(Request $request, $id)
+    public function recordPayment(Request $request, $id, PaymentRecorder $recorder)
     {
         $record = FinancingRecord::findOrFail($id);
-        $amount = $request->amount;
-        
-        $record->amount_paid += $amount;
-        $record->balance = max(0, $record->receivables - $record->amount_paid);
-        
-        if ($record->balance <= 0 && $record->status == 'Released') {
-            $record->status = 'Cleared';
-        }
-        
-        $record->save();
+        $request->validate(['amount' => 'required|numeric|min:0.01']);
+
+        $recorder->recordFinancingPayment($record, (float) $request->amount, 'Office Payment');
+
         return back()->with('success', 'Payment Recorded');
     }
 }

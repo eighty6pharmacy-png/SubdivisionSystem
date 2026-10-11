@@ -2,10 +2,15 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\DownpaymentStatus;
+use App\Enums\ReservationStatus;
 use App\Http\Controllers\Controller;
 use App\Models\BuyerMasterList;
 use App\Models\Lot;
+use App\Models\Reservation;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class BuyerMasterListController extends Controller
@@ -13,9 +18,16 @@ class BuyerMasterListController extends Controller
     public function index(Request $request)
     {
         // Auto-archive overdue reservations without any paid downpayments
-        $overdueReservations = \App\Models\Reservation::where('deadline_date', '<', now()->format('Y-m-d'))
-            ->whereDoesntHave('downpayments', function ($query) {
-                $query->where('status', 'Paid');
+        $paidDownpaymentStatuses = [
+            DownpaymentStatus::FullyPaid->value,
+            DownpaymentStatus::GoodStanding->value,
+            'Paid',
+            'Delinquent',
+        ];
+        $overdueReservations = Reservation::where('deadline_date', '<', now()->format('Y-m-d'))
+            ->whereIn('status', ReservationStatus::activeValues())
+            ->whereDoesntHave('downpayments', function ($query) use ($paidDownpaymentStatuses) {
+                $query->whereIn('status', $paidDownpaymentStatuses);
             })->get();
 
         foreach ($overdueReservations as $res) {
@@ -30,10 +42,12 @@ class BuyerMasterListController extends Controller
             $res->delete();
         }
 
-        $query = BuyerMasterList::with('reservations');
+        $query = BuyerMasterList::query();
 
         if ($request->status === 'cancelled') {
-            $query->onlyTrashed();
+            $query->onlyTrashed()->with(['reservations' => fn ($q) => $q->withTrashed()]);
+        } else {
+            $query->with('reservations');
         }
 
         if ($request->filled('search')) {
@@ -58,48 +72,8 @@ class BuyerMasterListController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'first_name' => 'required|string|max:255',
-            'middle_name' => 'nullable|string|max:255',
-            'last_name' => 'required|string|max:255',
-            'email' => 'nullable|email|max:255',
-            'civil_status' => 'nullable|string|max:50',
-            'spouse_name' => 'nullable|string|max:255',
-            'present_address' => 'nullable|string|max:1000',
-            'postal_address' => 'nullable|string|max:1000',
-            'contact_number' => 'nullable|string|max:50',
-            'proof_of_id' => 'nullable|string|max:255',
-            'pagibig_number' => 'nullable|string|max:255',
-            'financing_method' => 'nullable|string|max:50',
-
-            // Property Info Validation
-            'block_no' => 'nullable|string|max:50',
-            'lot_no' => 'nullable|string|max:50',
-            'tct_no' => 'nullable|string|max:255',
-            'pid' => 'nullable|string|max:255',
-            'tax_dec_no' => 'nullable|string|max:255',
-            'lot_area' => 'nullable|numeric|min:0',
-            'floor_area' => 'nullable|numeric|min:0',
-            'description' => 'nullable|string',
-
-            // Financial Info Validation
-            'contract_amount' => 'nullable|numeric|min:0',
-            'improvement_amount' => 'nullable|numeric|min:0',
-            'equity' => 'nullable|numeric|min:0',
-            'loan_base' => 'nullable|numeric|min:0',
-            'loan_term' => 'nullable|integer|min:0|max:100', // Years
-            'monthly_amortization' => 'nullable|numeric|min:0',
-            'mri_sri' => 'nullable|numeric|min:0',
-            'insurance' => 'nullable|numeric|min:0',
-            'mri_ds_1time' => 'nullable|numeric|min:0',
-            'nonlife_1time' => 'nullable|numeric|min:0',
-            'retention' => 'nullable|numeric|min:0',
-            'total_deductions' => 'nullable|numeric|min:0',
-        ], [
-            'first_name.required' => 'The First Name is mandatory for the master list.',
-            'last_name.required' => 'The Last Name is mandatory for the master list.',
-            'loan_term.max' => 'Loan term cannot exceed 100 years.'
-        ]);
+        $this->prepareBuyerContactEmail($request);
+        $validated = $request->validate($this->buyerFormRules(), $this->buyerFormMessages());
 
         $existingBuyer = BuyerMasterList::where('first_name', $validated['first_name'])
                                         ->where('last_name', $validated['last_name'])
@@ -112,6 +86,8 @@ class BuyerMasterListController extends Controller
             ], 409);
         }
 
+        $validated['lot_id'] = $this->matchingLotId($validated['block_no'] ?? null, $validated['lot_no'] ?? null);
+
         BuyerMasterList::create($validated);
 
         return response()->json(['success' => true, 'message' => 'Buyer added successfully to the Master List.']);
@@ -121,28 +97,69 @@ class BuyerMasterListController extends Controller
     {
         $buyer = BuyerMasterList::findOrFail($id);
 
-        $validated = $request->validate([
+        $this->prepareBuyerContactEmail($request);
+        $validated = $request->validate($this->buyerFormRules(), $this->buyerFormMessages());
+
+        $lotId = $this->matchingLotId($validated['block_no'] ?? null, $validated['lot_no'] ?? null);
+        $lotChanged = ($validated['block_no'] ?? null) != $buyer->block_no || ($validated['lot_no'] ?? null) != $buyer->lot_no;
+        if ($lotId || $lotChanged) {
+            $validated['lot_id'] = $lotId;
+        }
+
+        $buyer->update($validated);
+
+        return response()->json(['success' => true, 'message' => 'Buyer record updated securely.']);
+    }
+
+    private function matchingLotId(?string $block, ?string $lotNumber): ?string
+    {
+        if (blank($block) || blank($lotNumber)) {
+            return null;
+        }
+
+        return \App\Models\Lot::where('block', $block)->where('lot_number', $lotNumber)->value('id');
+    }
+
+    private function prepareBuyerContactEmail(Request $request): void
+    {
+        $request->merge([
+            'contact_number' => preg_replace('/[\s\-().]/', '', (string) $request->input('contact_number')),
+            'email' => trim((string) $request->input('email')),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buyerFormRules(): array
+    {
+        return [
             'first_name' => 'required|string|max:255',
-            'middle_name' => 'nullable|string|max:255',
+            'middle_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
-            'email' => 'nullable|email|max:255',
-            'civil_status' => 'nullable|string|max:50',
-            'spouse_name' => 'nullable|string|max:255',
-            'present_address' => 'nullable|string|max:1000',
-            'postal_address' => 'nullable|string|max:1000',
-            'contact_number' => 'nullable|string|max:50',
-            'proof_of_id' => 'nullable|string|max:255',
-            'pagibig_number' => 'nullable|string|max:255',
+            'email' => ['required', 'email:rfc,dns', 'max:255', function (string $attribute, mixed $value, \Closure $fail) {
+                $domain = substr(strrchr(strtolower((string) $value), '@') ?: '', 1);
+                if ($domain === '' || (! checkdnsrr($domain, 'MX') && ! checkdnsrr($domain, 'A'))) {
+                    $fail('That email domain does not appear to accept mail. Please use a real, active email address.');
+                }
+            }],
+            'civil_status' => 'required|string|max:50',
+            'spouse_name' => 'required_if:civil_status,Married|nullable|string|max:255',
+            'present_address' => 'required|string|max:1000',
+            'postal_address' => 'required|string|max:1000',
+            'contact_number' => ['required', 'regex:/^(09\d{9}|\+639\d{9}|639\d{9})$/'],
+            'proof_of_id' => 'required|string|max:255',
+            'pagibig_number' => 'required|string|max:255',
             'financing_method' => 'nullable|string|max:50',
 
-            'block_no' => 'nullable|string|max:50',
-            'lot_no' => 'nullable|string|max:50',
+            'block_no' => 'required|string|max:50',
+            'lot_no' => 'required|string|max:50',
             'tct_no' => 'nullable|string|max:255',
             'pid' => 'nullable|string|max:255',
             'tax_dec_no' => 'nullable|string|max:255',
-            'lot_area' => 'nullable|numeric|min:0',
-            'floor_area' => 'nullable|numeric|min:0',
-            'description' => 'nullable|string',
+            'lot_area' => 'required|numeric|min:0',
+            'floor_area' => 'required|numeric|min:0',
+            'description' => 'required|string',
 
             'contract_amount' => 'nullable|numeric|min:0',
             'improvement_amount' => 'nullable|numeric|min:0',
@@ -156,11 +173,23 @@ class BuyerMasterListController extends Controller
             'nonlife_1time' => 'nullable|numeric|min:0',
             'retention' => 'nullable|numeric|min:0',
             'total_deductions' => 'nullable|numeric|min:0',
-        ]);
+        ];
+    }
 
-        $buyer->update($validated);
-
-        return response()->json(['success' => true, 'message' => 'Buyer record updated securely.']);
+    /**
+     * @return array<string, string>
+     */
+    private function buyerFormMessages(): array
+    {
+        return [
+            'first_name.required' => 'The First Name is mandatory for the master list.',
+            'last_name.required' => 'The Last Name is mandatory for the master list.',
+            'email.required' => 'Email Address is required.',
+            'email.email' => 'Please enter a real email address on a domain that can receive mail (Gmail, Outlook, company mail, etc.).',
+            'contact_number.required' => 'Contact / Mobile Number is required.',
+            'contact_number.regex' => 'Use a Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX.',
+            'loan_term.max' => 'Loan term cannot exceed 100 years.',
+        ];
     }
 
     public function destroy($id)
@@ -186,6 +215,88 @@ class BuyerMasterListController extends Controller
         return response()->json(['success' => true, 'message' => 'Buyer record and account archived safely.']);
     }
 
+    public function restore($id)
+    {
+        $buyer = BuyerMasterList::onlyTrashed()->findOrFail($id);
+
+        $duplicate = BuyerMasterList::where('first_name', $buyer->first_name)
+            ->where('last_name', $buyer->last_name)
+            ->where('id', '!=', $buyer->id)
+            ->first();
+
+        if ($duplicate) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot restore: an active buyer with the same first and last name already exists. Merge or rename one record first.',
+            ], 409);
+        }
+
+        $notes = DB::transaction(function () use ($buyer) {
+            $buyer->restore();
+            $notes = [];
+
+            $trashedUser = User::onlyTrashed()->where('buyer_master_list_id', $buyer->id)->first();
+            if ($trashedUser) {
+                $emailTaken = User::where('email', $trashedUser->email)->where('id', '!=', $trashedUser->id)->exists();
+                if ($emailTaken) {
+                    $notes[] = 'Login was not restored because that email is already in use. Generate a new account after updating the email.';
+                } else {
+                    $trashedUser->restore();
+                    if ($trashedUser->status === 'Archived') {
+                        $trashedUser->update(['status' => 'Active']);
+                    }
+                    $notes[] = 'Login account restored.';
+                }
+            }
+
+            $archivedReservations = Reservation::onlyTrashed()
+                ->where('buyer_master_list_id', $buyer->id)
+                ->orderByDesc('created_at')
+                ->get();
+
+            $restoredReservations = 0;
+            $lotBlocked = false;
+            foreach ($archivedReservations as $reservation) {
+                $lotHeld = Reservation::where('lot_id', $reservation->lot_id)
+                    ->whereIn('status', ReservationStatus::activeValues())
+                    ->exists();
+                if ($lotHeld) {
+                    $lotBlocked = true;
+                    continue;
+                }
+
+                $reservation->restore();
+                $updates = [];
+                if ($reservation->status === ReservationStatus::Cancelled->value) {
+                    $updates['status'] = ReservationStatus::Reserved->value;
+                }
+                $deadline = $reservation->deadline_date;
+                if ($deadline && \Carbon\Carbon::parse($deadline)->startOfDay()->lt(now()->startOfDay())) {
+                    $updates['deadline_date'] = now()->addDays(30)->toDateString();
+                }
+                if ($updates) {
+                    $reservation->update($updates);
+                }
+                $restoredReservations++;
+            }
+
+            if ($lotBlocked) {
+                $notes[] = 'Reservation was not restored because the lot is already reserved or occupied. Edit the buyer to assign a new lot.';
+            } elseif ($restoredReservations > 0) {
+                $notes[] = 'Reservation restored. A lapsed deadline was extended by 30 days.';
+            }
+
+            return $notes;
+        });
+
+        $message = 'Buyer restored.';
+        if ($notes !== []) {
+            $message .= ' '.implode(' ', $notes);
+        }
+
+        return response()->json(['success' => true, 'message' => $message]);
+    }
+
     public function generateAccount($id)
     {
         $buyer = BuyerMasterList::findOrFail($id);
@@ -207,6 +318,10 @@ class BuyerMasterListController extends Controller
         $existingUser = \App\Models\User::where('buyer_master_list_id', $buyer->id)->first();
         if ($existingUser) {
             return back()->with('error', 'This buyer already has an account associated with email: ' . $existingUser->email);
+        }
+
+        if (\App\Models\User::where('email', $email)->exists()) {
+            return back()->with('error', 'Another account already uses the email: ' . $email);
         }
 
         $user = \App\Models\User::create(

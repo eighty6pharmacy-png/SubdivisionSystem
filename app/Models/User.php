@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
  * @property string $id
+ * @property string|null $external_id
  * @property string $name
  * @property string $email
  * @property string|null $contact_number
@@ -41,6 +42,7 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
+        'external_id',
         'name',
         'email',
         'contact_number',

@@ -25,6 +25,42 @@ Route::get('/appointment', function () {
     return view('appointment');
 });
 
+if (!function_exists('subdivisionLockoutResponse')) {
+    function subdivisionLockoutResponse(string $key, int $maxAttempts, string $reason): ?\Illuminate\Http\JsonResponse
+    {
+        if (!\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($key, $maxAttempts)) {
+            return null;
+        }
+
+        $seconds = \Illuminate\Support\Facades\RateLimiter::availableIn($key);
+        $minutes = max(1, (int) ceil($seconds / 60));
+        $wait = $minutes === 1 ? '1 minute' : $minutes.' minutes';
+
+        return response()->json([
+            'success' => false,
+            'message' => $reason.' Please wait '.$wait.' and try again.',
+            'retry_after_seconds' => $seconds,
+        ], 429);
+    }
+}
+
+if (!function_exists('subdivisionOtpCacheKey')) {
+    function subdivisionOtpCacheKey(string $email): string
+    {
+        return 'otp_'.strtolower(trim($email));
+    }
+}
+
+if (!function_exists('subdivisionOtpMatches')) {
+    function subdivisionOtpMatches(string $email, string $otp): bool
+    {
+        $cached = \Illuminate\Support\Facades\Cache::get(subdivisionOtpCacheKey($email));
+        $given = hash('sha256', trim($otp));
+
+        return is_string($cached) && strlen($cached) === strlen($given) && hash_equals($cached, $given);
+    }
+}
+
 Route::get('/login', function (\Illuminate\Http\Request $request) {
     if (\Illuminate\Support\Facades\Auth::check()) {
         \Illuminate\Support\Facades\Auth::logout();
@@ -40,7 +76,13 @@ Route::post('/login', function (\Illuminate\Http\Request $request) {
         'password' => ['required'],
     ]);
 
+    $loginKey = 'login|'.strtolower($credentials['email']).'|'.$request->ip();
+    if ($locked = subdivisionLockoutResponse($loginKey, 5, 'Too many failed sign-in attempts.')) {
+        return $locked;
+    }
+
     if (\Illuminate\Support\Facades\Auth::attempt($credentials)) {
+        \Illuminate\Support\Facades\RateLimiter::clear($loginKey);
         $user = \Illuminate\Support\Facades\Auth::user();
         if ($user->status === 'Archived') {
             \Illuminate\Support\Facades\Auth::logout();
@@ -68,11 +110,19 @@ Route::post('/login', function (\Illuminate\Http\Request $request) {
         return response()->json(['success' => true, 'redirect' => $target]);
     }
 
+    \Illuminate\Support\Facades\RateLimiter::hit($loginKey, 15 * 60);
+    if ($locked = subdivisionLockoutResponse($loginKey, 5, 'Too many failed sign-in attempts.')) {
+        return $locked;
+    }
+
+    $left = max(0, 5 - \Illuminate\Support\Facades\RateLimiter::attempts($loginKey));
+
     return response()->json([
         'success' => false,
-        'message' => 'Username or password is invalid!!',
+        'message' => 'Email or password is incorrect. '.$left.' attempt'.($left === 1 ? '' : 's').' left before a 15-minute pause.',
+        'attempts_left' => $left,
     ], 401);
-})->middleware('throttle:5,1');
+});
 
 Route::post('/logout', function (\Illuminate\Http\Request $request) {
     \Illuminate\Support\Facades\Auth::logout();
@@ -83,14 +133,29 @@ Route::post('/logout', function (\Illuminate\Http\Request $request) {
 
 Route::post('/forgot-password', function (\Illuminate\Http\Request $request) {
     $request->validate(['email' => 'required|email']);
-    $user = \App\Models\User::where('email', $request->email)->first();
+    $email = strtolower(trim($request->email));
+    $emailKey = 'pw-reset-email|'.$email;
+    $ipKey = 'pw-reset-ip|'.$request->ip();
 
-    if (!$user) {
-        return response()->json(['success' => false, 'message' => 'Email address not found in the system.']);
+    if ($locked = subdivisionLockoutResponse($emailKey, 3, 'Too many password reset requests for this email.')) {
+        return $locked;
+    }
+    if ($locked = subdivisionLockoutResponse($ipKey, 10, 'Too many password reset requests.')) {
+        return $locked;
     }
 
-    $otp = sprintf('%06d', rand(100000, 999999));
-    \Illuminate\Support\Facades\Cache::put('otp_' . $user->email, $otp, now()->addMinutes(15));
+    \Illuminate\Support\Facades\RateLimiter::hit($emailKey, 60 * 60);
+    \Illuminate\Support\Facades\RateLimiter::hit($ipKey, 60 * 60);
+
+    $user = \App\Models\User::whereRaw('LOWER(email) = ?', [$email])->first();
+    $generic = 'If that email is registered, we sent a 6-digit code. It expires in 15 minutes.';
+
+    if (!$user) {
+        return response()->json(['success' => true, 'message' => $generic]);
+    }
+
+    $otp = sprintf('%06d', random_int(0, 999999));
+    \Illuminate\Support\Facades\Cache::put(subdivisionOtpCacheKey($email), hash('sha256', $otp), now()->addMinutes(15));
 
     try {
         \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($user, $otp) {
@@ -122,7 +187,7 @@ Route::post('/forgot-password', function (\Illuminate\Http\Request $request) {
         return response()->json(['success' => false, 'message' => 'Failed to send email.']);
     }
 
-    return response()->json(['success' => true]);
+    return response()->json(['success' => true, 'message' => $generic]);
 });
 
 Route::post('/verify-otp', function (\Illuminate\Http\Request $request) {
@@ -131,13 +196,28 @@ Route::post('/verify-otp', function (\Illuminate\Http\Request $request) {
         'otp' => 'required|string'
     ]);
 
-    $cachedOtp = \Illuminate\Support\Facades\Cache::get('otp_' . $request->email);
+    $email = strtolower(trim($request->email));
+    $verifyKey = 'otp-verify|'.$email.'|'.$request->ip();
+    if ($locked = subdivisionLockoutResponse($verifyKey, 5, 'Too many incorrect codes.')) {
+        \Illuminate\Support\Facades\Cache::forget(subdivisionOtpCacheKey($email));
 
-    if ($cachedOtp && $cachedOtp === $request->otp) {
+        return $locked;
+    }
+
+    if (subdivisionOtpMatches($email, $request->otp)) {
+        \Illuminate\Support\Facades\RateLimiter::clear($verifyKey);
+
         return response()->json(['success' => true]);
     }
 
-    return response()->json(['success' => false, 'message' => 'Invalid or expired OTP.']);
+    \Illuminate\Support\Facades\RateLimiter::hit($verifyKey, 15 * 60);
+    if ($locked = subdivisionLockoutResponse($verifyKey, 5, 'Too many incorrect codes.')) {
+        \Illuminate\Support\Facades\Cache::forget(subdivisionOtpCacheKey($email));
+
+        return $locked;
+    }
+
+    return response()->json(['success' => false, 'message' => 'Invalid or expired code.']);
 });
 
 Route::post('/reset-password', function (\Illuminate\Http\Request $request) {
@@ -147,19 +227,29 @@ Route::post('/reset-password', function (\Illuminate\Http\Request $request) {
         'password' => 'required|string|min:8'
     ]);
 
-    $cachedOtp = \Illuminate\Support\Facades\Cache::get('otp_' . $request->email);
+    $email = strtolower(trim($request->email));
+    $verifyKey = 'otp-verify|'.$email.'|'.$request->ip();
+    if ($locked = subdivisionLockoutResponse($verifyKey, 5, 'Too many incorrect codes.')) {
+        \Illuminate\Support\Facades\Cache::forget(subdivisionOtpCacheKey($email));
 
-    if ($cachedOtp && $cachedOtp === $request->otp) {
-        $user = \App\Models\User::where('email', $request->email)->first();
+        return $locked;
+    }
+
+    if (subdivisionOtpMatches($email, $request->otp)) {
+        $user = \App\Models\User::whereRaw('LOWER(email) = ?', [$email])->first();
         if ($user) {
-            $user->password = \Illuminate\Support\Facades\Hash::make($request->password);
+            $user->password = $request->password;
             $user->save();
-            \Illuminate\Support\Facades\Cache::forget('otp_' . $request->email);
+            \Illuminate\Support\Facades\Cache::forget(subdivisionOtpCacheKey($email));
+            \Illuminate\Support\Facades\RateLimiter::clear($verifyKey);
+
             return response()->json(['success' => true]);
         }
     }
 
-    return response()->json(['success' => false, 'message' => 'Failed to reset password.']);
+    \Illuminate\Support\Facades\RateLimiter::hit($verifyKey, 15 * 60);
+
+    return response()->json(['success' => false, 'message' => 'Failed to reset password. The code may be invalid or expired.']);
 });
 
 // getVisitorPins() removed, now using API endpoints and controller
@@ -285,45 +375,27 @@ Route::post('/api/webhooks/paymongo', function (\Illuminate\Http\Request $reques
     if ($event === 'checkout_session.payment.paid') {
         $paymentData = $request->input('data.attributes.data.attributes');
         $billId = $paymentData['reference_number'] ?? null;
+        $recorder = app(\App\Services\PaymentRecorder::class);
+
+        $payments = $paymentData['payments'] ?? [];
+        $paidPayment = \App\Services\PaymentRecorder::paidPayment($payments);
+        $paymongoPaymentId = \App\Services\PaymentRecorder::paymongoPaymentId($paidPayment ?? ($payments[0] ?? null), $paymentData ?? []);
+        $sourceType = $paidPayment['attributes']['source']['type'] ?? ($paymentData['source']['type'] ?? '');
+        $paymentIntentId = $paidPayment['attributes']['payment_intent_id'] ?? ($paymentData['payment_intent_id'] ?? null);
 
         if (str_starts_with($billId, 'DP-')) {
             $dpId = substr($billId, 3);
             $dp = \App\Models\Downpayment::find($dpId);
             if ($dp) {
                 $amountPaid = isset($paymentData['payments'][0]['attributes']['amount']) ? ($paymentData['payments'][0]['attributes']['amount'] / 100) : (isset($paymentData['amount']) ? ($paymentData['amount'] / 100) : $dp->monthly_amortization);
-                
-                $dp->amount += $amountPaid;
-                $dp->balance -= $amountPaid;
-                if ($dp->balance <= 0) {
-                    $dp->status = 'Fully Paid';
-                    $dp->balance = 0;
-                } else {
-                    $dp->status = 'Good Standing';
-                }
-                $dp->due_date = \Carbon\Carbon::parse($dp->due_date)->addMonth();
-                $dp->save();
 
-                $payments = $paymentData['payments'] ?? [];
-                $paidPayment = collect($payments)->first(function ($payment) {
-                    return ($payment['attributes']['status'] ?? '') === 'paid';
-                });
-                
-                $sourceType = $paidPayment['attributes']['source']['type'] ?? ($paymentData['source']['type'] ?? '');
-                $method = $sourceType === 'gcash' ? 'GCash' : ($sourceType ? ucfirst($sourceType) : 'Online Payment');
-                $trn = $paidPayment['attributes']['payment_intent_id'] ?? ($paymentData['payment_intent_id'] ?? ('PM-' . strtoupper(\Illuminate\Support\Str::random(8))));
-                $trn .= '-' . substr($dp->id, 0, 8);
-
-                \Illuminate\Support\Facades\DB::table('downpayment_histories')->insert([
-                    'id' => (string) \Illuminate\Support\Str::uuid(),
-                    'downpayment_id' => $dp->id,
-                    'amount' => $amountPaid,
-                    'payment_date' => now(),
-                    'trn' => $trn,
-                    'payment_method' => $method,
-                    'status' => 'Paid',
-                    'created_at' => now(),
-                    'updated_at' => now()
-                ]);
+                $recorder->recordDownpaymentPayment(
+                    $dp,
+                    (float) $amountPaid,
+                    \App\Services\PaymentRecorder::methodFromSource($sourceType, 'Online Payment'),
+                    $paymongoPaymentId,
+                    \App\Services\PaymentRecorder::onlineTrn($paymentIntentId, $dp->id)
+                );
                 \Illuminate\Support\Facades\Log::info('Webhook marked DP ' . $dp->id . ' as paid.');
             }
         } elseif (str_starts_with($billId, 'FIN-')) {
@@ -331,44 +403,35 @@ Route::post('/api/webhooks/paymongo', function (\Illuminate\Http\Request $reques
             $fin = \App\Models\FinancingRecord::find($finId);
             if ($fin) {
                 $amountPaid = isset($paymentData['payments'][0]['attributes']['amount']) ? ($paymentData['payments'][0]['attributes']['amount'] / 100) : (isset($paymentData['amount']) ? ($paymentData['amount'] / 100) : $fin->balance);
-                $fin->amount_paid += $amountPaid;
-                $fin->balance = max(0, $fin->receivables - $fin->amount_paid);
-                if ($fin->balance <= 0 && $fin->status == 'Released') {
-                    $fin->status = 'Cleared';
-                }
-                $fin->save();
+
+                $recorder->recordFinancingPayment(
+                    $fin,
+                    (float) $amountPaid,
+                    \App\Services\PaymentRecorder::methodFromSource($sourceType, 'Online Payment'),
+                    $paymongoPaymentId,
+                    \App\Services\PaymentRecorder::onlineTrn($paymentIntentId, $fin->id)
+                );
                 \Illuminate\Support\Facades\Log::info('Webhook marked FIN ' . $fin->id . ' as paid.');
             }
         } else {
             $bill = \App\Models\UtilityBill::find($billId);
-        if ($bill && $bill->status !== 'paid') {
-            $payments = $paymentData['payments'] ?? [];
-            $paidPayment = collect($payments)->first(function ($payment) {
-                return ($payment['attributes']['status'] ?? '') === 'paid';
-            });
+            if ($bill && $bill->status !== \App\Enums\BillStatus::Paid->value) {
+                if ($paidPayment || ($paymentData['status'] ?? '') === 'paid') {
+                    $amountPaid = isset($paidPayment['attributes']['amount']) ? ($paidPayment['attributes']['amount'] / 100) : (isset($paymentData['amount']) ? ($paymentData['amount'] / 100) : ($bill->amount + $bill->previous_balance));
+                    $paidAt = isset($paidPayment['attributes']['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paidPayment['attributes']['paid_at'], config('app.timezone')) : (isset($paymentData['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paymentData['paid_at'], config('app.timezone')) : now());
 
-            if ($paidPayment || ($paymentData['status'] ?? '') === 'paid') {
-                $sourceType = $paidPayment['attributes']['source']['type'] ?? ($paymentData['source']['type'] ?? '');
-                $method = $sourceType === 'gcash' ? 'GCash' : ($sourceType ? ucfirst($sourceType) : 'PayMongo');
-                $trn = $paidPayment['attributes']['payment_intent_id'] ?? ($paymentData['payment_intent_id'] ?? ('PM-' . strtoupper(\Illuminate\Support\Str::random(8))));
-                $trn .= '-' . substr($bill->id, 0, 8);
-
-                $amountPaid = isset($paidPayment['attributes']['amount']) ? ($paidPayment['attributes']['amount'] / 100) : (isset($paymentData['amount']) ? ($paymentData['amount'] / 100) : ($bill->amount + $bill->previous_balance));
-                $paidAt = isset($paidPayment['attributes']['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paidPayment['attributes']['paid_at'], config('app.timezone')) : (isset($paymentData['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paymentData['paid_at'], config('app.timezone')) : now());
-
-                \App\Models\Payment::create([
-                    'id' => (string) \Illuminate\Support\Str::uuid(),
-                    'utility_bill_id' => $bill->id,
-                    'amount_paid' => $amountPaid,
-                    'method' => $method,
-                    'trn' => $trn,
-                    'payment_date' => $paidAt,
-                ]);
-                $bill->update(['status' => 'paid']);
-                \Illuminate\Support\Facades\Log::info('Webhook marked bill ' . $bill->id . ' as paid.');
+                    $recorder->recordUtilityPayment(
+                        $bill,
+                        (float) $amountPaid,
+                        \App\Services\PaymentRecorder::methodFromSource($sourceType, 'PayMongo'),
+                        $paymongoPaymentId,
+                        \App\Services\PaymentRecorder::onlineTrn($paymentIntentId, $bill->id),
+                        $paidAt
+                    );
+                    \Illuminate\Support\Facades\Log::info('Webhook marked bill ' . $bill->id . ' as paid.');
+                }
             }
         }
-        } // Closing the else block added for UtilityBill
     }
 
     return response()->json(['success' => true]);
@@ -413,16 +476,95 @@ Route::post('/api/appointments', function (\Illuminate\Http\Request $request) {
     }
     // ────────────────────────────────────────────────────────────────────────
 
+    $normalizedContact = preg_replace('/[\s\-().]/', '', (string) $request->input('contact_number'));
+    $request->merge([
+        'contact_number' => $normalizedContact,
+        'email' => trim((string) $request->input('email')),
+    ]);
+
+    $allowedTimes = [
+        '09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM',
+        '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM',
+    ];
+
+    $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+        'first_name' => 'required|string|max:100',
+        'middle_name' => 'required|string|max:100',
+        'last_name' => 'required|string|max:100',
+        'email' => ['required', 'email:rfc,dns', function (string $attribute, mixed $value, \Closure $fail) {
+            $domain = substr(strrchr(strtolower((string) $value), '@') ?: '', 1);
+            if ($domain === '' || (!checkdnsrr($domain, 'MX') && !checkdnsrr($domain, 'A'))) {
+                $fail('That email domain does not appear to accept mail. Please use a real, active email address.');
+            }
+        }],
+        'contact_number' => ['required', 'regex:/^(09\d{9}|\+639\d{9}|639\d{9})$/'],
+        'date' => 'required|date|after_or_equal:today',
+        'time' => ['required', \Illuminate\Validation\Rule::in($allowedTimes)],
+        'status' => ['nullable', \Illuminate\Validation\Rule::in(\App\Enums\AppointmentStatus::values())],
+    ], [
+        'first_name.required' => 'First Name is required.',
+        'middle_name.required' => 'Middle Name is required.',
+        'last_name.required' => 'Last Name is required.',
+        'email.required' => 'Email Address is required.',
+        'email.email' => 'Please enter a real email address on a domain that can receive mail (Gmail, Outlook, company mail, etc.).',
+        'contact_number.required' => 'Contact / Mobile Number is required.',
+        'contact_number.regex' => 'Use a Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX.',
+        'date.required' => 'Preferred Date is required.',
+        'time.required' => 'Preferred Time is required.',
+        'date.after_or_equal' => 'Preferred date cannot be in the past.',
+        'time.in' => 'Please select a valid appointment time slot.',
+    ]);
+    if ($validator->fails()) {
+        return response()->json([
+            'success' => false,
+            'message' => $validator->errors()->first(),
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    $tz = config('app.timezone', 'Asia/Manila');
+    $appointmentDate = \Carbon\Carbon::parse($request->input('date'), $tz)->startOfDay();
+    $slotAt = \Carbon\Carbon::parse($request->input('date').' '.$request->input('time'), $tz);
+    if ($slotAt->lte(now($tz))) {
+        return response()->json([
+            'success' => false,
+            'message' => 'That time slot has already passed. Please choose a later time.',
+        ], 422);
+    }
+
+    $unavailableDates = json_decode(\App\Models\Setting::where('key', 'unavailable_dates')->value('value') ?? '[]', true) ?: [];
+    $dateYmd = $appointmentDate->format('Y-m-d');
+    $datePretty = $appointmentDate->format('M j, Y');
+    foreach ($unavailableDates as $blocked) {
+        if ($blocked === $dateYmd || $blocked === $datePretty) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This date is unavailable. Please select another date.',
+            ], 422);
+        }
+    }
+
+    $alreadyTaken = \App\Models\Appointment::whereDate('date', $dateYmd)
+        ->where('time', $request->input('time'))
+        ->where('status', '!=', \App\Enums\AppointmentStatus::Cancelled->value)
+        ->exists();
+    if ($alreadyTaken) {
+        return response()->json([
+            'success' => false,
+            'message' => 'An appointment is already scheduled on this time and day. Please select a different date or time slot.',
+        ], 422);
+    }
+
     $apt = \App\Models\Appointment::create([
         'first_name'     => $request->input('first_name'),
         'middle_name'    => $request->input('middle_name'),
         'last_name'      => $request->input('last_name'),
-        'contact_number' => $request->input('contact_number'),
+        'contact_number' => $normalizedContact,
         'email'          => $request->input('email'),
         'type'           => $request->input('type'),
-        'date'           => \Carbon\Carbon::parse($request->input('date')),
+        'date'           => $appointmentDate,
         'time'           => $request->input('time'),
-        'status'         => $request->input('status', 'Pending'),
+        'status'         => $request->input('status') ?: \App\Enums\AppointmentStatus::Pending->value,
         'notes'          => $request->input('notes'),
     ]);
     
@@ -438,6 +580,13 @@ Route::post('/api/appointments', function (\Illuminate\Http\Request $request) {
     return response()->json(['success' => true]);
 })->middleware('throttle:3,60');
 Route::put('/api/incidents/{id}/status', function (\Illuminate\Http\Request $request, $id) {
+    $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+        'status' => ['required', \Illuminate\Validation\Rule::in(\App\Enums\IncidentStatus::values())],
+    ]);
+    if ($validator->fails()) {
+        return response()->json(['success' => false, 'message' => 'Invalid incident status. Allowed: ' . implode(', ', \App\Enums\IncidentStatus::values()) . '.'], 422);
+    }
+
     $inc = \App\Models\Incident::whereRaw('id::text LIKE ?', [str_replace(['%', '_'], ['\%', '\_'], $id) . '%'])->first();
     if ($inc) {
         $inc->update(['status' => $request->input('status')]);
@@ -462,6 +611,13 @@ Route::put('/api/appointments/{id}/email', function (\Illuminate\Http\Request $r
     return response()->json(['success' => false], 404);
 });
 Route::put('/api/appointments/{id}/status', function (\Illuminate\Http\Request $request, $id) {
+    $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+        'status' => ['required', \Illuminate\Validation\Rule::in(\App\Enums\AppointmentStatus::values())],
+    ]);
+    if ($validator->fails()) {
+        return response()->json(['success' => false, 'message' => 'Invalid appointment status. Allowed: ' . implode(', ', \App\Enums\AppointmentStatus::values()) . '.'], 422);
+    }
+
     $apt = \App\Models\Appointment::whereRaw('id::text LIKE ?', [$id . '%'])->first();
     if ($apt) {
         $oldStatus = $apt->status;
@@ -577,7 +733,8 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
         // 3. Total Residents
         $totalResidentsCount = 0;
-        if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
+        if (\Illuminate\Support\Facades\Schema::hasTable('users')
+            && \Spatie\Permission\Models\Role::where('name', 'Resident')->where('guard_name', 'web')->exists()) {
             $totalResidentsCount = \App\Models\User::role('Resident')->count();
         }
 
@@ -693,6 +850,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     // Master List System
     Route::resource('buyer-master-list', \App\Http\Controllers\Admin\BuyerMasterListController::class);
     Route::post('buyer-master-list/{id}/generate-account', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'generateAccount'])->name('buyer.generate-account');
+    Route::post('buyer-master-list/{id}/restore', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'restore'])->name('buyer.restore');
     Route::get('/buyer-master-list/{id}/export-msvs', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'exportMsvs'])->name('admin.buyer.export.msvs');
     Route::get('/buyer-master-list/{id}/export-bvs', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'exportBvs'])->name('admin.buyer.export.bvs');
     Route::get('/buyer-master-list/{id}/export-housing-loan', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'exportHousingLoan'])->name('admin.buyer.export.housing_loan');
@@ -704,8 +862,11 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             $role = $u->roles->first()->name ?? 'Resident';
             $lot = $u->lots->first();
             return [
-                'id' => 'USR-' . str_pad($u->id, 4, '0', STR_PAD_LEFT),
+                'id' => $u->external_id
+                    ? 'USR-' . $u->external_id
+                    : 'USR-' . strtoupper(substr(str_replace('-', '', $u->id), 0, 8)),
                 'db_id' => $u->id,
+                'external_id' => $u->external_id,
                 'name' => $u->name,
                 'email' => $u->email,
                 'role' => $role,
@@ -718,6 +879,157 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             ];
         })->toArray();
         return view('admin.users.index', ['users' => $users]);
+    });
+    Route::post('/users/import', [\App\Http\Controllers\Admin\UserImportController::class, 'import']);
+    Route::get('/users/import/template', [\App\Http\Controllers\Admin\UserImportController::class, 'downloadTemplate']);
+    Route::post('/users', function (\Illuminate\Http\Request $request) {
+        $normalizedContact = preg_replace('/[\s\-().]/', '', (string) $request->input('contact_number'));
+        $request->merge([
+            'contact_number' => $normalizedContact,
+            'email' => trim((string) $request->input('email')),
+        ]);
+
+        $validated = $request->validate([
+            'name' => 'required|string',
+            'email' => ['required', 'email:rfc,dns', \Illuminate\Validation\Rule::unique('users', 'email')->whereNull('deleted_at'), function (string $attribute, mixed $value, \Closure $fail) {
+                $domain = substr(strrchr(strtolower((string) $value), '@') ?: '', 1);
+                if ($domain === '' || (!checkdnsrr($domain, 'MX') && !checkdnsrr($domain, 'A'))) {
+                    $fail('That email domain does not appear to accept mail. Please use a real, active email address.');
+                }
+            }],
+            'contact_number' => ['required', 'regex:/^(09\d{9}|\+639\d{9}|639\d{9})$/'],
+            'role' => 'required|string',
+            'status' => 'required|string',
+            'password' => 'required|string|min:6',
+            'block' => 'required_if:role,Resident|integer',
+            'lot' => 'required_if:role,Resident|integer',
+        ], [
+            'email.required' => 'Email Address is required.',
+            'email.email' => 'Please enter a real email address on a domain that can receive mail (Gmail, Outlook, company mail, etc.).',
+            'contact_number.required' => 'Contact / Mobile Number is required.',
+            'contact_number.regex' => 'Use a Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX.',
+        ]);
+
+        $user = \App\Models\User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'contact_number' => $validated['contact_number'] ?? null,
+            'password' => \Illuminate\Support\Facades\Hash::make($validated['password']),
+        ]);
+        $user->assignRole($validated['role']);
+
+        if ($request->has('block') && $request->has('lot')) {
+            if (!empty($validated['block']) && !empty($validated['lot'])) {
+                $lot = \App\Models\Lot::firstOrCreate([
+                    'block' => (string) $validated['block'],
+                    'lot_number' => (string) $validated['lot'],
+                ]);
+                $user->lots()->attach($lot->id);
+                $lot->update(['status' => 'Occupied']);
+            }
+        }
+
+        try {
+            \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($validated) {
+                $message->to($validated['email'])
+                    ->subject('Your Subdivision System Account')
+                    ->html("<h2>Welcome to Subdivision System</h2>
+                                <p>Your account has been created. Here are your login credentials:</p>
+                                <p><strong>Email:</strong> {$validated['email']}<br>
+                                <strong>Password:</strong> {$validated['password']}</p>
+                                <p>Please login and change your password immediately.</p>");
+            });
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to send email to new user: ' . $e->getMessage());
+        }
+
+        return response()->json(['success' => true]);
+    });
+    Route::put('/users/{id}', function (\Illuminate\Http\Request $request, $id) {
+        $user = \App\Models\User::find($id);
+        if ($user) {
+            if ($user->status === 'Archived') {
+                return response()->json(['success' => false, 'message' => 'Archived users cannot be edited.'], 403);
+            }
+
+            $normalizedContact = preg_replace('/[\s\-().]/', '', (string) $request->input('contact_number'));
+            $request->merge([
+                'contact_number' => $normalizedContact,
+                'email' => trim((string) $request->input('email', $user->email)),
+            ]);
+
+            $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+                'name' => 'required|string',
+                'email' => ['required', 'email:rfc,dns', \Illuminate\Validation\Rule::unique('users', 'email')->whereNull('deleted_at')->ignore($user->id), function (string $attribute, mixed $value, \Closure $fail) {
+                    $domain = substr(strrchr(strtolower((string) $value), '@') ?: '', 1);
+                    if ($domain === '' || (!checkdnsrr($domain, 'MX') && !checkdnsrr($domain, 'A'))) {
+                        $fail('That email domain does not appear to accept mail. Please use a real, active email address.');
+                    }
+                }],
+                'contact_number' => ['required', 'regex:/^(09\d{9}|\+639\d{9}|639\d{9})$/'],
+                'password' => 'nullable|string|min:6',
+                'block' => 'nullable|integer',
+                'lot' => 'nullable|integer',
+            ], [
+                'email.required' => 'Email Address is required.',
+                'email.email' => 'Please enter a real email address on a domain that can receive mail (Gmail, Outlook, company mail, etc.).',
+                'contact_number.required' => 'Contact / Mobile Number is required.',
+                'contact_number.regex' => 'Use a Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX.',
+            ]);
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $validator->errors()->first(),
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
+
+            $validated = $validator->validated();
+            $user->name = $validated['name'];
+            $user->email = $validated['email'];
+            $user->contact_number = $validated['contact_number'];
+            if (!empty($validated['password'] ?? null)) {
+                $user->password = \Illuminate\Support\Facades\Hash::make($validated['password']);
+            }
+            $user->save();
+
+            if ($request->has('role')) {
+                $user->syncRoles([$request->input('role')]);
+            }
+            if ($request->has('block') && $request->has('lot')) {
+                if (!empty($request->input('block')) && !empty($request->input('lot'))) {
+                    $lot = \App\Models\Lot::firstOrCreate([
+                        'block' => (string) $request->input('block'),
+                        'lot_number' => (string) $request->input('lot'),
+                    ]);
+                    $user->lots()->sync([$lot->id]);
+                }
+            }
+            return response()->json(['success' => true]);
+        }
+        return response()->json(['success' => false], 404);
+    });
+    Route::put('/users/{id}/archive', function ($id) {
+        $user = \App\Models\User::find($id);
+        if ($user) {
+            foreach ($user->lots as $lot) {
+                $lot->update(['status' => 'Vacant House']);
+            }
+            $user->update(['status' => 'Archived']);
+            return response()->json(['success' => true]);
+        }
+        return response()->json(['success' => false], 404);
+    });
+    Route::put('/users/{id}/restore', function ($id) {
+        $user = \App\Models\User::find($id);
+        if ($user) {
+            foreach ($user->lots as $lot) {
+                $lot->update(['status' => 'Occupied']);
+            }
+            $user->update(['status' => 'Active']);
+            return response()->json(['success' => true]);
+        }
+        return response()->json(['success' => false], 404);
     });
     Route::get('/residents', function () {
         return redirect('/admin/users');
@@ -749,14 +1061,10 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     });
 
     Route::post('/reservation-fee', function (\Illuminate\Http\Request $request) {
-        $lot = \App\Models\Lot::firstOrCreate(
-            ['block' => $request->input('block'), 'lot_number' => $request->input('lot')],
-            ['status' => 'Reserved', 'provider_managed' => false]
-        );
-        
         $name = $request->input('name');
         $contact = $request->input('contact');
         
+        $buyer = null;
         if ($request->input('buyer_master_list_id')) {
             $buyer = \App\Models\BuyerMasterList::find($request->input('buyer_master_list_id'));
             if ($buyer) {
@@ -765,24 +1073,43 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             }
         }
         
-        $res = \App\Models\Reservation::create([
-            'lot_id' => $lot->id,
-            'buyer_master_list_id' => $request->input('buyer_master_list_id'),
-            'status' => 'Reserved',
-            'reservation_date' => now(),
-            'deadline_date' => $request->input('deadline_date') ? \Carbon\Carbon::parse($request->input('deadline_date')) : null,
-            'amount' => $request->input('amount') ?? 20000,
-            'notes' => ($name ?: 'New Buyer') . ' | ' . ($contact ?: 'N/A')
-        ]);
+        try {
+            $res = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $buyer, $name, $contact) {
+                $lot = \App\Models\Lot::firstOrCreate(
+                    ['block' => $request->input('block'), 'lot_number' => $request->input('lot')],
+                    ['status' => \App\Enums\LotStatus::Reserved->value, 'provider_managed' => false]
+                );
+
+                $res = \App\Models\Reservation::create([
+                    'lot_id' => $lot->id,
+                    'buyer_master_list_id' => $request->input('buyer_master_list_id'),
+                    'status' => \App\Enums\ReservationStatus::Reserved->value,
+                    'reservation_date' => now(),
+                    'deadline_date' => $request->input('deadline_date') ? \Carbon\Carbon::parse($request->input('deadline_date')) : null,
+                    'amount' => $request->input('amount') ?? 20000,
+                    'notes' => ($name ?: 'New Buyer') . ' | ' . ($contact ?: 'N/A')
+                ]);
+
+                if ($buyer) {
+                    $buyer->lot_id = $lot->id;
+                    $buyer->save();
+                }
+
+                return $res;
+            });
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            return response()->json(['success' => false, 'message' => 'Lot already has an active reservation.'], 422);
+        }
+
         return response()->json(['success' => true, 'id' => substr($res->id, 0, 8)]);
     });
 
     Route::post('/reservation-fee/cancel', function (\Illuminate\Http\Request $request) {
-        $res = \App\Models\Reservation::where('id', 'LIKE', $request->input('id') . '%')->first();
+        $res = \App\Models\Reservation::whereRaw('CAST(id AS TEXT) LIKE ?', [$request->input('id') . '%'])->first();
         if ($res) {
-            $res->update(['status' => 'Cancelled']);
+            $res->update(['status' => \App\Enums\ReservationStatus::Cancelled->value]);
             if ($res->lot) {
-                $res->lot->update(['status' => 'Available']);
+                $res->lot->update(['status' => \App\Enums\LotStatus::Available->value]);
             }
             return response()->json(['success' => true]);
         }
@@ -800,92 +1127,84 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             return response()->json(['success' => false, 'message' => 'Buyer already has an active downpayment schedule.'], 403);
         }
 
-        // Use existing reservation without downpayment, or create a structural one
-        $res = \App\Models\Reservation::where('buyer_master_list_id', $buyerId)
-            ->whereDoesntHave('downpayments')
-            ->first();
+        try {
+            $dp = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $buyerId) {
+                // Use existing reservation without downpayment, or create a structural one
+                $res = \App\Models\Reservation::where('buyer_master_list_id', $buyerId)
+                    ->whereDoesntHave('downpayments')
+                    ->first();
 
-        if (!$res) {
-            $lot = \App\Models\Lot::firstOrCreate(
-                ['block' => $request->input('block'), 'lot_number' => $request->input('lot')],
-                ['status' => 'Reserved', 'provider_managed' => false]
-            );
-            $res = \App\Models\Reservation::create([
-                'lot_id' => $lot->id,
-                'buyer_master_list_id' => $buyerId,
-                'status' => 'Pending',
-                'reservation_date' => now(),
-                'amount' => 0,
-                'notes' => $request->input('name') ?? 'New Buyer',
-                'first_name' => $request->input('first_name'),
-                'last_name' => $request->input('last_name')
-            ]);
-        } else {
-            // Update the existing reservation's status to converted since they now have a downpayment
-            $res->status = 'Converted';
-            $res->save();
-        }
+                if (!$res) {
+                    $lot = \App\Models\Lot::firstOrCreate(
+                        ['block' => $request->input('block'), 'lot_number' => $request->input('lot')],
+                        ['status' => \App\Enums\LotStatus::Reserved->value, 'provider_managed' => false]
+                    );
+                    $res = \App\Models\Reservation::create([
+                        'lot_id' => $lot->id,
+                        'buyer_master_list_id' => $buyerId,
+                        'status' => \App\Enums\ReservationStatus::Pending->value,
+                        'reservation_date' => now(),
+                        'amount' => 0,
+                        'notes' => $request->input('name') ?? 'New Buyer',
+                        'first_name' => $request->input('first_name'),
+                        'last_name' => $request->input('last_name')
+                    ]);
+                } else {
+                    // Update the existing reservation's status to converted since they now have a downpayment
+                    $res->status = \App\Enums\ReservationStatus::Converted->value;
+                    $res->save();
+                }
 
-        $dp = \App\Models\Downpayment::create([
-            'reservation_id' => $res->id,
-            'amount' => 0,
-            'balance' => $request->input('dpAmount') ?? 0,
-            'due_date' => \Carbon\Carbon::parse($request->input('nextDate') ?? now()->addMonth()),
-            'status' => 'Good Standing',
-            'monthly_amortization' => $request->input('monthly_amortization') ?? 15000,
-            'months_to_pay' => $request->input('months_to_pay') ?? 24,
-            'contract_date' => $request->input('contract_date') ? \Carbon\Carbon::parse($request->input('contract_date')) : now(),
-            'penalty_percentage' => $request->input('penalty_percentage') ?? 0
-        ]);
+                $dp = \App\Models\Downpayment::create([
+                    'reservation_id' => $res->id,
+                    'amount' => 0,
+                    'balance' => $request->input('dpAmount') ?? 0,
+                    'due_date' => \Carbon\Carbon::parse($request->input('nextDate') ?? now()->addMonth()),
+                    'status' => \App\Enums\DownpaymentStatus::GoodStanding->value,
+                    'monthly_amortization' => $request->input('monthly_amortization') ?? 15000,
+                    'months_to_pay' => $request->input('months_to_pay') ?? 24,
+                    'contract_date' => $request->input('contract_date') ? \Carbon\Carbon::parse($request->input('contract_date')) : now(),
+                    'penalty_percentage' => $request->input('penalty_percentage') ?? 0
+                ]);
 
-        // "Client First" Workflow: Sync back the newly established contract details to the Masterlist
-        $buyer = \App\Models\BuyerMasterList::find($request->input('buyer_master_list_id'));
-        if ($buyer) {
-            $buyer->block_no = $request->input('block');
-            $buyer->lot_no = $request->input('lot');
-            $buyer->contract_amount = $request->input('contract_amount');
-            $buyer->equity = $request->input('dpAmount');
-            $buyer->save();
+                // "Client First" Workflow: Sync back the newly established contract details to the Masterlist
+                $buyer = \App\Models\BuyerMasterList::find($request->input('buyer_master_list_id'));
+                if ($buyer) {
+                    $buyer->lot_id = \App\Models\Lot::where('block', $request->input('block'))
+                        ->where('lot_number', $request->input('lot'))
+                        ->value('id') ?? $res->lot_id;
+                    $buyer->block_no = $request->input('block');
+                    $buyer->lot_no = $request->input('lot');
+                    $buyer->contract_amount = $request->input('contract_amount');
+                    $buyer->equity = $request->input('dpAmount');
+                    $buyer->save();
+                }
+
+                return $dp;
+            });
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            return response()->json(['success' => false, 'message' => 'This lot already has an active reservation, or this reservation already has a downpayment schedule.'], 422);
         }
 
         return response()->json(['success' => true, 'id' => substr($dp->id, 0, 8)]);
     });
 
     Route::post('/downpayment-fee/pay', function (\Illuminate\Http\Request $request) {
-        $dp = \App\Models\Downpayment::where('id', 'LIKE', $request->input('id') . '%')->first();
+        $dp = \App\Models\Downpayment::whereRaw('CAST(id AS TEXT) LIKE ?', [$request->input('id') . '%'])->first();
         if ($dp) {
-            $payment_amount = (float) $request->input('amount');
-            $dp->amount += $payment_amount;
-            $dp->balance -= $payment_amount;
-            if ($dp->balance <= 0) {
-                $dp->status = 'Fully Paid';
-                $dp->balance = 0;
-            } else {
-                $dp->status = 'Good Standing';
-            }
-            // Update next due date to next month
-            $dp->due_date = \Carbon\Carbon::parse($dp->due_date)->addMonth();
-            $dp->save();
-
-            // Record in downpayment_histories
-            $trn = strtoupper(\Illuminate\Support\Str::random(10));
-            $history_id = (string) \Illuminate\Support\Str::uuid();
-            \Illuminate\Support\Facades\DB::table('downpayment_histories')->insert([
-                'id' => $history_id,
-                'downpayment_id' => $dp->id,
-                'amount' => $payment_amount,
-                'payment_date' => $request->input('payment_date') ? \Carbon\Carbon::parse($request->input('payment_date')) : now(),
-                'trn' => $trn,
-                'payment_method' => 'Office Payment',
-                'status' => 'Paid',
-                'created_at' => now(),
-                'updated_at' => now()
-            ]);
+            $history = app(\App\Services\PaymentRecorder::class)->recordDownpaymentPayment(
+                $dp,
+                (float) $request->input('amount'),
+                'Office Payment',
+                null,
+                null,
+                $request->input('payment_date') ? \Carbon\Carbon::parse($request->input('payment_date')) : now()
+            );
 
             return response()->json([
                 'success' => true,
-                'trn' => $trn,
-                'id' => $history_id,
+                'trn' => $history->trn,
+                'id' => $history->id,
                 'next_due' => $dp->due_date ? \Carbon\Carbon::parse($dp->due_date)->format('Y-m-d') : null
             ]);
         }
@@ -994,6 +1313,13 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     Route::get('/gis', function () {
         return view('admin.gis.index'); });
     Route::post('/gis/update-occupancy', function (\Illuminate\Http\Request $request) {
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'status' => ['required', \Illuminate\Validation\Rule::in(\App\Enums\LotStatus::values())],
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['success' => false, 'message' => 'Invalid lot status. Allowed: ' . implode(', ', \App\Enums\LotStatus::values()) . '.'], 422);
+        }
+
         $lot = \App\Models\Lot::firstOrCreate(
             ['block' => $request->input('block'), 'lot_number' => $request->input('lot')]
         );
@@ -1261,6 +1587,13 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
     });
 
     Route::put('/incidents/{id}/status', function (\Illuminate\Http\Request $request, $id) {
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'status' => ['required', \Illuminate\Validation\Rule::in(\App\Enums\IncidentStatus::values())],
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['success' => false, 'message' => 'Invalid incident status. Allowed: ' . implode(', ', \App\Enums\IncidentStatus::values()) . '.'], 422);
+        }
+
         $inc = \App\Models\Incident::whereRaw('id::text LIKE ?', [$id . '%'])->first();
         if ($inc) {
             $inc->update(['status' => $request->input('status')]);
@@ -1497,89 +1830,6 @@ Route::post('/resident/incidents', function (\Illuminate\Http\Request $request) 
     return response()->json(['success' => true]);
 });
 
-// Admin User Management
-Route::post('/admin/users/import', [\App\Http\Controllers\Admin\UserImportController::class, 'import']);
-Route::post('/admin/users', function (\Illuminate\Http\Request $request) {
-    $validated = $request->validate([
-        'name' => 'required|string',
-        'email' => 'required|email|unique:users',
-        'contact_number' => 'required|string',
-        'role' => 'required|string',
-        'status' => 'required|string',
-        'password' => 'required|string|min:6',
-        'block' => 'required_if:role,Resident|integer',
-        'lot' => 'required_if:role,Resident|integer',
-    ]);
-
-    $user = \App\Models\User::create([
-        'name' => $validated['name'],
-        'email' => $validated['email'],
-        'contact_number' => $validated['contact_number'] ?? null,
-        'password' => \Illuminate\Support\Facades\Hash::make($validated['password']),
-    ]);
-    $user->assignRole($validated['role']);
-
-    if ($request->has('block') && $request->has('lot')) {
-        if (!empty($validated['block']) && !empty($validated['lot'])) {
-            $lot = \App\Models\Lot::firstOrCreate([
-                'block' => $validated['block'],
-                'lot_number' => $validated['lot']
-            ]);
-            $user->lots()->attach($lot->id);
-            $lot->update(['status' => 'Occupied']);
-        }
-    }
-
-    try {
-        \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($validated) {
-            $message->to($validated['email'])
-                ->subject('Your Subdivision System Account')
-                ->html("<h2>Welcome to Subdivision System</h2>
-                                <p>Your account has been created. Here are your login credentials:</p>
-                                <p><strong>Email:</strong> {$validated['email']}<br>
-                                <strong>Password:</strong> {$validated['password']}</p>
-                                <p>Please login and change your password immediately.</p>");
-        });
-    } catch (\Exception $e) {
-        \Illuminate\Support\Facades\Log::error('Failed to send email to new user: ' . $e->getMessage());
-    }
-
-    return response()->json(['success' => true]);
-});
-
-Route::put('/admin/users/{id}', function (\Illuminate\Http\Request $request, $id) {
-    $user = \App\Models\User::find($id);
-    if ($user) {
-        if ($user->status === 'Archived') {
-            return response()->json(['success' => false, 'message' => 'Archived users cannot be edited.'], 403);
-        }
-        $user->name = $request->input('name', $user->name);
-        $user->email = $request->input('email', $user->email);
-        if ($request->has('contact_number')) {
-            $user->contact_number = $request->input('contact_number');
-        }
-        if ($request->has('password') && !empty($request->input('password'))) {
-            $user->password = \Illuminate\Support\Facades\Hash::make($request->input('password'));
-        }
-        $user->save();
-
-        if ($request->has('role')) {
-            $user->syncRoles([$request->input('role')]);
-        }
-        if ($request->has('block') && $request->has('lot')) {
-            if (!empty($request->input('block')) && !empty($request->input('lot'))) {
-                $lot = \App\Models\Lot::firstOrCreate([
-                    'block' => $request->input('block'),
-                    'lot_number' => $request->input('lot')
-                ]);
-                $user->lots()->sync([$lot->id]);
-            }
-        }
-        return response()->json(['success' => true]);
-    }
-    return response()->json(['success' => false], 404);
-});
-
 Route::get('/admin/api/billing/export-soa', [App\Http\Controllers\ExportController::class, 'exportSOA'])->name('admin.billing.export-soa');
 
 Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $request) {
@@ -1592,6 +1842,44 @@ Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $r
 
     $waterMinM3 = $request->input('water_min_m3');
     $waterMinRate = $request->input('water_min_rate');
+
+    if (!$prevDate || !$currDate || !$dueDate) {
+        return response()->json(['success' => false, 'message' => 'Please select previous reading, current reading, and due dates.'], 422);
+    }
+
+    $tz = config('app.timezone', 'Asia/Manila');
+    try {
+        $prev = \Carbon\Carbon::parse($prevDate, $tz)->startOfDay();
+        $curr = \Carbon\Carbon::parse($currDate, $tz)->startOfDay();
+        $due = \Carbon\Carbon::parse($dueDate, $tz)->startOfDay();
+    } catch (\Exception $e) {
+        return response()->json(['success' => false, 'message' => 'One or more dates are invalid.'], 422);
+    }
+
+    $minCurr = now($tz)->startOfMonth();
+    $lastBillForType = \App\Models\UtilityBill::where('type', $type)
+        ->whereNotNull('current_reading_date')
+        ->orderByDesc('current_reading_date')
+        ->first();
+    if ($lastBillForType && $lastBillForType->current_reading_date) {
+        $nextAllowed = \Carbon\Carbon::parse($lastBillForType->current_reading_date, $tz)->addMonth()->startOfMonth();
+        if ($nextAllowed->gt($minCurr)) {
+            $minCurr = $nextAllowed;
+        }
+    }
+
+    if ($curr->lt($minCurr)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Current reading date cannot be in a past billing month. Earliest allowed: '.$minCurr->format('M j, Y').'.',
+        ], 422);
+    }
+    if ($prev->gte($curr)) {
+        return response()->json(['success' => false, 'message' => 'Previous reading date must be before the current reading date.'], 422);
+    }
+    if ($due->lt($curr)) {
+        return response()->json(['success' => false, 'message' => 'Due date must be on or after the current reading date.'], 422);
+    }
 
     if ($rate !== null) {
         $settingKey = $type === 'electricity' ? 'elec_rate' : 'water_rate';
@@ -1636,35 +1924,37 @@ Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $r
             $carriedBalance = max(0, $totalDueAfterPenalty - $totalPaid);
         }
 
-        if ($currDate) {
-            $currDt = \Carbon\Carbon::parse($currDate)->startOfDay();
-            $existingBill = \App\Models\UtilityBill::where('lot_id', $lot->id)
-                ->where('type', $type)
-                ->whereYear('created_at', $currDt->year)
-                ->whereMonth('created_at', $currDt->month)
-                ->exists();
+        $billingPeriod = ($currDate ? \Carbon\Carbon::parse($currDate) : now())->startOfMonth()->toDateString();
+        $existingBill = \App\Models\UtilityBill::where('lot_id', $lot->id)
+            ->where('type', $type)
+            ->whereDate('billing_period', $billingPeriod)
+            ->exists();
 
-            if ($existingBill) {
-                continue; // Skip to prevent duplicate cycle for this exact month
-            }
+        if ($existingBill) {
+            continue; // Skip to prevent duplicate cycle for this exact month
         }
 
-        $bill = \App\Models\UtilityBill::create([
-            'id' => (string) \Illuminate\Support\Str::uuid(),
-            'type' => $type,
-            'user_id' => $user ? $user->id : null,
-            'lot_id' => $lot->id,
-            'previous_reading' => $prevReading,
-            'previous_reading_date' => $prevDate,
-            'current_reading_date' => $currDate,
-            'current_reading' => 0,
-            'usage_value' => 0,
-            'amount' => 0,
-            'previous_balance' => $carriedBalance,
-            'due_date' => $dueDate,
-            'status' => 'unpaid',
-            'is_at_risk' => false,
-        ]);
+        try {
+            $bill = \App\Models\UtilityBill::create([
+                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'type' => $type,
+                'user_id' => $user ? $user->id : null,
+                'lot_id' => $lot->id,
+                'previous_reading' => $prevReading,
+                'previous_reading_date' => $prevDate,
+                'current_reading_date' => $currDate,
+                'current_reading' => 0,
+                'usage_value' => 0,
+                'amount' => 0,
+                'previous_balance' => $carriedBalance,
+                'due_date' => $dueDate,
+                'status' => \App\Enums\BillStatus::Unpaid->value,
+                'is_at_risk' => false,
+                'billing_period' => $billingPeriod,
+            ]);
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            continue; // Generated concurrently for this lot, type and month
+        }
         $generatedCount++;
 
         if ($currDate) {
@@ -1682,7 +1972,9 @@ Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $r
 
 Route::post('/admin/api/billing/disconnect', function (\Illuminate\Http\Request $request) {
     $lotNumber = $request->input('lot');
-    $lot = \App\Models\Lot::where('lot_number', $lotNumber)->orWhere('block', 'like', "%$lotNumber%")->first();
+    $lot = $request->filled('block')
+        ? \App\Models\Lot::where('block', $request->input('block'))->where('lot_number', $lotNumber)->first()
+        : \App\Models\Lot::where('lot_number', $lotNumber)->orWhere('block', 'like', "%$lotNumber%")->first();
     if ($lot) {
         $lot->provider_managed = true;
         $lot->save();
@@ -1693,7 +1985,9 @@ Route::post('/admin/api/billing/disconnect', function (\Illuminate\Http\Request 
 
 Route::post('/admin/api/billing/reconnect', function (\Illuminate\Http\Request $request) {
     $lotNumber = $request->input('lot');
-    $lot = \App\Models\Lot::where('lot_number', $lotNumber)->orWhere('block', 'like', "%$lotNumber%")->first();
+    $lot = $request->filled('block')
+        ? \App\Models\Lot::where('block', $request->input('block'))->where('lot_number', $lotNumber)->first()
+        : \App\Models\Lot::where('lot_number', $lotNumber)->orWhere('block', 'like', "%$lotNumber%")->first();
     if ($lot) {
         $lot->provider_managed = false;
         $lot->save();
@@ -1722,59 +2016,25 @@ Route::post('/admin/api/billing/pay', function (\Illuminate\Http\Request $reques
         $totalDueBeforePenalty = $bill->amount + $bill->previous_balance;
         $penalty = ($bill->due_date && \Carbon\Carbon::parse($bill->due_date)->isPast()) ? ($totalDueBeforePenalty * 0.05) : 0;
         $totalDue = $totalDueBeforePenalty + $penalty;
-        $totalPaid = \App\Models\Payment::where('utility_bill_id', $bill->id)->sum('amount_paid');
 
-        $remaining = round($totalDue - $totalPaid, 2);
-        if ($remaining <= 0) {
-            return response()->json(['success' => false, 'message' => 'Bill is already fully paid.'], 400);
-        }
-        if ($amount > $remaining) {
-            return response()->json(['success' => false, 'message' => 'Payment amount exceeds the remaining balance.'], 400);
-        }
-
-        \App\Models\Payment::create([
-            'id' => (string) \Illuminate\Support\Str::uuid(),
-            'utility_bill_id' => $bill->id,
-            'amount_paid' => $amount,
-            'method' => 'Office',
-            'trn' => 'TRN-' . strtoupper(\Illuminate\Support\Str::random(8)),
-            'payment_date' => now(),
-        ]);
-
-        $totalPaidAfter = \App\Models\Payment::where('utility_bill_id', $bill->id)->sum('amount_paid');
-        if ($totalPaidAfter >= $totalDue - 0.01) {
-            $bill->update(['status' => 'paid']);
+        try {
+            app(\App\Services\PaymentRecorder::class)->recordUtilityPayment(
+                $bill,
+                $amount,
+                'Office',
+                null,
+                'TRN-' . strtoupper(\Illuminate\Support\Str::random(8)),
+                now(),
+                (float) $totalDue
+            );
+        } catch (\App\Exceptions\PaymentRejectedException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
         }
 
         return response()->json(['success' => true]);
     }
     return response()->json(['success' => false], 404);
 });
-
-Route::put('/admin/users/{id}/archive', function ($id) {
-    $user = \App\Models\User::find($id);
-    if ($user) {
-        foreach ($user->lots as $lot) {
-            $lot->update(['status' => 'Vacant House']);
-        }
-        $user->update(['status' => 'Archived']);
-        return response()->json(['success' => true]);
-    }
-    return response()->json(['success' => false], 404);
-});
-
-Route::put('/admin/users/{id}/restore', function ($id) {
-    $user = \App\Models\User::find($id);
-    if ($user) {
-        foreach ($user->lots as $lot) {
-            $lot->update(['status' => 'Occupied']);
-        }
-        $user->update(['status' => 'Active']);
-        return response()->json(['success' => true]);
-    }
-    return response()->json(['success' => false], 404);
-});
-
 
 /* =========================================================================
    API Endpoints for Mail / Notifications (External Integrations)

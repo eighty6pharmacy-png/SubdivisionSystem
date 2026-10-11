@@ -114,15 +114,23 @@ class BuyerPortalController extends Controller
         $dp = Downpayment::find($request->input('dp_id'));
         if (!$dp) return response()->json(['success' => false, 'message' => 'Downpayment not found.'], 404);
 
-        $amount = $dp->monthly_amortization;
-        if ($dp->balance < $amount) $amount = $dp->balance;
+        $principal = min((float) $dp->monthly_amortization, (float) $dp->balance);
+        $penalty = $dp->latePenaltyAmount($principal);
 
         $lineItems = [[
             'currency' => 'PHP',
-            'amount' => (int) round($amount * 100),
+            'amount' => (int) round($principal * 100),
             'name' => 'Downpayment Amortization',
             'quantity' => 1
         ]];
+        if ($penalty > 0) {
+            $lineItems[] = [
+                'currency' => 'PHP',
+                'amount' => (int) round($penalty * 100),
+                'name' => 'Late Payment Penalty (' . rtrim(rtrim(number_format((float) $dp->penalty_percentage, 2), '0'), '.') . '%)',
+                'quantity' => 1
+            ];
+        }
 
         return $this->createCheckoutSession($lineItems, 'DP-' . $dp->id, 'Subdivision Downpayment', $dp);
     }

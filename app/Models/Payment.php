@@ -18,6 +18,7 @@ class Payment extends Model
         'method',
         'trn',
         'payment_date',
+        'paymongo_payment_id',
     ];
 
     protected function casts(): array

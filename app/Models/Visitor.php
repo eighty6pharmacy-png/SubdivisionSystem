@@ -31,4 +31,10 @@ class Visitor extends Model
     {
         return $this->belongsTo(User::class, 'host_id');
     }
+
+    // Not named guard(): that would override Model::guard(array $guarded).
+    public function guardUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'guard_id');
+    }
 }

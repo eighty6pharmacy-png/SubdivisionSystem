@@ -2,12 +2,18 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\BillStatus;
+use App\Services\PaymentRecorder;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 class SyncPaymongoCheckouts
 {
+    public function __construct(private PaymentRecorder $recorder)
+    {
+    }
+
     /**
      * Handle an incoming request.
      *
@@ -27,45 +33,45 @@ class SyncPaymongoCheckouts
         return $next($request);
     }
 
+    private function fetchCheckoutSession(string $checkoutId): ?array
+    {
+        $response = \Illuminate\Support\Facades\Http::withHeaders([
+            'accept' => 'application/json',
+            'authorization' => 'Basic ' . base64_encode(config('services.paymongo.secret_key') . ':')
+        ])->get('https://api.paymongo.com/v1/checkout_sessions/' . $checkoutId);
+
+        return $response->successful() ? $response->json() : null;
+    }
+
     private function syncResidentBills($user)
     {
         $pendingBills = \App\Models\UtilityBill::where('user_id', $user->id)
-            ->where('status', '!=', 'paid')
+            ->where('status', '!=', BillStatus::Paid->value)
             ->whereNotNull('paymongo_checkout_id')
             ->get();
             
         foreach ($pendingBills as $bill) {
             try {
-                $response = \Illuminate\Support\Facades\Http::withHeaders([
-                    'accept' => 'application/json',
-                    'authorization' => 'Basic ' . base64_encode(config('services.paymongo.secret_key') . ':')
-                ])->get('https://api.paymongo.com/v1/checkout_sessions/' . $bill->paymongo_checkout_id);
+                $sessionData = $this->fetchCheckoutSession($bill->paymongo_checkout_id);
                 
-                if ($response->successful()) {
-                    $sessionData = $response->json();
-                    $payments = $sessionData['data']['attributes']['payments'] ?? [];
-                    
-                    $paidPayment = collect($payments)->first(function ($payment) {
-                        return $payment['attributes']['status'] === 'paid';
-                    });
+                if ($sessionData) {
+                    $sessionAttributes = $sessionData['data']['attributes'] ?? [];
+                    $paidPayment = PaymentRecorder::paidPayment($sessionAttributes['payments'] ?? []);
                     
                     if ($paidPayment) {
-                        $sourceType = $paidPayment['attributes']['source']['type'] ?? '';
-                        $method = $sourceType === 'gcash' ? 'GCash' : ($sourceType ? ucfirst($sourceType) : 'PayMongo');
-                        $trn = $paidPayment['attributes']['payment_intent_id'] ?? ('PM-' . strtoupper(\Illuminate\Support\Str::random(8)));
-                        $trn .= '-' . substr($bill->id, 0, 8);
+                        $method = PaymentRecorder::methodFromSource($paidPayment['attributes']['source']['type'] ?? '', 'PayMongo');
+                        $trn = PaymentRecorder::onlineTrn($paidPayment['attributes']['payment_intent_id'] ?? null, $bill->id);
                         $exactAmount = isset($paidPayment['attributes']['amount']) ? ($paidPayment['attributes']['amount'] / 100) : ($bill->amount + $bill->previous_balance);
                         $paidAt = isset($paidPayment['attributes']['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paidPayment['attributes']['paid_at'], config('app.timezone')) : now();
-                        
-                        \App\Models\Payment::create([
-                            'id' => (string) \Illuminate\Support\Str::uuid(),
-                            'utility_bill_id' => $bill->id,
-                            'amount_paid' => $exactAmount,
-                            'method' => $method,
-                            'trn' => $trn,
-                            'payment_date' => $paidAt,
-                        ]);
-                        $bill->update(['status' => 'paid']);
+
+                        $this->recorder->recordUtilityPayment(
+                            $bill,
+                            (float) $exactAmount,
+                            $method,
+                            PaymentRecorder::paymongoPaymentId($paidPayment, $sessionAttributes),
+                            $trn,
+                            $paidAt
+                        );
                     }
                 }
             } catch (\Exception $e) {
@@ -93,47 +99,24 @@ class SyncPaymongoCheckouts
 
         foreach ($pendingDps as $dp) {
             try {
-                $response = \Illuminate\Support\Facades\Http::withHeaders([
-                    'accept' => 'application/json',
-                    'authorization' => 'Basic ' . base64_encode(config('services.paymongo.secret_key') . ':')
-                ])->get('https://api.paymongo.com/v1/checkout_sessions/' . $dp->paymongo_checkout_id);
+                $sessionData = $this->fetchCheckoutSession($dp->paymongo_checkout_id);
 
-                if ($response->successful()) {
-                    $sessionData = $response->json();
-                    $payments = $sessionData['data']['attributes']['payments'] ?? [];
-                    $paidPayment = collect($payments)->first(function ($payment) {
-                        return $payment['attributes']['status'] === 'paid';
-                    });
+                if ($sessionData) {
+                    $sessionAttributes = $sessionData['data']['attributes'] ?? [];
+                    $paidPayment = PaymentRecorder::paidPayment($sessionAttributes['payments'] ?? []);
 
                     if ($paidPayment) {
                         $exactAmount = isset($paidPayment['attributes']['amount']) ? ($paidPayment['attributes']['amount'] / 100) : $dp->monthly_amortization;
-                        $dp->amount += $exactAmount;
-                        $dp->balance -= $exactAmount;
-                        if ($dp->balance <= 0) {
-                            $dp->status = 'Fully Paid';
-                            $dp->balance = 0;
-                        } else {
-                            $dp->status = 'Good Standing';
-                        }
-                        $dp->due_date = \Carbon\Carbon::parse($dp->due_date)->addMonth();
-                        $dp->paymongo_checkout_id = null;
-                        $dp->save();
+                        $method = PaymentRecorder::methodFromSource($paidPayment['attributes']['source']['type'] ?? '', 'Online Payment');
+                        $trn = PaymentRecorder::onlineTrn($paidPayment['attributes']['payment_intent_id'] ?? null, $dp->id);
 
-                        $sourceType = $paidPayment['attributes']['source']['type'] ?? '';
-                        $method = $sourceType === 'gcash' ? 'GCash' : ($sourceType ? ucfirst($sourceType) : 'Online Payment');
-
-                        $trn = 'PM-' . strtoupper(\Illuminate\Support\Str::random(8)) . '-' . substr($dp->id, 0, 8);
-                        \Illuminate\Support\Facades\DB::table('downpayment_histories')->insert([
-                            'id' => (string) \Illuminate\Support\Str::uuid(),
-                            'downpayment_id' => $dp->id,
-                            'amount' => $exactAmount,
-                            'payment_date' => now(),
-                            'trn' => $trn,
-                            'payment_method' => $method,
-                            'status' => 'Paid',
-                            'created_at' => now(),
-                            'updated_at' => now()
-                        ]);
+                        $this->recorder->recordDownpaymentPayment(
+                            $dp,
+                            (float) $exactAmount,
+                            $method,
+                            PaymentRecorder::paymongoPaymentId($paidPayment, $sessionAttributes),
+                            $trn
+                        );
                     }
                 }
             } catch (\Exception $e) {
@@ -151,33 +134,24 @@ class SyncPaymongoCheckouts
 
         if ($fin) {
             try {
-                $response = \Illuminate\Support\Facades\Http::withHeaders([
-                    'accept' => 'application/json',
-                    'authorization' => 'Basic ' . base64_encode(config('services.paymongo.secret_key') . ':')
-                ])->get('https://api.paymongo.com/v1/checkout_sessions/' . $fin->paymongo_checkout_id);
+                $sessionData = $this->fetchCheckoutSession($fin->paymongo_checkout_id);
 
-                if ($response->successful()) {
-                    $sessionData = $response->json();
-                    $payments = $sessionData['data']['attributes']['payments'] ?? [];
-                    $paidPayment = collect($payments)->first(function ($payment) {
-                        return $payment['attributes']['status'] === 'paid';
-                    });
+                if ($sessionData) {
+                    $sessionAttributes = $sessionData['data']['attributes'] ?? [];
+                    $paidPayment = PaymentRecorder::paidPayment($sessionAttributes['payments'] ?? []);
 
                     if ($paidPayment) {
                         $exactAmount = isset($paidPayment['attributes']['amount']) ? ($paidPayment['attributes']['amount'] / 100) : $fin->balance;
-                        $fin->amount_paid += $exactAmount;
-                        $fin->balance = max(0, $fin->receivables - $fin->amount_paid);
-                        $fin->paymongo_checkout_id = null;
-                        $fin->save();
-                        
-                        \Illuminate\Support\Facades\DB::table('financing_payment_histories')->insert([
-                            'id' => (string) \Illuminate\Support\Str::uuid(),
-                            'financing_record_id' => $fin->id,
-                            'amount_paid' => $exactAmount,
-                            'payment_date' => now(),
-                            'created_at' => now(),
-                            'updated_at' => now()
-                        ]);
+                        $method = PaymentRecorder::methodFromSource($paidPayment['attributes']['source']['type'] ?? '', 'Online Payment');
+                        $trn = PaymentRecorder::onlineTrn($paidPayment['attributes']['payment_intent_id'] ?? null, $fin->id);
+
+                        $this->recorder->recordFinancingPayment(
+                            $fin,
+                            (float) $exactAmount,
+                            $method,
+                            PaymentRecorder::paymongoPaymentId($paidPayment, $sessionAttributes),
+                            $trn
+                        );
                     }
                 }
             } catch (\Exception $e) {

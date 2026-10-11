@@ -17,8 +17,11 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Ensure Admin role exists
-        $adminRole = Role::firstOrCreate(['name' => 'Admin']);
+        foreach (['Admin', 'Resident', 'Buyer', 'Security Guard', 'Finance Officer'] as $roleName) {
+            Role::firstOrCreate(['name' => $roleName, 'guard_name' => 'web']);
+        }
+
+        $adminRole = Role::findByName('Admin', 'web');
 
         // Create Admin User
         $user = User::updateOrCreate(

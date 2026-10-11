@@ -51,6 +51,9 @@
                 $progressPercent = $totalDp > 0 ? ($dp->amount / $totalDp) * 100 : 0;
                 $circumference = 2 * 3.14159 * 52;
                 $cerStroke = ($progressPercent / 100) * $circumference;
+                $principalDue = min((float) $dp->monthly_amortization, (float) $dp->balance);
+                $penaltyDue = $dp->latePenaltyAmount($principalDue);
+                $payNow = $principalDue + $penaltyDue;
             @endphp
             
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin-bottom: 24px;">
@@ -89,7 +92,7 @@
                     @if($dp->balance > 0)
                     <div style="margin-top: 24px;">
                         <button id="payDpBtn_{{ $dp->id }}" class="btn btn-primary" style="width: 100%; padding: 14px; font-weight: 700; background: #0057B8; cursor: pointer; border: none; border-radius: 8px; color: #fff; text-transform: uppercase; font-size: 14px; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'" onclick="payDownpayment('{{ $dp->id }}')">
-                            📱 Pay ₱{{ number_format($dp->monthly_amortization, 2) }} via GCash
+                            Pay ₱{{ number_format($payNow, 2) }} via GCash
                         </button>
                     </div>
                     @endif
