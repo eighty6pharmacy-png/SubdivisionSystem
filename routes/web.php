@@ -396,6 +396,10 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::post('/api/appointments', function (\Illuminate\Http\Request $request) {
+    if ($emailError = \App\Rules\BookableAppointmentEmail::responseIfInvalid($request)) {
+        return $emailError;
+    }
+
     // ── Real reCAPTCHA v2 Server-Side Verification ──────────────────────────
     $token = $request->input('recaptcha_token');
     if (!$token) {
@@ -454,6 +458,10 @@ Route::put('/api/incidents/{id}/status', function (\Illuminate\Http\Request $req
 });
 
 Route::put('/api/appointments/{id}/email', function (\Illuminate\Http\Request $request, $id) {
+    if ($emailError = \App\Rules\BookableAppointmentEmail::responseIfInvalid($request)) {
+        return $emailError;
+    }
+
     $apt = \App\Models\Appointment::whereRaw('id::text LIKE ?', [$id . '%'])->first();
     if ($apt) {
         $apt->update(['email' => $request->input('email')]);
