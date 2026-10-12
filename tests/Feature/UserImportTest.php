@@ -104,7 +104,8 @@ class UserImportTest extends TestCase
             'external_id' => '1001',
             'email' => 'juan@example.test',
             'contact_number' => '09181234567',
-            'name' => 'Juan Dela Cruz',
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
         ]);
 
         Queue::assertNothingPushed();

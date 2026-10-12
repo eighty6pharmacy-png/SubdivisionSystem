@@ -259,7 +259,7 @@ Route::prefix('resident')->middleware(['auth', 'web', 'role:Resident', 'sync_pay
 
     Route::post('/api/billing/pay', function (\Illuminate\Http\Request $request) {
         $billId = $request->input('bill_id');
-        $bill = \App\Models\UtilityBill::whereRaw('id::text LIKE ?', [$billId . '%'])->where('status', '!=', 'paid')->first();
+        $bill = \App\Models\UtilityBill::whereKey($billId)->where('status', '!=', 'paid')->first();
 
         if (!$bill) {
             return response()->json(['success' => false, 'message' => 'Bill not found or already paid.'], 404);
@@ -587,7 +587,7 @@ Route::put('/api/incidents/{id}/status', function (\Illuminate\Http\Request $req
         return response()->json(['success' => false, 'message' => 'Invalid incident status. Allowed: ' . implode(', ', \App\Enums\IncidentStatus::values()) . '.'], 422);
     }
 
-    $inc = \App\Models\Incident::whereRaw('id::text LIKE ?', [str_replace(['%', '_'], ['\%', '\_'], $id) . '%'])->first();
+    $inc = \App\Models\Incident::whereKey($id)->first();
     if ($inc) {
         $inc->update(['status' => $request->input('status')]);
         if ($inc->user) {
@@ -603,7 +603,7 @@ Route::put('/api/incidents/{id}/status', function (\Illuminate\Http\Request $req
 });
 
 Route::put('/api/appointments/{id}/email', function (\Illuminate\Http\Request $request, $id) {
-    $apt = \App\Models\Appointment::whereRaw('id::text LIKE ?', [$id . '%'])->first();
+    $apt = \App\Models\Appointment::whereKey($id)->first();
     if ($apt) {
         $apt->update(['email' => $request->input('email')]);
         return response()->json(['success' => true]);
@@ -618,7 +618,7 @@ Route::put('/api/appointments/{id}/status', function (\Illuminate\Http\Request $
         return response()->json(['success' => false, 'message' => 'Invalid appointment status. Allowed: ' . implode(', ', \App\Enums\AppointmentStatus::values()) . '.'], 422);
     }
 
-    $apt = \App\Models\Appointment::whereRaw('id::text LIKE ?', [$id . '%'])->first();
+    $apt = \App\Models\Appointment::whereKey($id)->first();
     if ($apt) {
         $oldStatus = $apt->status;
         $apt->update([
@@ -628,7 +628,7 @@ Route::put('/api/appointments/{id}/status', function (\Illuminate\Http\Request $
         
         if ($request->input('status') === 'Completed' && $oldStatus !== 'Completed') {
             \App\Models\Visitor::create([
-                'host_id' => null,
+                'resident_id' => null,
                 'visitor_name' => $apt->client_name,
                 'pin' => $apt->pin,
                 'purpose' => 'Appointment: ' . $apt->type,
@@ -638,7 +638,7 @@ Route::put('/api/appointments/{id}/status', function (\Illuminate\Http\Request $
                 'plate_number' => 'N/A',
                 'type' => 'Appointment',
                 'visitor_address' => 'N/A',
-                'guard_id' => auth()->id(),
+                'guard_id' => auth()->user()?->guardAccount ? auth()->id() : null,
                 'guard_name' => auth()->check() ? auth()->user()->name : 'Guard',
             ]);
         }
@@ -858,9 +858,9 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
     // User Management System
     Route::get('/users', function () {
-        $users = \App\Models\User::with(['lots', 'roles'])->get()->map(function (\App\Models\User $u) {
+        $users = \App\Models\User::with(['lots', 'roles', 'buyerMasterList.lot'])->get()->map(function (\App\Models\User $u) {
             $role = $u->roles->first()->name ?? 'Resident';
-            $lot = $u->lots->first();
+            $lot = $u->lots->first() ?? $u->buyerMasterList?->lot;
             return [
                 'id' => $u->external_id
                     ? 'USR-' . $u->external_id
@@ -868,11 +868,15 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                 'db_id' => $u->id,
                 'external_id' => $u->external_id,
                 'name' => $u->name,
+                'first_name' => $u->first_name,
+                'middle_name' => $u->middle_name,
+                'last_name' => $u->last_name,
                 'email' => $u->email,
                 'role' => $role,
                 'status' => $u->status ?? 'Active',
                 'joined' => $u->created_at->format('Y-m-d'),
                 'contact_number' => $u->contact_number,
+                'can_log_in' => $u->password !== null,
                 'block' => $lot ? $lot->block : '',
                 'lot' => $lot ? $lot->lot_number : '',
                 'meta' => $lot ? 'Block ' . $lot->block . ', Lot ' . $lot->lot_number : ''
@@ -890,7 +894,10 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         ]);
 
         $validated = $request->validate([
-            'name' => 'required|string',
+            'first_name' => 'required_without:name|nullable|string|max:255',
+            'middle_name' => 'nullable|string|max:255',
+            'last_name' => 'required_without:name|nullable|string|max:255',
+            'name' => 'required_without:first_name|nullable|string|max:255',
             'email' => ['required', 'email:rfc,dns', \Illuminate\Validation\Rule::unique('users', 'email')->whereNull('deleted_at'), function (string $attribute, mixed $value, \Closure $fail) {
                 $domain = substr(strrchr(strtolower((string) $value), '@') ?: '', 1);
                 if ($domain === '' || (!checkdnsrr($domain, 'MX') && !checkdnsrr($domain, 'A'))) {
@@ -910,23 +917,28 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'contact_number.regex' => 'Use a Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX.',
         ]);
 
-        $user = \App\Models\User::create([
-            'name' => $validated['name'],
+        $userAttributes = [
             'email' => $validated['email'],
             'contact_number' => $validated['contact_number'] ?? null,
             'password' => \Illuminate\Support\Facades\Hash::make($validated['password']),
-        ]);
+        ];
+        if (! empty($validated['first_name'])) {
+            $userAttributes['first_name'] = $validated['first_name'];
+            $userAttributes['middle_name'] = trim((string) ($validated['middle_name'] ?? '')) ?: null;
+            $userAttributes['last_name'] = $validated['last_name'] ?? null;
+        } else {
+            $userAttributes['name'] = $validated['name'];
+        }
+        $user = \App\Models\User::create($userAttributes);
         $user->assignRole($validated['role']);
 
-        if ($request->has('block') && $request->has('lot')) {
-            if (!empty($validated['block']) && !empty($validated['lot'])) {
-                $lot = \App\Models\Lot::firstOrCreate([
-                    'block' => (string) $validated['block'],
-                    'lot_number' => (string) $validated['lot'],
-                ]);
-                $user->lots()->attach($lot->id);
-                $lot->update(['status' => 'Occupied']);
-            }
+        if (($validated['role'] ?? '') === 'Resident' && ! empty($validated['block']) && ! empty($validated['lot'])) {
+            $lot = \App\Models\Lot::firstOrCreate([
+                'block' => (string) $validated['block'],
+                'lot_number' => (string) $validated['lot'],
+            ]);
+            $user->lots()->attach($lot->id);
+            $lot->update(['status' => 'Occupied']);
         }
 
         try {
@@ -959,7 +971,10 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             ]);
 
             $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
-                'name' => 'required|string',
+                'first_name' => 'required_without:name|nullable|string|max:255',
+                'middle_name' => 'nullable|string|max:255',
+                'last_name' => 'required_without:name|nullable|string|max:255',
+                'name' => 'required_without:first_name|nullable|string|max:255',
                 'email' => ['required', 'email:rfc,dns', \Illuminate\Validation\Rule::unique('users', 'email')->whereNull('deleted_at')->ignore($user->id), function (string $attribute, mixed $value, \Closure $fail) {
                     $domain = substr(strrchr(strtolower((string) $value), '@') ?: '', 1);
                     if ($domain === '' || (!checkdnsrr($domain, 'MX') && !checkdnsrr($domain, 'A'))) {
@@ -985,7 +1000,13 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             }
 
             $validated = $validator->validated();
-            $user->name = $validated['name'];
+            if (! empty($validated['first_name'])) {
+                $user->first_name = $validated['first_name'];
+                $user->middle_name = trim((string) ($validated['middle_name'] ?? '')) ?: null;
+                $user->last_name = $validated['last_name'] ?? null;
+            } else {
+                $user->name = $validated['name'];
+            }
             $user->email = $validated['email'];
             $user->contact_number = $validated['contact_number'];
             if (!empty($validated['password'] ?? null)) {
@@ -994,9 +1015,14 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             $user->save();
 
             if ($request->has('role')) {
+                $reason = $user->refusalForRoleChange((string) $request->input('role'));
+                if ($reason) {
+                    return response()->json(['success' => false, 'message' => $reason], 422);
+                }
                 $user->syncRoles([$request->input('role')]);
             }
-            if ($request->has('block') && $request->has('lot')) {
+            $roleName = $request->input('role') ?: $user->roles()->first()?->name;
+            if ($roleName === 'Resident' && $request->has('block') && $request->has('lot')) {
                 if (!empty($request->input('block')) && !empty($request->input('lot'))) {
                     $lot = \App\Models\Lot::firstOrCreate([
                         'block' => (string) $request->input('block'),
@@ -1101,11 +1127,11 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             return response()->json(['success' => false, 'message' => 'Lot already has an active reservation.'], 422);
         }
 
-        return response()->json(['success' => true, 'id' => substr($res->id, 0, 8)]);
+        return response()->json(['success' => true, 'id' => $res->id]);
     });
 
     Route::post('/reservation-fee/cancel', function (\Illuminate\Http\Request $request) {
-        $res = \App\Models\Reservation::whereRaw('CAST(id AS TEXT) LIKE ?', [$request->input('id') . '%'])->first();
+        $res = \App\Models\Reservation::whereKey($request->input('id'))->first();
         if ($res) {
             $res->update(['status' => \App\Enums\ReservationStatus::Cancelled->value]);
             if ($res->lot) {
@@ -1120,7 +1146,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $buyerId = $request->input('buyer_master_list_id');
         
         // Prevent duplication
-        $existingRes = \App\Models\Reservation::where('buyer_master_list_id', $buyerId)
+        $existingRes = \App\Models\Reservation::where('buyer_id', $buyerId)
             ->whereHas('downpayments')
             ->first();
         if ($existingRes) {
@@ -1130,7 +1156,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         try {
             $dp = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $buyerId) {
                 // Use existing reservation without downpayment, or create a structural one
-                $res = \App\Models\Reservation::where('buyer_master_list_id', $buyerId)
+                $res = \App\Models\Reservation::where('buyer_id', $buyerId)
                     ->whereDoesntHave('downpayments')
                     ->first();
 
@@ -1168,16 +1194,40 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                 ]);
 
                 // "Client First" Workflow: Sync back the newly established contract details to the Masterlist
-                $buyer = \App\Models\BuyerMasterList::find($request->input('buyer_master_list_id'));
+                $buyer = \App\Models\BuyerMasterList::with('financingRecord')->find($request->input('buyer_master_list_id'));
                 if ($buyer) {
-                    $buyer->lot_id = \App\Models\Lot::where('block', $request->input('block'))
+                    $lotId = \App\Models\Lot::where('block', $request->input('block'))
                         ->where('lot_number', $request->input('lot'))
                         ->value('id') ?? $res->lot_id;
-                    $buyer->block_no = $request->input('block');
-                    $buyer->lot_no = $request->input('lot');
-                    $buyer->contract_amount = $request->input('contract_amount');
-                    $buyer->equity = $request->input('dpAmount');
+                    $buyer->lot_id = $lotId;
                     $buyer->save();
+
+                    $contract = (float) ($request->input('contract_amount') ?? 0);
+                    $equity = (float) ($request->input('dpAmount') ?? 0);
+                    $record = $buyer->financingRecord ?? new \App\Models\FinancingRecord([
+                        'buyer_id' => $buyer->id,
+                        'lot_id' => $lotId,
+                        'status' => \App\Enums\FinancingStatus::Pending->value,
+                    ]);
+                    $record->lot_id = $record->lot_id ?: $lotId;
+                    $record->contract_price = $contract;
+                    $record->total_consideration = $contract
+                        + (float) $record->mbrdc_add_fees
+                        + (float) $record->other_exp_annotation
+                        + (float) $record->improvements_fee;
+                    $record->paid_by_vendee_equity = $equity;
+                    $record->mbrdc_amt_due_for_financing = $record->total_consideration - $equity;
+                    $retentionOnHold = $record->retention_on_hold === null ? true : (bool) $record->retention_on_hold;
+                    $totalDeductions = (float) $record->inspection_fee
+                        + ($retentionOnHold ? (float) $record->retention_fee : 0)
+                        + (float) $record->sri_mri
+                        + (float) $record->pag_ibig_non_life
+                        + (float) $record->interim_mri;
+                    $record->total_amt_due = $totalDeductions;
+                    $record->net_loan_proceeds = (float) $record->loan_release - $totalDeductions;
+                    $record->receivables = max(0, (float) $record->mbrdc_amt_due_for_financing - (float) $record->loan_release + (float) $record->additional_bill_of_materials + (float) $record->mbrdc_turn_over_fee);
+                    $record->balance = max(0, (float) $record->receivables - (float) $record->amount_paid);
+                    $record->save();
                 }
 
                 return $dp;
@@ -1186,11 +1236,11 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             return response()->json(['success' => false, 'message' => 'This lot already has an active reservation, or this reservation already has a downpayment schedule.'], 422);
         }
 
-        return response()->json(['success' => true, 'id' => substr($dp->id, 0, 8)]);
+        return response()->json(['success' => true, 'id' => $dp->id]);
     });
 
     Route::post('/downpayment-fee/pay', function (\Illuminate\Http\Request $request) {
-        $dp = \App\Models\Downpayment::whereRaw('CAST(id AS TEXT) LIKE ?', [$request->input('id') . '%'])->first();
+        $dp = \App\Models\Downpayment::whereKey($request->input('id'))->first();
         if ($dp) {
             $history = app(\App\Services\PaymentRecorder::class)->recordDownpaymentPayment(
                 $dp,
@@ -1233,7 +1283,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         // Only fetch buyers who DO NOT have an active or pending reservation
         $masterListBuyers = \App\Models\BuyerMasterList::whereDoesntHave('reservations', function ($q) {
             $q->whereIn('status', ['Reserved', 'Pending']);
-        })->orderBy('last_name')->get();
+        })->get()->sortBy(fn ($buyer) => $buyer->last_name)->values();
 
         return view('admin.reservation-fee.index', [
             'bills' => getReservationFees(),
@@ -1262,7 +1312,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         ];
         
         // Only fetch buyers who DO NOT have any downpayments yet
-        $masterListBuyers = \App\Models\BuyerMasterList::whereDoesntHave('reservations.downpayments')->orderBy('last_name')->get();
+        $masterListBuyers = \App\Models\BuyerMasterList::with('financingRecord')->whereDoesntHave('reservations.downpayments')->get()->sortBy(fn ($buyer) => $buyer->last_name)->values();
 
         return view('admin.downpayment-fee.index', [
             'bills' => getDownpaymentFees(),
@@ -1293,16 +1343,30 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'content' => 'required|string',
         ]);
 
+        $admin = \Illuminate\Support\Facades\Auth::user();
+        \App\Models\AdminAccount::firstOrCreate(['user_id' => $admin->id]);
+
         $ann = \App\Models\Announcement::create([
             'title' => $validated['title'],
             'category' => $validated['category'],
             'content' => $validated['content'],
-            'author' => \Illuminate\Support\Facades\Auth::user()->name ?? 'Admin',
+            'author' => $admin->name ?? 'Admin',
+            'admin_id' => $admin->id,
             'status' => 'Published',
             'publish_date' => now(),
         ]);
 
-        // Dispatch job to send emails to all residents in the background
+        $now = now();
+        $recipientRows = \App\Models\Resident::query()->pluck('user_id')->map(fn ($residentId) => [
+            'announcement_id' => $ann->id,
+            'resident_id' => $residentId,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ])->all();
+        if ($recipientRows !== []) {
+            \Illuminate\Support\Facades\DB::table('announcement_recipients')->insert($recipientRows);
+        }
+
         \App\Jobs\SendAnnouncementEmails::dispatch($ann);
 
         return response()->json(['success' => true, 'message' => 'Announcement posted and emails sent.']);
@@ -1324,8 +1388,12 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             ['block' => $request->input('block'), 'lot_number' => $request->input('lot')]
         );
 
-        if ($lot->users()->exists()) {
-            return response()->json(['success' => false, 'message' => 'Lot is occupied by a resident and cannot be changed.'], 403);
+        $occupiedByResident = $lot->users()->where(function ($q) {
+            $q->where('status', '!=', 'Archived')->orWhereNull('status');
+        })->exists();
+        $occupiedByBuyer = \App\Models\BuyerMasterList::where('lot_id', $lot->id)->exists();
+        if ($occupiedByResident || $occupiedByBuyer) {
+            return response()->json(['success' => false, 'message' => 'Lot is occupied and cannot be changed.'], 403);
         }
 
         $lot->update(['status' => $request->input('status')]);
@@ -1443,12 +1511,12 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
         
         $user = \Illuminate\Support\Facades\Auth::user();
         
-        $latestBill = \App\Models\UtilityBill::where('user_id', $user->id)
+        $latestBill = \App\Models\UtilityBill::where('resident_id', $user->id)
             ->where('type', $type)
             ->orderBy('created_at', 'desc')
             ->first();
             
-        $query = \App\Models\UtilityBill::where('user_id', $user->id)
+        $query = \App\Models\UtilityBill::where('resident_id', $user->id)
             ->where('type', $type)
             ->orderBy('created_at', 'desc');
             
@@ -1462,7 +1530,7 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
 
     Route::get('/bills/history/{type}/pdf/{id}', function ($type, $id) {
         $bill = \App\Models\UtilityBill::with(['user', 'lot'])->findOrFail($id);
-        if ($bill->user_id !== \Illuminate\Support\Facades\Auth::id()) abort(403);
+        if ($bill->resident_id !== \Illuminate\Support\Facades\Auth::id()) abort(403);
         
         $pdf = app('dompdf.wrapper');
         $pdf->loadView('resident.bill_pdf', compact('bill'));
@@ -1537,7 +1605,7 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
     });
     Route::get('/incidents', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
-        $reports = \App\Models\Incident::where('user_id', $user->id)
+        $reports = \App\Models\Incident::where('resident_id', $user->id)
             ->orderBy('created_at', 'desc')
             ->get();
         $admin = \App\Models\User::role('Admin')->whereNotNull('contact_number')->first();
@@ -1570,7 +1638,8 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             'type' => $request->input('type'),
             'description' => $request->input('description'),
             'status' => 'pending',
-            'user_id' => \Illuminate\Support\Facades\Auth::id(),
+            'resident_id' => \Illuminate\Support\Facades\Auth::id(),
+            'reporter_name' => \Illuminate\Support\Facades\Auth::user()?->name,
             'image_url' => count($imageUrls) > 0 ? json_encode($imageUrls) : null,
         ]);
         
@@ -1594,7 +1663,7 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             return response()->json(['success' => false, 'message' => 'Invalid incident status. Allowed: ' . implode(', ', \App\Enums\IncidentStatus::values()) . '.'], 422);
         }
 
-        $inc = \App\Models\Incident::whereRaw('id::text LIKE ?', [$id . '%'])->first();
+        $inc = \App\Models\Incident::whereKey($id)->first();
         if ($inc) {
             $inc->update(['status' => $request->input('status')]);
         }
@@ -1822,7 +1891,8 @@ Route::post('/resident/incidents', function (\Illuminate\Http\Request $request) 
         'subject' => $validated['subject'],
         'type' => $validated['type'],
         'description' => $validated['description'],
-        'user_id' => \Illuminate\Support\Facades\Auth::id(),
+        'resident_id' => \Illuminate\Support\Facades\Auth::id(),
+        'reporter_name' => \Illuminate\Support\Facades\Auth::user()?->name,
         'status' => 'pending',
         'image_url' => $finalImageUrl
     ]);
@@ -1936,9 +2006,9 @@ Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $r
 
         try {
             $bill = \App\Models\UtilityBill::create([
-                'id' => (string) \Illuminate\Support\Str::uuid(),
                 'type' => $type,
-                'user_id' => $user ? $user->id : null,
+                'resident_id' => $user?->resident ? $user->id : null,
+                'billed_to_name' => $user?->name,
                 'lot_id' => $lot->id,
                 'previous_reading' => $prevReading,
                 'previous_reading_date' => $prevDate,
@@ -1999,7 +2069,7 @@ Route::post('/admin/api/billing/reconnect', function (\Illuminate\Http\Request $
 Route::post('/admin/api/billing/add-balance', function (\Illuminate\Http\Request $request) {
     $id = $request->input('id');
     $balance = (float) $request->input('balance');
-    $bill = \App\Models\UtilityBill::whereRaw('id::text LIKE ?', [$id . '%'])->first();
+    $bill = \App\Models\UtilityBill::whereKey($id)->first();
     if ($bill) {
         $bill->update(['previous_balance' => $bill->previous_balance + $balance]);
         return response()->json(['success' => true]);
@@ -2011,7 +2081,7 @@ Route::post('/admin/api/billing/pay', function (\Illuminate\Http\Request $reques
     $id = $request->input('id');
     $amount = (float) $request->input('amount');
 
-    $bill = \App\Models\UtilityBill::whereRaw('id::text LIKE ?', [$id . '%'])->first();
+    $bill = \App\Models\UtilityBill::whereKey($id)->first();
     if ($bill) {
         $totalDueBeforePenalty = $bill->amount + $bill->previous_balance;
         $penalty = ($bill->due_date && \Carbon\Carbon::parse($bill->due_date)->isPast()) ? ($totalDueBeforePenalty * 0.05) : 0;
@@ -2195,7 +2265,14 @@ Route::post('/api/send-billing-warning-sms', function (\Illuminate\Http\Request 
     $billId = $request->input('bill_id', 'Unknown');
     $amount = $request->input('amount', '0.00');
 
-    $user = \App\Models\User::where('email', $email)->orWhere('name', $residentName)->first();
+    $nameParts = preg_split('/\s+/', trim((string) $residentName), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $user = \App\Models\User::where('email', $email)->first();
+    if (! $user && $nameParts !== []) {
+        $user = \App\Models\User::query()
+            ->where('first_name', $nameParts[0])
+            ->when(count($nameParts) > 1, fn ($q) => $q->where('last_name', $nameParts[count($nameParts) - 1]))
+            ->first();
+    }
 
     if (!$user || empty($user->contact_number)) {
         return response()->json(['success' => false, 'error' => 'Resident not found or has no contact number.'], 404);

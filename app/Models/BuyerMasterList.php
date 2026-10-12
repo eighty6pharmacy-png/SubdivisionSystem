@@ -3,40 +3,200 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
+use Spatie\Permission\Models\Role;
 
 class BuyerMasterList extends Model
 {
-    use HasUuids, SoftDeletes;
+    use SoftDeletes;
 
+    protected $table = 'buyers';
+
+    protected $with = ['user', 'lot'];
+
+    /**
+     * Identity columns are not stored here. They are read and written through the user account.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
-        'first_name', 'middle_name', 'last_name', 'email', 'civil_status', 'spouse_name',
-        'present_address', 'postal_address', 'contact_number', 'proof_of_id', 'pagibig_number',
-        'financing_method', // Newly added
-        'lot_id', 'block_no', 'lot_no', 'tct_no', 'pid', 'tax_dec_no', 'lot_area', 'floor_area', 'description',
-        'contract_amount', 'improvement_amount', 'equity', 'loan_base', 'loan_term',
-        'monthly_amortization', 'mri_sri', 'insurance', 'mri_ds_1time', 'nonlife_1time',
-        'retention', 'total_deductions'
+        'user_id',
+        'civil_status',
+        'spouse_name',
+        'present_address',
+        'postal_address',
+        'proof_of_id',
+        'pagibig_number',
+        'lot_id',
+        'tct_no',
+        'pid',
+        'tax_dec_no',
+        'lot_area',
+        'floor_area',
+        'description',
     ];
-    
-    public function reservations(): \Illuminate\Database\Eloquent\Relations\HasMany
+
+    /**
+     * @var list<string>
+     */
+    private array $identityPending = [];
+
+    protected static function booted(): void
     {
-        return $this->hasMany(Reservation::class);
+        static::saving(function (BuyerMasterList $buyer) {
+            if ($buyer->identityPending === []) {
+                return;
+            }
+
+            $user = $buyer->relationLoaded('user') ? $buyer->user : $buyer->user()->first();
+            if ($user) {
+                $user->fill($buyer->identityPending)->save();
+                $buyer->unsetRelation('user');
+            }
+            $buyer->identityPending = [];
+        });
     }
 
-    public function user(): \Illuminate\Database\Eloquent\Relations\HasOne
+    public static function create(array $attributes = [])
     {
-        return $this->hasOne(User::class, 'buyer_master_list_id');
+        return DB::transaction(function () use ($attributes) {
+            $userKeys = ['first_name', 'middle_name', 'last_name', 'email', 'contact_number', 'password', 'name', 'external_id', 'status', 'joined_at'];
+            $userAttributes = array_intersect_key($attributes, array_flip($userKeys));
+            $buyerAttributes = array_diff_key($attributes, array_flip(array_merge($userKeys, ['id'])));
+
+            $email = $userAttributes['email'] ?? null;
+            if ($email === null || $email === '') {
+                throw new \InvalidArgumentException('A buyer needs an email address. The buyer form requires one.');
+            }
+
+            unset($userAttributes['password']);
+            $userAttributes['email'] = $email;
+            $userAttributes['status'] = $userAttributes['status'] ?? 'Active';
+
+            $user = User::create($userAttributes);
+            Role::findOrCreate('Buyer', 'web');
+            $user->assignRole('Buyer');
+
+            $buyer = static::query()->where('user_id', $user->id)->first() ?? new static(['user_id' => $user->id]);
+            $buyer->user_id = $user->id;
+            $buyer->fill($buyerAttributes);
+            $buyer->save();
+            $buyer->setRelation('user', $user->fresh());
+
+            return $buyer;
+        });
     }
 
-    public function financingRecord(): \Illuminate\Database\Eloquent\Relations\HasOne
+    public function update(array $attributes = [], array $options = [])
     {
-        return $this->hasOne(FinancingRecord::class, 'buyer_master_list_id');
+        $userKeys = ['first_name', 'middle_name', 'last_name', 'email', 'contact_number', 'password', 'name'];
+        $userAttributes = array_intersect_key($attributes, array_flip($userKeys));
+        $buyerAttributes = array_diff_key($attributes, array_flip(array_merge($userKeys, ['block_no', 'lot_no'])));
+
+        if ($userAttributes !== []) {
+            $user = $this->user()->first();
+            if ($user) {
+                $user->update($userAttributes);
+                $this->unsetRelation('user');
+            }
+        }
+
+        if ($buyerAttributes === []) {
+            return true;
+        }
+
+        return parent::update($buyerAttributes, $options);
     }
 
-    public function lot(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function getBlockNoAttribute(): ?string
+    {
+        return $this->lot?->block;
+    }
+
+    public function setBlockNoAttribute(mixed $value): void
+    {
+    }
+
+    public function getLotNoAttribute(): ?string
+    {
+        return $this->lot?->lot_number;
+    }
+
+    public function setLotNoAttribute(mixed $value): void
+    {
+    }
+
+    public function getFirstNameAttribute(): ?string
+    {
+        return $this->identityPending['first_name'] ?? $this->user?->first_name;
+    }
+
+    public function setFirstNameAttribute(?string $value): void
+    {
+        $this->identityPending['first_name'] = $value;
+    }
+
+    public function getMiddleNameAttribute(): ?string
+    {
+        return $this->identityPending['middle_name'] ?? $this->user?->middle_name;
+    }
+
+    public function setMiddleNameAttribute(?string $value): void
+    {
+        $this->identityPending['middle_name'] = $value;
+    }
+
+    public function getLastNameAttribute(): ?string
+    {
+        return $this->identityPending['last_name'] ?? $this->user?->last_name;
+    }
+
+    public function setLastNameAttribute(?string $value): void
+    {
+        $this->identityPending['last_name'] = $value;
+    }
+
+    public function getEmailAttribute(): ?string
+    {
+        return $this->identityPending['email'] ?? $this->user?->email;
+    }
+
+    public function setEmailAttribute(?string $value): void
+    {
+        $this->identityPending['email'] = $value;
+    }
+
+    public function getContactNumberAttribute(): ?string
+    {
+        return $this->identityPending['contact_number'] ?? $this->user?->contact_number;
+    }
+
+    public function setContactNumberAttribute(?string $value): void
+    {
+        $this->identityPending['contact_number'] = $value;
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id')->withTrashed();
+    }
+
+    public function lot(): BelongsTo
     {
         return $this->belongsTo(Lot::class, 'lot_id');
+    }
+
+    public function reservations(): HasMany
+    {
+        return $this->hasMany(Reservation::class, 'buyer_id', 'id');
+    }
+
+    public function financingRecord(): HasOne
+    {
+        return $this->hasOne(FinancingRecord::class, 'buyer_id', 'id');
     }
 }

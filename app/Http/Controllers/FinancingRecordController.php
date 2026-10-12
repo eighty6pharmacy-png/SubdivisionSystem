@@ -20,7 +20,7 @@ class FinancingRecordController extends Controller
         }
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->whereHas('buyerMasterList', function($q) use ($search) {
+            $query->whereHas('buyerMasterList.user', function($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
                   ->orWhere('last_name', 'like', "%{$search}%");
             });
@@ -45,7 +45,7 @@ class FinancingRecordController extends Controller
 
     public function create()
     {
-        $buyersWithFinancing = FinancingRecord::pluck('buyer_master_list_id')->toArray();
+        $buyersWithFinancing = FinancingRecord::pluck('buyer_id')->toArray();
         $buyers = BuyerMasterList::whereNotIn('id', $buyersWithFinancing)
             ->with('reservations.lot')
             ->get();
@@ -57,25 +57,21 @@ class FinancingRecordController extends Controller
     {
         // Generate from Downpayment / Buyer Info
         // Simplified store logic for now
-        $buyer = BuyerMasterList::findOrFail($request->buyer_id);
-        $lot = $buyer->reservations->first()->lot ?? null;
+        $buyer = BuyerMasterList::with(['reservations.lot', 'lot'])->findOrFail($request->buyer_id);
+        $lotId = $buyer->lot_id ?? $buyer->reservations->first()?->lot_id;
 
-        if (!$lot) {
-            return back()->with('error', 'Buyer has no lot reserved.');
+        if (!$lotId) {
+            return back()->with('error', 'Buyer has no lot assigned.');
         }
 
-        if (FinancingRecord::where('buyer_master_list_id', $buyer->id)->exists()) {
+        if (FinancingRecord::where('buyer_id', $buyer->id)->exists()) {
             return back()->with('error', 'Buyer already has an active financing record. Duplication is not allowed.');
         }
 
         FinancingRecord::create([
-            'buyer_master_list_id' => $buyer->id,
-            'lot_id' => $lot->id,
-            'contract_price' => $buyer->contract_amount ?? 0,
-            'total_consideration' => $buyer->contract_amount ?? 0,
-            'paid_by_vendee_equity' => $buyer->equity ?? 0,
-            'mbrdc_amt_due_for_financing' => ($buyer->contract_amount ?? 0) - ($buyer->equity ?? 0),
-            'status' => FinancingStatus::Pending->value
+            'buyer_id' => $buyer->id,
+            'lot_id' => $lotId,
+            'status' => FinancingStatus::Pending->value,
         ]);
 
         return redirect()->route('financing.index')->with('success', 'Financing Record Created.');
@@ -93,18 +89,35 @@ class FinancingRecordController extends Controller
 
         $request->validate([
             'status' => ['nullable', \Illuminate\Validation\Rule::in(FinancingStatus::values())],
+            'financing_method' => 'nullable|string|max:50',
+            'loan_base' => 'nullable|numeric|min:0',
+            'loan_term' => 'nullable|integer|min:0|max:100',
+            'monthly_amortization' => 'nullable|numeric|min:0',
+            'paid_by_vendee_equity' => 'nullable|numeric|min:0',
         ]);
         
         $data = $request->all();
+        foreach (['loan_base', 'monthly_amortization', 'paid_by_vendee_equity'] as $moneyField) {
+            if (! isset($data[$moneyField]) || $data[$moneyField] === '') {
+                $data[$moneyField] = 0;
+            }
+        }
+        if (($data['loan_term'] ?? '') === '') {
+            $data['loan_term'] = null;
+        }
+        if (($data['financing_method'] ?? '') === '') {
+            $data['financing_method'] = null;
+        }
         
         // Calculate Base Financials
         $contractPrice = $data['contract_price'] ?? $record->contract_price;
         $mbrdcAddFees = $data['mbrdc_add_fees'] ?? $record->mbrdc_add_fees;
         $otherExp = $data['other_exp_annotation'] ?? $record->other_exp_annotation;
         $improvementsFee = $data['improvements_fee'] ?? $record->improvements_fee;
+        $equity = $data['paid_by_vendee_equity'] ?? $record->paid_by_vendee_equity;
         
         $data['total_consideration'] = $contractPrice + $mbrdcAddFees + $otherExp + $improvementsFee;
-        $data['mbrdc_amt_due_for_financing'] = $data['total_consideration'] - $record->paid_by_vendee_equity;
+        $data['mbrdc_amt_due_for_financing'] = $data['total_consideration'] - $equity;
 
         // Retention/Conversion is only deducted while it is on hold (Pag-IBIG/bank hold)
         $retentionOnHold = filter_var($request->input('retention_on_hold', $record->retention_on_hold), FILTER_VALIDATE_BOOLEAN);

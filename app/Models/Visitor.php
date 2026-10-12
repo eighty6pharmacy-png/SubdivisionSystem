@@ -4,16 +4,16 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Visitor extends Model
 {
-    use HasUuids, SoftDeletes;
+    use SoftDeletes;
 
     protected $fillable = [
-        'host_id',
+        'resident_id',
+        'host_name',
         'visitor_name',
         'pin',
         'purpose',
@@ -29,7 +29,7 @@ class Visitor extends Model
 
     public function host(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'host_id');
+        return $this->belongsTo(User::class, 'resident_id');
     }
 
     // Not named guard(): that would override Model::guard(array $guarded).

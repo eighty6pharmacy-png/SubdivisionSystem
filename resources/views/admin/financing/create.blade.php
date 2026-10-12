@@ -76,7 +76,7 @@
                         @endforeach
                     </select>
                     <p style="font-size: 12px; color: #64748b; margin-top: 8px;">
-                        Selecting a buyer will automatically sync their contract price, equity, and lot information from the Master List.
+                        Contract price, equity, and loan terms are entered on the financing record after it is created.
                     </p>
                 </div>
                 <div style="margin-top: 24px; text-align: right;">

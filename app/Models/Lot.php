@@ -4,13 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Lot extends Model
 {
-    use HasUuids;
-
     protected $fillable = [
         'block',
         'lot_number',
@@ -27,7 +25,12 @@ class Lot extends Model
 
     public function users(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'user_lots', 'lot_id', 'user_id')->withTimestamps();
+        return $this->belongsToMany(User::class, 'resident_lots', 'lot_id', 'resident_id')->withTimestamps();
+    }
+
+    public function buyer(): HasOne
+    {
+        return $this->hasOne(BuyerMasterList::class, 'lot_id');
     }
 
     public function utilityBills(): \Illuminate\Database\Eloquent\Relations\HasMany

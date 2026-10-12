@@ -2,14 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class DownpaymentHistory extends Model
 {
-    use HasUuids;
-
     protected $table = 'downpayment_histories';
 
     protected $fillable = [

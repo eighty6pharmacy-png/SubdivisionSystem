@@ -27,6 +27,7 @@ class UserImportController extends Controller
         $headers = [
             'external_id',
             'first_name',
+            'middle_name',
             'last_name',
             'email',
             'contact_number',
@@ -42,6 +43,7 @@ class UserImportController extends Controller
             fputcsv($out, [
                 '1001',
                 'Juan',
+                '',
                 'Dela Cruz',
                 'juan.delacruz@example.com',
                 '09171234567',
@@ -53,6 +55,7 @@ class UserImportController extends Controller
             fputcsv($out, [
                 '2001',
                 'Maria',
+                '',
                 'Santos',
                 'maria.santos@example.com',
                 '09181234567',
@@ -143,6 +146,7 @@ class UserImportController extends Controller
     {
         $externalId = trim((string) ($data['external_id'] ?? ''));
         $firstName = trim((string) ($data['first_name'] ?? ''));
+        $middleName = trim((string) ($data['middle_name'] ?? ''));
         $lastName = trim((string) ($data['last_name'] ?? ''));
         $email = strtolower(trim((string) ($data['email'] ?? '')));
         $contact = $this->normalizePhone((string) ($data['contact_number'] ?? ''));
@@ -176,6 +180,24 @@ class UserImportController extends Controller
         }
 
         $existingByExternal = User::where('external_id', $externalId)->first();
+
+        $buyer = null;
+        if ($role === 'Buyer') {
+            $buyerResult = $this->resolveBuyer($rowNumber, $buyerMasterListId, $block, $lot);
+            if ($buyerResult['error']) {
+                return ['error' => $buyerResult['error'], 'created' => false, 'updated' => false];
+            }
+            $buyer = $buyerResult['buyer'];
+        }
+
+        $accountUser = $existingByExternal;
+        if ($role === 'Buyer' && $buyer?->user) {
+            if ($accountUser && $accountUser->id !== $buyer->user->id) {
+                return ['error' => "Row {$rowNumber}: This external_id belongs to a different account than the matched buyer.", 'created' => false, 'updated' => false];
+            }
+            $accountUser = $buyer->user;
+        }
+
         $validator = Validator::make(
             [
                 'email' => $email,
@@ -185,7 +207,7 @@ class UserImportController extends Controller
                 'email' => [
                     'required',
                     'email:rfc',
-                    Rule::unique('users', 'email')->whereNull('deleted_at')->ignore($existingByExternal?->id),
+                    Rule::unique('users', 'email')->whereNull('deleted_at')->ignore($accountUser?->id),
                     function (string $attribute, mixed $value, \Closure $fail) {
                         if (app()->environment('testing')) {
                             return;
@@ -207,25 +229,17 @@ class UserImportController extends Controller
             return ['error' => "Row {$rowNumber}: ".$validator->errors()->first(), 'created' => false, 'updated' => false];
         }
 
-        $buyer = null;
-        if ($role === 'Buyer') {
-            $buyerResult = $this->resolveBuyer($rowNumber, $buyerMasterListId, $block, $lot);
-            if ($buyerResult['error']) {
-                return ['error' => $buyerResult['error'], 'created' => false, 'updated' => false];
-            }
-            $buyer = $buyerResult['buyer'];
-        }
-
         if ($role === 'Resident' || $role === 'Buyer') {
-            $lotConflict = $this->lotOccupancyError($rowNumber, $block, $lot, $existingByExternal?->id);
+            $lotConflict = $this->lotOccupancyError($rowNumber, $block, $lot, $accountUser?->id);
             if ($lotConflict) {
                 return ['error' => $lotConflict, 'created' => false, 'updated' => false];
             }
         }
 
         try {
-            if ($existingByExternal) {
-                $this->updateExistingUser($existingByExternal, $firstName, $lastName, $email, $contact, $role, $block, $lot, $buyer);
+            if ($accountUser) {
+                $passwordWasNull = $accountUser->password === null;
+                $this->updateExistingUser($accountUser, $externalId, $firstName, $middleName, $lastName, $email, $contact, $role, $block, $lot, $buyer, $passwordWasNull);
 
                 return ['error' => null, 'created' => false, 'updated' => true];
             }
@@ -234,20 +248,17 @@ class UserImportController extends Controller
                 return ['error' => "Row {$rowNumber}: Email {$email} already exists.", 'created' => false, 'updated' => false];
             }
 
-            if ($buyer && User::where('buyer_master_list_id', $buyer->id)->exists()) {
-                return ['error' => "Row {$rowNumber}: Buyer master list record already has a linked user account.", 'created' => false, 'updated' => false];
-            }
-
             $password = 'Alth'.strtoupper(Str::random(6)).'!';
 
             $user = User::create([
                 'external_id' => $externalId,
-                'name' => trim("{$firstName} {$lastName}"),
+                'first_name' => $firstName,
+                'middle_name' => $middleName !== '' ? $middleName : null,
+                'last_name' => $lastName,
                 'email' => $email,
                 'contact_number' => $contact,
                 'password' => Hash::make($password),
                 'status' => 'Active',
-                'buyer_master_list_id' => $buyer?->id,
             ]);
 
             Role::findOrCreate($role, 'web');
@@ -300,8 +311,7 @@ class UserImportController extends Controller
         }
 
         $buyer = BuyerMasterList::query()
-            ->where('block_no', $block)
-            ->where('lot_no', $lot)
+            ->whereHas('lot', fn ($q) => $q->where('block', $block)->where('lot_number', $lot))
             ->first();
 
         if (!$buyer) {
@@ -334,44 +344,56 @@ class UserImportController extends Controller
             return "Row {$rowNumber}: Block {$block} Lot {$lot} is already occupied by an active account.";
         }
 
+        $buyerOnLot = BuyerMasterList::query()
+            ->where('lot_id', $existingLot->id)
+            ->when($ignoreUserId, fn ($q) => $q->where('user_id', '!=', $ignoreUserId))
+            ->exists();
+        if ($buyerOnLot) {
+            return "Row {$rowNumber}: Block {$block} Lot {$lot} is already occupied by an active account.";
+        }
+
         return null;
     }
 
     private function updateExistingUser(
         User $user,
+        string $externalId,
         string $firstName,
+        string $middleName,
         string $lastName,
         string $email,
         string $contact,
         string $role,
         ?string $block,
         ?string $lot,
-        ?BuyerMasterList $buyer
+        ?BuyerMasterList $buyer,
+        bool $setPassword = false
     ): void {
-        if ($buyer && $user->buyer_master_list_id && $user->buyer_master_list_id !== $buyer->id) {
-            throw new \InvalidArgumentException('Cannot reassign user to a different buyer master list record.');
+        if ($buyer && $buyer->user_id !== $user->id) {
+            throw new \InvalidArgumentException('Cannot reassign user to a different buyer record.');
         }
 
-        if ($buyer) {
-            $other = User::where('buyer_master_list_id', $buyer->id)
-                ->where('id', '!=', $user->id)
-                ->exists();
-            if ($other) {
-                throw new \InvalidArgumentException('Buyer master list record already has a linked user account.');
-            }
-        }
-
-        $user->name = trim("{$firstName} {$lastName}");
+        $user->external_id = $externalId;
+        $user->first_name = $firstName;
+        $user->middle_name = $middleName !== '' ? $middleName : null;
+        $user->last_name = $lastName;
         $user->email = $email;
         $user->contact_number = $contact;
-        if ($buyer) {
-            $user->buyer_master_list_id = $buyer->id;
+
+        $plainPassword = null;
+        if ($setPassword) {
+            $plainPassword = 'Alth'.strtoupper(Str::random(6)).'!';
+            $user->password = Hash::make($plainPassword);
         }
         $user->save();
 
         Role::findOrCreate($role, 'web');
         $user->syncRoles([$role]);
         $this->syncUserLot($user, $role, $block, $lot, $buyer);
+
+        if ($plainPassword) {
+            SendNewUserCredentialsJob::dispatch($user, $plainPassword);
+        }
     }
 
     private function syncUserLot(User $user, string $role, ?string $block, ?string $lot, ?BuyerMasterList $buyer): void
@@ -380,9 +402,22 @@ class UserImportController extends Controller
             return;
         }
 
-        if ($buyer?->lot_id) {
-            $user->lots()->sync([$buyer->lot_id]);
-            Lot::whereKey($buyer->lot_id)->update(['status' => 'Occupied']);
+        if ($role === 'Buyer') {
+            $buyer = $buyer ?? $user->buyerMasterList;
+            if (! $buyer) {
+                return;
+            }
+            if ($block !== null && $lot !== null) {
+                $lotModel = Lot::firstOrCreate([
+                    'block' => $block,
+                    'lot_number' => $lot,
+                ]);
+                $buyer->lot_id = $lotModel->id;
+                $buyer->save();
+                $lotModel->update(['status' => 'Occupied']);
+            } elseif ($buyer->lot_id) {
+                Lot::whereKey($buyer->lot_id)->update(['status' => 'Occupied']);
+            }
 
             return;
         }

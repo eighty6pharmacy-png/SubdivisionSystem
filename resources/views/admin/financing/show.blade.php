@@ -110,7 +110,17 @@
                     <div class="responsive-grid grid-2" style="gap: 24px;">
                         <div>
                             <h4 style="font-size: 14px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">Base Information & Add-ons</h4>
+                            <div class="form-group">
+                                <label>Financing Method</label>
+                                <select name="financing_method" class="form-control">
+                                    <option value="">-- Select Method --</option>
+                                    <option value="Pag-IBIG" {{ $record->financing_method == 'Pag-IBIG' ? 'selected' : '' }}>Pag-IBIG</option>
+                                    <option value="Bank Loan" {{ $record->financing_method == 'Bank Loan' ? 'selected' : '' }}>Bank Loan</option>
+                                    <option value="Cash" {{ $record->financing_method == 'Cash' ? 'selected' : '' }}>Cash</option>
+                                </select>
+                            </div>
                             <div class="form-group"><label>Contract Price</label><input type="number" step="0.01" name="contract_price" class="form-control" value="{{ $record->contract_price }}"></div>
+                            <div class="form-group"><label>Equity Paid by Buyer</label><input type="number" step="0.01" name="paid_by_vendee_equity" class="form-control" value="{{ $record->paid_by_vendee_equity }}"></div>
                             <div class="form-group"><label>MBRDC Add. Fees</label><input type="number" step="0.01" name="mbrdc_add_fees" class="form-control" value="{{ $record->mbrdc_add_fees }}"></div>
                             <div class="form-group"><label>Other Exp (Annotation/DA/SPA)</label><input type="number" step="0.01" name="other_exp_annotation" class="form-control" value="{{ $record->other_exp_annotation }}"></div>
                             <div class="form-group"><label>Improvements Fee</label><input type="number" step="0.01" name="improvements_fee" class="form-control" value="{{ $record->improvements_fee }}"></div>
@@ -129,6 +139,9 @@
                         <div>
                             <div style="font-size: 14px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">&nbsp;</div>
                             <div class="form-group"><label>Gross Loan Released</label><input type="number" step="0.01" name="loan_release" class="form-control" style="border-color: #3b82f6;" value="{{ $record->loan_release }}"></div>
+                            <div class="form-group"><label>Loan Base</label><input type="number" step="0.01" name="loan_base" class="form-control" value="{{ $record->loan_base }}"></div>
+                            <div class="form-group"><label>Loan Term (Years)</label><input type="number" name="loan_term" min="0" max="100" step="1" class="form-control" value="{{ $record->loan_term }}"></div>
+                            <div class="form-group"><label>Monthly Amortization</label><input type="number" step="0.01" name="monthly_amortization" class="form-control" value="{{ $record->monthly_amortization }}"></div>
                             <div class="form-group"><label>Inspection/Processing Fee</label><input type="number" step="0.01" name="inspection_fee" class="form-control" style="color: #dc2626;" value="{{ $record->inspection_fee }}"></div>
                             <div class="form-group"><label>Retention/Conversion</label><input type="number" step="0.01" name="retention_fee" class="form-control" style="color: #dc2626;" value="{{ $record->retention_fee }}"></div>
                             <div class="form-group"><label>Retention/Conversion Status</label>

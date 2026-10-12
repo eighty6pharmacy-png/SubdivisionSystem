@@ -5,15 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
-
 class FinancingRecord extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory;
 
     protected $fillable = [
+        'buyer_id',
         'buyer_master_list_id',
         'lot_id',
+        'financing_method',
+        'loan_base',
+        'loan_term',
+        'monthly_amortization',
         'contract_price',
         'mbrdc_add_fees',
         'other_exp_annotation',
@@ -48,9 +51,20 @@ class FinancingRecord extends Model
         'loan_release_date' => 'date',
     ];
 
+    public function setBuyerMasterListIdAttribute($value): void
+    {
+        $this->attributes['buyer_id'] = $value;
+        unset($this->attributes['buyer_master_list_id']);
+    }
+
+    public function getBuyerMasterListIdAttribute(): mixed
+    {
+        return $this->attributes['buyer_id'] ?? null;
+    }
+
     public function buyerMasterList(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
-        return $this->belongsTo(BuyerMasterList::class, 'buyer_master_list_id');
+        return $this->belongsTo(BuyerMasterList::class, 'buyer_id', 'id');
     }
 
     public function lot(): \Illuminate\Database\Eloquent\Relations\BelongsTo

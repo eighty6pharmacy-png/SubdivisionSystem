@@ -500,8 +500,8 @@
                     <option value="">-- Choose Buyer --</option>
                     @foreach($masterListBuyers as $b)
                         <option value="{{ $b->id }}" data-first="{{ $b->first_name }}" data-last="{{ $b->last_name }}"
-                            data-block="{{ $b->block_no }}" data-lot="{{ $b->lot_no }}" data-tcp="{{ $b->contract_amount }}"
-                            data-equity="{{ $b->equity }}" data-term="{{ $b->loan_term }}">
+                            data-block="{{ $b->block_no }}" data-lot="{{ $b->lot_no }}" data-tcp="{{ $b->financingRecord?->contract_price ?? '' }}"
+                            data-equity="{{ $b->financingRecord?->paid_by_vendee_equity ?? '' }}">
                             {{ $b->last_name }}, {{ $b->first_name }}
                             {{ $b->middle_name ? substr($b->middle_name, 0, 1) . '.' : '' }} — (Block {{ $b->block_no ?? '?' }}, Lot {{ $b->lot_no ?? '?' }})
                         </option>

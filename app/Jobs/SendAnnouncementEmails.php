@@ -31,8 +31,12 @@ class SendAnnouncementEmails implements ShouldQueue
      */
     public function handle(): void
     {
-        $residents = User::role('Resident')->get();
+        $residentIds = $this->announcement->recipients()->pluck('resident_id');
+        $residents = User::whereIn('id', $residentIds)->get();
         foreach ($residents as $resident) {
+            if (! $resident->email || str_ends_with($resident->email, '@buyers.invalid')) {
+                continue;
+            }
             Mail::to($resident->email)->send(new AnnouncementPosted($this->announcement));
         }
     }

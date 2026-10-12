@@ -29,7 +29,7 @@ class BuyerPortalController extends Controller
         }
 
         // Fetch financing record
-        $financing = FinancingRecord::where('buyer_master_list_id', $buyer->id)->first();
+        $financing = FinancingRecord::where('buyer_id', $buyer->id)->first();
 
         return view('buyer.dashboard', compact('buyer', 'downpayments', 'financing'));
     }
@@ -51,7 +51,7 @@ class BuyerPortalController extends Controller
             }
         }
 
-        $financing = FinancingRecord::where('buyer_master_list_id', $buyer->id)->first();
+        $financing = FinancingRecord::where('buyer_id', $buyer->id)->first();
 
         $finHistories = collect();
         if ($financing) {

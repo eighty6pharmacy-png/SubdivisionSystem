@@ -165,7 +165,7 @@
             <table style="border:none; margin-bottom:0;">
                 <tr>
                     <td style="padding:5px; border:none; width:40%;"><strong>Name:</strong></td>
-                    <td style="padding:5px; border:none;">{{ $bill->user->name ?? 'Resident' }}</td>
+                    <td style="padding:5px; border:none;">{{ $bill->user->name ?? $bill->billed_to_name ?? 'Resident' }}</td>
                 </tr>
                 <tr>
                     <td style="padding:5px; border:none;"><strong>Address:</strong></td>

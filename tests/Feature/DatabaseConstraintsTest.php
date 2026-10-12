@@ -30,7 +30,11 @@ class DatabaseConstraintsTest extends TestCase
 
     private function buyer(array $attributes = []): BuyerMasterList
     {
-        return BuyerMasterList::create(array_merge(['first_name' => 'Juan', 'last_name' => 'Dela Cruz'], $attributes));
+        return BuyerMasterList::create(array_merge([
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
+            'email' => 'juan.'.str()->uuid().'@example.test',
+        ], $attributes));
     }
 
     private function reservation(Lot $lot, string $status = 'Reserved', ?BuyerMasterList $buyer = null): Reservation
@@ -236,7 +240,7 @@ class DatabaseConstraintsTest extends TestCase
             ->assertOk()
             ->assertJson(['success' => true]);
 
-        $this->assertSoftDeleted('buyer_master_lists', ['id' => $buyer->id]);
+        $this->assertSoftDeleted('buyers', ['id' => $buyer->id]);
         $this->assertSoftDeleted('reservations', ['id' => $reservation->id]);
         $this->assertDatabaseHas('downpayments', ['id' => $dp->id]);
         $this->assertSame(1, DownpaymentHistory::where('downpayment_id', $dp->id)->count());
@@ -254,13 +258,11 @@ class DatabaseConstraintsTest extends TestCase
             'deadline_date' => now()->subDays(5)->toDateString(),
             'amount' => 20000,
         ]);
-        $user = User::create([
-            'name' => 'Juan Dela Cruz',
-            'email' => 'juan-restore@example.test',
-            'password' => 'secret123',
-            'buyer_master_list_id' => $buyer->id,
-            'status' => 'Active',
-        ]);
+        $user = $buyer->user;
+        $user->email = 'juan-restore@example.test';
+        $user->password = 'secret123';
+        $user->status = 'Active';
+        $user->save();
         $admin = $this->admin();
 
         $this->actingAs($admin)->deleteJson("/admin/buyer-master-list/{$buyer->id}")->assertOk();
@@ -301,13 +303,10 @@ class DatabaseConstraintsTest extends TestCase
 
     public function test_restore_skips_user_when_email_is_reused(): void
     {
-        $buyer = $this->buyer();
-        $user = User::create([
-            'name' => 'Juan',
-            'email' => 'reuse@example.test',
-            'password' => 'secret123',
-            'buyer_master_list_id' => $buyer->id,
-        ]);
+        $buyer = $this->buyer(['email' => 'reuse@example.test']);
+        $user = $buyer->user;
+        $user->password = 'secret123';
+        $user->save();
         $admin = $this->admin();
         $this->actingAs($admin)->deleteJson("/admin/buyer-master-list/{$buyer->id}")->assertOk();
         User::create(['name' => 'Other', 'email' => 'reuse@example.test', 'password' => 'secret123']);
@@ -330,7 +329,7 @@ class DatabaseConstraintsTest extends TestCase
             ->assertStatus(409)
             ->assertJson(['success' => false]);
 
-        $this->assertSoftDeleted('buyer_master_lists', ['id' => $buyer->id]);
+        $this->assertSoftDeleted('buyers', ['id' => $buyer->id]);
     }
 
     public function test_index_does_not_auto_archive_good_standing_overdue_reservation(): void
@@ -380,13 +379,24 @@ class DatabaseConstraintsTest extends TestCase
         $this->actingAs($this->admin())
             ->postJson('/admin/buyer-master-list', [
                 'first_name' => 'Maria',
+                'middle_name' => 'Reyes',
                 'last_name' => 'Santos',
+                'email' => 'maria.santos@gmail.com',
+                'contact_number' => '09171234567',
+                'civil_status' => 'Single',
+                'present_address' => 'Block 5 Lot 12',
+                'postal_address' => 'Block 5 Lot 12',
+                'proof_of_id' => 'Passport',
+                'pagibig_number' => '1234-5678-9012',
                 'block_no' => '5',
                 'lot_no' => '12',
+                'lot_area' => 100,
+                'floor_area' => 50,
+                'description' => 'House and lot',
             ])
             ->assertOk();
 
-        $this->assertSame($lot->id, BuyerMasterList::where('first_name', 'Maria')->value('lot_id'));
+        $this->assertSame($lot->id, BuyerMasterList::whereHas('user', fn ($q) => $q->where('first_name', 'Maria'))->value('lot_id'));
         $this->assertSame(1, Lot::count());
     }
 

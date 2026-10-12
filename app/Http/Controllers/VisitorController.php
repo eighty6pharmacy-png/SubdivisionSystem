@@ -16,7 +16,7 @@ class VisitorController extends Controller
         $query = Visitor::with('host.lots')->orderBy('updated_at', 'desc');
         
         if (auth()->check() && auth()->user()->hasRole('Resident')) {
-            $query->where('host_id', auth()->id());
+            $query->where('resident_id', auth()->id());
         }
 
         $visitors = $query->get()->map(function ($vis) {
@@ -31,10 +31,12 @@ class VisitorController extends Controller
                     $block = $lot->block;
                     $lotNum = $lot->lot_number;
                 }
+            } elseif ($vis->host_name) {
+                $hostName = $vis->host_name;
             }
 
             return [
-                'id' => substr($vis->id, 0, 8),
+                'id' => $vis->id,
                 'db_id' => $vis->id,
                 'pin' => $vis->pin,
                 'visitor' => $vis->visitor_name,
@@ -71,7 +73,8 @@ class VisitorController extends Controller
         $isWalkIn = $request->type === 'Walk-in';
 
         $data = [
-            'host_id' => $isWalkIn ? null : auth()->id(),
+            'resident_id' => $isWalkIn ? null : auth()->id(),
+            'host_name' => $isWalkIn ? null : auth()->user()?->name,
             'visitor_name' => $request->visitor_name,
             'purpose' => $request->purpose,
             'validity' => $request->validity,
@@ -83,8 +86,10 @@ class VisitorController extends Controller
         ];
 
         if ($isWalkIn && auth()->check()) {
-            $data['guard_id'] = auth()->user()->id;
             $data['guard_name'] = auth()->user()->name;
+            if (auth()->user()->guardAccount) {
+                $data['guard_id'] = auth()->user()->id;
+            }
         }
 
         $visitor = Visitor::create($data);
@@ -101,13 +106,13 @@ class VisitorController extends Controller
             }
         }
 
-        return response()->json(['success' => true, 'id' => substr($visitor->id, 0, 8)]);
+        return response()->json(['success' => true, 'id' => $visitor->id]);
     }
 
     // For Admin approving a code
     public function approve($id)
     {
-        $visitor = Visitor::where('id', 'like', $id . '%')->with('host')->firstOrFail();
+        $visitor = Visitor::whereKey($id)->with('host')->firstOrFail();
         
         if ($visitor->status !== 'Pending') {
             return response()->json(['success' => false, 'message' => 'Already processed']);
@@ -180,7 +185,7 @@ class VisitorController extends Controller
             return response()->json([
                 'success' => true,
                 'is_appointment' => false,
-                'visitor_id' => substr($visitor->id, 0, 8),
+                'visitor_id' => $visitor->id,
                 'db_id' => $visitor->id,
                 'visitor_name' => $visitor->visitor_name,
                 'destination' => $dest,
@@ -213,7 +218,7 @@ class VisitorController extends Controller
             return response()->json([
                 'success' => true,
                 'is_appointment' => true,
-                'visitor_id' => substr($appointment->id, 0, 8),
+                'visitor_id' => $appointment->id,
                 'db_id' => $appointment->id,
                 'visitor_name' => $appointment->client_name,
                 'destination' => 'Management Office',
@@ -262,7 +267,7 @@ class VisitorController extends Controller
     // For Admin rejecting a code
     public function reject($id)
     {
-        $visitor = Visitor::where('id', 'like', $id . '%')->firstOrFail();
+        $visitor = Visitor::whereKey($id)->firstOrFail();
         
         if ($visitor->status !== 'Pending') {
             return response()->json(['success' => false, 'message' => 'Already processed']);

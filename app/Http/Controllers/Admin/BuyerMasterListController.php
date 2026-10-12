@@ -33,11 +33,8 @@ class BuyerMasterListController extends Controller
         foreach ($overdueReservations as $res) {
             $buyer = $res->buyerMasterList;
             if ($buyer) {
+                $buyer->user?->delete();
                 $buyer->delete();
-                $user = \App\Models\User::where('buyer_master_list_id', $buyer->id)->first();
-                if ($user) {
-                    $user->delete();
-                }
             }
             $res->delete();
         }
@@ -45,14 +42,14 @@ class BuyerMasterListController extends Controller
         $query = BuyerMasterList::query();
 
         if ($request->status === 'cancelled') {
-            $query->onlyTrashed()->with(['reservations' => fn ($q) => $q->withTrashed()]);
+            $query->onlyTrashed()->with(['reservations' => fn ($q) => $q->withTrashed(), 'financingRecord']);
         } else {
-            $query->with('reservations');
+            $query->with(['reservations', 'financingRecord']);
         }
 
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
+            $query->whereHas('user', function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
                     ->orWhere('last_name', 'like', "%{$search}%")
                     ->orWhere('middle_name', 'like', "%{$search}%");
@@ -60,7 +57,7 @@ class BuyerMasterListController extends Controller
         }
 
         if ($request->filled('block')) {
-            $query->where('block_no', $request->block);
+            $query->whereHas('lot', fn ($q) => $q->where('block', $request->block));
         }
 
         $buyers = $query->orderBy('created_at', 'desc')->get();
@@ -75,9 +72,10 @@ class BuyerMasterListController extends Controller
         $this->prepareBuyerContactEmail($request);
         $validated = $request->validate($this->buyerFormRules(), $this->buyerFormMessages());
 
-        $existingBuyer = BuyerMasterList::where('first_name', $validated['first_name'])
-                                        ->where('last_name', $validated['last_name'])
-                                        ->first();
+        $existingBuyer = BuyerMasterList::whereHas('user', function ($q) use ($validated) {
+            $q->where('first_name', $validated['first_name'])
+                ->where('last_name', $validated['last_name']);
+        })->first();
 
         if ($existingBuyer) {
             return response()->json([
@@ -150,7 +148,6 @@ class BuyerMasterListController extends Controller
             'contact_number' => ['required', 'regex:/^(09\d{9}|\+639\d{9}|639\d{9})$/'],
             'proof_of_id' => 'required|string|max:255',
             'pagibig_number' => 'required|string|max:255',
-            'financing_method' => 'nullable|string|max:50',
 
             'block_no' => 'required|string|max:50',
             'lot_no' => 'required|string|max:50',
@@ -160,19 +157,6 @@ class BuyerMasterListController extends Controller
             'lot_area' => 'required|numeric|min:0',
             'floor_area' => 'required|numeric|min:0',
             'description' => 'required|string',
-
-            'contract_amount' => 'nullable|numeric|min:0',
-            'improvement_amount' => 'nullable|numeric|min:0',
-            'equity' => 'nullable|numeric|min:0',
-            'loan_base' => 'nullable|numeric|min:0',
-            'loan_term' => 'nullable|integer|min:0|max:100',
-            'monthly_amortization' => 'nullable|numeric|min:0',
-            'mri_sri' => 'nullable|numeric|min:0',
-            'insurance' => 'nullable|numeric|min:0',
-            'mri_ds_1time' => 'nullable|numeric|min:0',
-            'nonlife_1time' => 'nullable|numeric|min:0',
-            'retention' => 'nullable|numeric|min:0',
-            'total_deductions' => 'nullable|numeric|min:0',
         ];
     }
 
@@ -188,7 +172,6 @@ class BuyerMasterListController extends Controller
             'email.email' => 'Please enter a real email address on a domain that can receive mail (Gmail, Outlook, company mail, etc.).',
             'contact_number.required' => 'Contact / Mobile Number is required.',
             'contact_number.regex' => 'Use a Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX.',
-            'loan_term.max' => 'Loan term cannot exceed 100 years.',
         ];
     }
 
@@ -200,11 +183,7 @@ class BuyerMasterListController extends Controller
             return response()->json(['success' => false, 'message' => 'Buyer is already archived.']);
         }
 
-        // Archive related user account if exists
-        $user = \App\Models\User::where('buyer_master_list_id', $buyer->id)->first();
-        if ($user) {
-            $user->delete();
-        }
+        $buyer->user?->delete();
 
         // Archive related reservations
         foreach($buyer->reservations as $res) {
@@ -219,9 +198,11 @@ class BuyerMasterListController extends Controller
     {
         $buyer = BuyerMasterList::onlyTrashed()->findOrFail($id);
 
-        $duplicate = BuyerMasterList::where('first_name', $buyer->first_name)
-            ->where('last_name', $buyer->last_name)
-            ->where('id', '!=', $buyer->id)
+        $duplicate = BuyerMasterList::where('user_id', '!=', $buyer->user_id)
+            ->whereHas('user', function ($q) use ($buyer) {
+                $q->where('first_name', $buyer->first_name)
+                    ->where('last_name', $buyer->last_name);
+            })
             ->first();
 
         if ($duplicate) {
@@ -235,7 +216,7 @@ class BuyerMasterListController extends Controller
             $buyer->restore();
             $notes = [];
 
-            $trashedUser = User::onlyTrashed()->where('buyer_master_list_id', $buyer->id)->first();
+            $trashedUser = User::onlyTrashed()->where('id', $buyer->user_id)->first();
             if ($trashedUser) {
                 $emailTaken = User::where('email', $trashedUser->email)->where('id', '!=', $trashedUser->id)->exists();
                 if ($emailTaken) {
@@ -250,7 +231,7 @@ class BuyerMasterListController extends Controller
             }
 
             $archivedReservations = Reservation::onlyTrashed()
-                ->where('buyer_master_list_id', $buyer->id)
+                ->where('buyer_id', $buyer->id)
                 ->orderByDesc('created_at')
                 ->get();
 
@@ -315,33 +296,39 @@ class BuyerMasterListController extends Controller
         
         $password = \Illuminate\Support\Str::random(8); // Random secure password
         
-        $existingUser = \App\Models\User::where('buyer_master_list_id', $buyer->id)->first();
-        if ($existingUser) {
-            return back()->with('error', 'This buyer already has an account associated with email: ' . $existingUser->email);
+        $user = $buyer->user;
+        if (! $user) {
+            return back()->with('error', 'This buyer has no user account to activate.');
+        }
+        if ($user->password) {
+            return back()->with('error', 'This buyer already has an account associated with email: ' . $user->email);
         }
 
-        if (\App\Models\User::where('email', $email)->exists()) {
+        $currentEmail = $user->email;
+        if (empty($email) || str_ends_with((string) $currentEmail, '@buyers.invalid')) {
+            if (empty(request()->input('account_email'))) {
+                $email = strtolower($buyer->first_name.'.'.$buyer->last_name.'@buyer.althesa.com');
+                $email = str_replace(' ', '', $email);
+            }
+        }
+
+        if (\App\Models\User::where('email', $email)->where('id', '!=', $user->id)->exists()) {
             return back()->with('error', 'Another account already uses the email: ' . $email);
         }
 
-        $user = \App\Models\User::create(
-            [
-                'buyer_master_list_id' => $buyer->id,
-                'name' => $buyer->first_name . ' ' . $buyer->last_name,
-                'email' => $email,
-                'password' => bcrypt($password),
-                'contact_number' => $buyer->contact_number,
-                'status' => 'Active',
-                'joined_at' => now(),
-            ]
-        );
-        
+        $user->email = $email;
+        $user->password = bcrypt($password);
+        $user->contact_number = $user->contact_number ?: $buyer->contact_number;
+        $user->status = 'Active';
+        $user->joined_at = $user->joined_at ?: now();
+        $user->save();
+
         if (!$user->hasRole('Buyer')) {
             $user->assignRole('Buyer');
         }
 
         // Send email if it's a real email address (not auto-generated @buyer.althesa.com)
-        if (!str_contains($email, '@buyer.althesa.com')) {
+        if (!str_contains($email, '@buyer.althesa.com') && !str_contains($email, '@buyers.invalid')) {
             try {
                 \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($email, $buyer, $password) {
                     $message->to($email)
@@ -448,11 +435,12 @@ class BuyerMasterListController extends Controller
 
     public function exportHousingLoan(Request $request, $id)
     {
-        $buyer = BuyerMasterList::findOrFail($id);
+        $buyer = BuyerMasterList::with('financingRecord')->findOrFail($id);
+        $finance = $buyer->financingRecord;
 
         if ($request->query('format') === 'pdf') {
             $pdf = app('dompdf.wrapper');
-            $pdf->loadView('admin.buyer_master_list.exports.housing_loan', compact('buyer'));
+            $pdf->loadView('admin.buyer_master_list.exports.housing_loan', compact('buyer', 'finance'));
             return $pdf->download('Housing_Loan_' . $buyer->last_name . '_' . $buyer->first_name . '.pdf');
         }
 
@@ -487,7 +475,7 @@ class BuyerMasterListController extends Controller
         $templateProcessor->setValue('pagibig_number', strtoupper($buyer->pagibig_number ?? ''));
         $templateProcessor->setValue('pagibig_no', strtoupper($buyer->pagibig_number ?? '')); // alias for old MSVS compatibility
         $templateProcessor->setValue('proof_of_id', strtoupper($buyer->proof_of_id ?? ''));
-        $templateProcessor->setValue('financing_method', strtoupper($buyer->financing_method ?? ''));
+        $templateProcessor->setValue('financing_method', strtoupper($finance?->financing_method ?? ''));
         
         // Map all property fields
         $templateProcessor->setValue('block_no', strtoupper($buyer->block_no ?? ''));
@@ -499,19 +487,19 @@ class BuyerMasterListController extends Controller
         $templateProcessor->setValue('floor_area', $buyer->floor_area ?? '');
         $templateProcessor->setValue('description', strtoupper($buyer->description ?? ''));
         
-        // Map all financial fields
-        $templateProcessor->setValue('contract_amount', $buyer->contract_amount ?? '');
-        $templateProcessor->setValue('equity', $buyer->equity ?? '');
-        $templateProcessor->setValue('loan_base', $buyer->loan_base ?? '');
-        $templateProcessor->setValue('loan_term', $buyer->loan_term ?? '');
-        $templateProcessor->setValue('monthly_amortization', $buyer->monthly_amortization ?? '');
-        $templateProcessor->setValue('improvement_amount', $buyer->improvement_amount ?? '');
-        $templateProcessor->setValue('mri_sri', $buyer->mri_sri ?? '');
-        $templateProcessor->setValue('insurance', $buyer->insurance ?? '');
-        $templateProcessor->setValue('mri_ds_1time', $buyer->mri_ds_1time ?? '');
-        $templateProcessor->setValue('nonlife_1time', $buyer->nonlife_1time ?? '');
-        $templateProcessor->setValue('retention', $buyer->retention ?? '');
-        $templateProcessor->setValue('total_deductions', $buyer->total_deductions ?? '');
+        // Financial placeholders come from the buyer's financing record.
+        $templateProcessor->setValue('contract_amount', $finance?->contract_price ?? '');
+        $templateProcessor->setValue('equity', $finance?->paid_by_vendee_equity ?? '');
+        $templateProcessor->setValue('loan_base', $finance?->loan_base ?? '');
+        $templateProcessor->setValue('loan_term', $finance?->loan_term ?? '');
+        $templateProcessor->setValue('monthly_amortization', $finance?->monthly_amortization ?? '');
+        $templateProcessor->setValue('improvement_amount', $finance?->improvements_fee ?? '');
+        $templateProcessor->setValue('mri_sri', $finance?->sri_mri ?? '');
+        $templateProcessor->setValue('insurance', $finance?->pag_ibig_non_life ?? '');
+        $templateProcessor->setValue('mri_ds_1time', $finance?->interim_mri ?? '');
+        $templateProcessor->setValue('nonlife_1time', $finance?->pag_ibig_non_life ?? '');
+        $templateProcessor->setValue('retention', $finance?->retention_fee ?? '');
+        $templateProcessor->setValue('total_deductions', $finance?->total_amt_due ?? '');
 
         $fileName = 'Housing_Loan_' . $buyer->last_name . '_' . $buyer->first_name . '.docx';
         $tempFile = tempnam(sys_get_temp_dir(), 'PHPWord');

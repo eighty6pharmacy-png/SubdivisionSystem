@@ -4,18 +4,18 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class UtilityBill extends Model
 {
-    use HasUuids, SoftDeletes;
+    use SoftDeletes;
 
     protected $fillable = [
         'type',
-        'user_id',
+        'resident_id',
+        'billed_to_name',
         'lot_id',
         'previous_reading',
         'previous_reading_date',
@@ -45,7 +45,7 @@ class UtilityBill extends Model
 
     public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'resident_id');
     }
 
     public function lot(): BelongsTo

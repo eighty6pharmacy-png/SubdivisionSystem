@@ -73,7 +73,7 @@
     <div class="bill-header">
         <div class="bill-title">
             <h1>Welcome, {{ $buyer->first_name }}</h1>
-            <p>Block {{ $buyer->block_no }}, Lot {{ $buyer->lot_no }} • {{ $buyer->financing_method ?? 'Financing' }}</p>
+            <p>Block {{ $buyer->block_no }}, Lot {{ $buyer->lot_no }} • {{ $financing?->financing_method ?? 'Financing' }}</p>
         </div>
     </div>
 

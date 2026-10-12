@@ -140,12 +140,15 @@
                             <span class="badge {{ $user['status'] === 'Active' ? 'badge-success' : 'badge-danger' }}" style="padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700;">
                                 {{ strtoupper($user['status']) }}
                             </span>
+                            @if(empty($user['can_log_in']))
+                                <div style="margin-top: 6px; font-size: 11px; font-weight: 700; color: #92400e;">No login yet</div>
+                            @endif
                         </td>
                         <td>
                             <div style="display: flex; gap: 8px;">
                                 <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openViewModal('{{ $user['id'] }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ addslashes($user['contact_number'] ?? 'N/A') }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}', '{{ date('M d, Y', strtotime($user['joined'])) }}', '{{ $user['status'] }}')">View</button>
                                 @if($user['status'] === 'Active')
-                                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openEditModal('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ $user['contact_number'] ?? '' }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}')">Edit</button>
+                                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openEditModal('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ addslashes($user['first_name'] ?? '') }}', '{{ addslashes($user['middle_name'] ?? '') }}', '{{ addslashes($user['last_name'] ?? '') }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ $user['contact_number'] ?? '' }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}')">Edit</button>
                                     <button class="btn btn-outline archive-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="archiveUser('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ $user['role'] }}', this)">Archive</button>
                                 @else
                                     <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; opacity: 0.5; cursor: not-allowed;" disabled>Edit</button>
@@ -188,6 +191,10 @@
                 <div style="flex: 1;">
                     <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">First Name</label>
                     <input type="text" id="userFirstName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="First name">
+                </div>
+                <div style="flex: 1;">
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Middle Name</label>
+                    <input type="text" id="userMiddleName" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Optional">
                 </div>
                 <div style="flex: 1;">
                     <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Last Name</label>
@@ -258,6 +265,10 @@
                 <div style="flex: 1;">
                     <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">First Name</label>
                     <input type="text" id="editUserFirstName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Middle Name</label>
+                    <input type="text" id="editUserMiddleName" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Optional">
                 </div>
                 <div style="flex: 1;">
                     <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Last Name</label>
@@ -369,7 +380,7 @@
         <div class="modal-header" style="padding: 0; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start;">
             <div>
                 <h2 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">Import Users from CSV</h2>
-                <p style="font-size: 13px; font-weight: 400; color: #64748b; margin-top: 4px;">Upload a CSV to create or update users by <strong>external_id</strong> (your spreadsheet primary key). Internal system IDs stay UUIDs.</p>
+                <p style="font-size: 13px; font-weight: 400; color: #64748b; margin-top: 4px;">Upload a CSV to create or update users by <strong>external_id</strong> (your spreadsheet primary key). Internal system IDs are assigned automatically.</p>
             </div>
             <button class="ann-btn-icon" onclick="closeImportModal()" style="background: none; border: none; cursor: pointer; color: #64748b;">
                 <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
@@ -382,7 +393,7 @@
                 <div style="font-weight: 700; color: #334155; margin-bottom: 6px;">Required columns</div>
                 <code style="font-size: 11px;">external_id, first_name, last_name, email, contact_number, role</code>
                 <div style="margin-top: 8px;"><strong>Residents:</strong> include <code>block</code> and <code>lot</code>.</div>
-                <div><strong>Buyers:</strong> use role <code>Buyer</code> and either <code>buyer_master_list_id</code> or <code>block</code> + <code>lot</code> to match the master list (links portal account to financing/reservation data).</div>
+                <div><strong>Buyers:</strong> use role <code>Buyer</code> and either <code>buyer_master_list_id</code> or <code>block</code> + <code>lot</code> to match the master list. An optional <code>middle_name</code> column is accepted. Matching a buyer updates that account instead of creating a second one.</div>
                 <div><strong>Staff:</strong> <code>Security Guard</code> or <code>Finance Officer</code> — block/lot optional.</div>
                 <a href="/admin/users/import/template" class="btn btn-outline" style="margin-top: 12px; width: 100%; justify-content: center; padding: 10px; border-radius: 10px; font-size: 12px; font-weight: 700; text-decoration: none;">Download CSV template</a>
             </div>
@@ -476,18 +487,16 @@
         document.getElementById('viewUserModal').style.display = 'none';
     }
 
-    function openEditModal(id, dbid, name, email, role, contact, block, lot) {
+    function openEditModal(id, dbid, firstName, middleName, lastName, email, role, contact, block, lot) {
         if (new URLSearchParams(window.location.search).get('edit') !== id) {
             window.history.pushState(null, '', '?edit=' + id);
         }
         document.getElementById('editUserId').value = id;
         document.getElementById('editUserDbId').value = dbid;
         document.getElementById('editUserIdLabel').innerText = `Updating ${id} (${role})`;
-        
-        const names = name.split(' ');
-        const firstName = names[0];
-        const lastName = names.slice(1).join(' ');
+
         document.getElementById('editUserFirstName').value = firstName;
+        document.getElementById('editUserMiddleName').value = middleName || '';
         document.getElementById('editUserLastName').value = lastName;
         
         document.getElementById('editUserEmail').value = email;
@@ -515,6 +524,7 @@
         const id = document.getElementById('editUserId').value;
         const dbid = document.getElementById('editUserDbId').value;
         const firstName = document.getElementById('editUserFirstName').value.trim();
+        const middleName = document.getElementById('editUserMiddleName').value.trim();
         const lastName = document.getElementById('editUserLastName').value.trim();
         const emailRaw = document.getElementById('editUserEmail').value;
         const contactRaw = document.getElementById('editUserContact').value;
@@ -522,8 +532,8 @@
         if (!validatedContact) return;
 
         const newPass = document.getElementById('editUserPassword').value;
-        const name = `${firstName} ${lastName}`.trim();
-        const payload = { name, email: validatedContact.email, contact_number: validatedContact.contact_number, password: newPass };
+        const name = [firstName, middleName, lastName].filter(Boolean).join(' ');
+        const payload = { first_name: firstName, middle_name: middleName, last_name: lastName, email: validatedContact.email, contact_number: validatedContact.contact_number, password: newPass };
         
         const resFields = document.getElementById('editResidentFields');
         if (resFields.style.display !== 'none') {
@@ -659,6 +669,7 @@
         e.preventDefault();
         
         const firstName = document.getElementById('userFirstName').value.trim();
+        const middleName = document.getElementById('userMiddleName').value.trim();
         const lastName = document.getElementById('userLastName').value.trim();
         const role = document.getElementById('newRole').value;
         const emailRaw = document.getElementById('userEmail').value;
@@ -666,8 +677,7 @@
         const validatedContact = validateUserEmailAndContact(emailRaw, contactRaw);
         if (!validatedContact) return;
 
-        const name = `${firstName} ${lastName}`.trim();
-        const payload = { name, email: validatedContact.email, contact_number: validatedContact.contact_number, role, status: 'Active' };
+        const payload = { first_name: firstName, middle_name: middleName, last_name: lastName, email: validatedContact.email, contact_number: validatedContact.contact_number, role, status: 'Active' };
         
         if (role === 'Resident') {
             payload.block = document.getElementById('resBlock').value;

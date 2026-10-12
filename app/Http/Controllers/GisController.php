@@ -11,12 +11,18 @@ class GisController extends Controller
     {
         $lots = Lot::with(['users' => function($q) {
             $q->where('status', '!=', 'Archived');
-        }, 'utilityBills'])->get();
+        }, 'buyer.user', 'utilityBills'])->get();
         
         $lotData = [];
         foreach ($lots as $lot) {
-            $isNotConnected = $lot->users->isEmpty();
-            $user = $isNotConnected ? null : $lot->users->first();
+            $user = $lot->users->first();
+            if (! $user) {
+                $buyerUser = $lot->buyer?->user;
+                if ($buyerUser && $buyerUser->status !== 'Archived' && ! $buyerUser->trashed()) {
+                    $user = $buyerUser;
+                }
+            }
+            $isNotConnected = $user === null;
             $owner = $user ? $user->name : 'Unassigned';
             $userId = $user ? $user->id : null;
             $userEmail = $user ? $user->email : '';

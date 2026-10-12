@@ -23,7 +23,7 @@ if (!function_exists('getIncidents')) {
                     }
 
                     return [
-                        'id' => substr($inc->id, 0, 8),
+                        'id' => $inc->id,
                         'sub' => $inc->subject,
                         'type' => $inc->type,
                         'res' => $resName,
@@ -46,7 +46,7 @@ if (!function_exists('getAnnouncements')) {
             if (\Illuminate\Support\Facades\Schema::hasTable('announcements') && \App\Models\Announcement::count() > 0) {
                 return \App\Models\Announcement::all()->map(function ($ann) {
                     return [
-                        'id' => substr($ann->id, 0, 8),
+                        'id' => $ann->id,
                         'title' => $ann->title,
                         'cat' => $ann->category,
                         'status' => $ann->status,
@@ -160,7 +160,7 @@ if (!function_exists('getLotMonthlyAmountChartData')) {
 
 if (!function_exists('updateResidentBehavior')) {
     function updateResidentBehavior(\App\Models\User $user) {
-        $bills = \App\Models\UtilityBill::where('user_id', $user->id)->get();
+        $bills = \App\Models\UtilityBill::where('resident_id', $user->id)->get();
         if ($bills->count() === 0) {
             $user->payment_behavior = 'Not available yet';
             $user->save();
@@ -284,7 +284,7 @@ if (!function_exists('getElectricalBills')) {
                     $previousBill = $billIndex !== false ? $resident->utilityBills->get($billIndex + 1) : null;
 
                     return [
-                        'id' => $bill ? substr($bill->id, 0, 8) : 'NEW-' . $resident->id,
+                        'id' => $bill ? $bill->id : 'NEW-' . $resident->id,
                         'db_id' => $bill ? $bill->id : null,
                         'lot' => $lot ? 'B' . $lot->block . ' L' . $lot->lot_number : 'N/A',
                         'block' => $lot ? $lot->block : 'N/A',
@@ -383,7 +383,7 @@ if (!function_exists('getWaterBills')) {
                     $previousBill = $billIndex !== false ? $resident->utilityBills->get($billIndex + 1) : null;
 
                     return [
-                        'id' => $bill ? substr($bill->id, 0, 8) : 'NEW-' . $resident->id,
+                        'id' => $bill ? $bill->id : 'NEW-' . $resident->id,
                         'db_id' => $bill ? $bill->id : null,
                         'lot' => $lot ? 'B' . $lot->block . ' L' . $lot->lot_number : 'N/A',
                         'block' => $lot ? $lot->block : 'N/A',
@@ -483,7 +483,7 @@ if (!function_exists('getReservationFees')) {
                     ->get()
                     ->map(function ($res) {
                     return [
-                        'id' => substr($res->id, 0, 8),
+                        'id' => $res->id,
                         'buyer' => ($res->buyerMasterList ? trim($res->buyerMasterList->first_name . ' ' . $res->buyerMasterList->last_name) : null) ?: ($res->notes ?? 'Guest'),
                         'contact' => $res->buyerMasterList->contact_number ?? '0917-000-0000',
                         'block' => $res->lot->block ?? 'N/A',
@@ -505,7 +505,7 @@ if (!function_exists('getDownpaymentFees')) {
     function getDownpaymentFees() {
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('downpayments') && \App\Models\Downpayment::count() > 0) {
-                return \App\Models\Downpayment::with(['reservation.lot', 'reservation.buyerMasterList'])->get()->map(function ($dp) {
+                return \App\Models\Downpayment::with(['reservation.lot', 'reservation.buyerMasterList.financingRecord'])->get()->map(function ($dp) {
                     $res = $dp->reservation;
                     $bml = $res?->buyerMasterList;
                     $histories = \Illuminate\Support\Facades\DB::table('downpayment_histories')->where('downpayment_id', $dp->id)->orderBy('created_at', 'asc')->get();
@@ -723,10 +723,10 @@ if (!function_exists('getDownpaymentFees')) {
                     }
 
                     return [
-                        'id' => substr($dp->id, 0, 8),
+                        'id' => $dp->id,
                         'buyer' => $buyerName !== '' ? $buyerName : 'Guest',
                         'contact' => $bml?->contact_number ?? 'N/A',
-                        'tcp' => (float) ($bml?->contract_amount ?? 0),
+                        'tcp' => (float) ($bml?->financingRecord?->contract_price ?? 0),
                         'penalty_percentage' => (float) ($dp->penalty_percentage ?? 0),
                         'block' => $res?->lot?->block ?? 'N/A',
                         'lot' => $res?->lot?->lot_number ?? 'N/A',
@@ -788,7 +788,7 @@ if (!function_exists('getUsers')) {
                     }
                     return [
                         'db_id' => $u->id,
-                        'id' => substr($u->id, 0, 8), // shorten uuid for UI
+                        'id' => $u->id,
                         'name' => $u->name,
                         'contact_number' => $u->contact_number,
                         'role' => $role,
@@ -830,7 +830,7 @@ if (!function_exists('getAppointments')) {
             if (\Illuminate\Support\Facades\Schema::hasTable('appointments') && \App\Models\Appointment::count() > 0) {
                 return \App\Models\Appointment::orderBy('created_at', 'desc')->get()->map(function ($apt) {
                     return [
-                        'id' => substr($apt->id, 0, 8),
+                        'id' => $apt->id,
                         'client' => $apt->client_name,
                         'first_name' => $apt->first_name,
                         'middle_name' => $apt->middle_name,

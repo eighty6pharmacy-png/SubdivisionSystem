@@ -4,18 +4,18 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Reservation extends Model
 {
-    use HasUuids, SoftDeletes;
+    use SoftDeletes;
 
     protected $fillable = [
         'user_id',
         'lot_id',
+        'buyer_id',
         'buyer_master_list_id',
         'status',
         'reservation_date',
@@ -48,8 +48,19 @@ class Reservation extends Model
         return $this->hasMany(Downpayment::class);
     }
 
+    public function setBuyerMasterListIdAttribute($value): void
+    {
+        $this->attributes['buyer_id'] = $value;
+        unset($this->attributes['buyer_master_list_id']);
+    }
+
+    public function getBuyerMasterListIdAttribute(): mixed
+    {
+        return $this->attributes['buyer_id'] ?? null;
+    }
+
     public function buyerMasterList(): BelongsTo
     {
-        return $this->belongsTo(BuyerMasterList::class);
+        return $this->belongsTo(BuyerMasterList::class, 'buyer_id', 'id');
     }
 }

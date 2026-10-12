@@ -45,7 +45,7 @@ class SyncPaymongoCheckouts
 
     private function syncResidentBills($user)
     {
-        $pendingBills = \App\Models\UtilityBill::where('user_id', $user->id)
+        $pendingBills = \App\Models\UtilityBill::where('resident_id', $user->id)
             ->where('status', '!=', BillStatus::Paid->value)
             ->whereNotNull('paymongo_checkout_id')
             ->get();
@@ -92,7 +92,7 @@ class SyncPaymongoCheckouts
     private function syncDownpayments($buyer)
     {
         $pendingDps = \App\Models\Downpayment::whereHas('reservation', function($q) use ($buyer) {
-            $q->where('buyer_master_list_id', $buyer->id);
+            $q->where('buyer_id', $buyer->id);
         })->where('balance', '>', 0)
           ->whereNotNull('paymongo_checkout_id')
           ->get();
@@ -127,7 +127,7 @@ class SyncPaymongoCheckouts
 
     private function syncFinancing($buyer)
     {
-        $fin = \App\Models\FinancingRecord::where('buyer_master_list_id', $buyer->id)
+        $fin = \App\Models\FinancingRecord::where('buyer_id', $buyer->id)
             ->where('balance', '>', 0)
             ->whereNotNull('paymongo_checkout_id')
             ->first();

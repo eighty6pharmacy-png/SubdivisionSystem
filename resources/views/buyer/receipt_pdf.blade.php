@@ -159,7 +159,7 @@
         if ($dp->due_date && $installmentNo > 0) {
             $dueThis = \Carbon\Carbon::parse($dp->due_date)->subMonths($all->count() - $installmentNo + 1)->format('M d, Y');
         }
-        $tcp = (float) ($buyer->contract_amount ?? 0);
+        $tcp = (float) ($buyer->financingRecord?->contract_price ?? 0);
     @endphp
 
     <div class="row">

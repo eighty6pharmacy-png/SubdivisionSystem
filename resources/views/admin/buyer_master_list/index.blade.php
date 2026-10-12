@@ -138,9 +138,14 @@
                                 <td style="font-weight: 600;">{{ $buyer->middle_name ?? '-' }}</td>
                                 <td style="font-weight: 600;">{{ $buyer->last_name }}</td>
                                 <td>{{ $buyer->block_no ?? '-' }}</td>
-                                <td>{{ $buyer->lot_no ?? '-' }}</td>
-                                <td style="font-family: monospace;">₱{{ number_format($buyer->contract_amount, 2) }}</td>
-                                <td style="font-family: monospace;">₱{{ number_format($buyer->equity, 2) }}</td>
+                                <td>
+                                    {{ $buyer->lot_no ?? '-' }}
+                                    @if($buyer->lot_link_warning)
+                                        <div style="margin-top: 4px; max-width: 220px; font-size: 11px; color: #92400e;">{{ $buyer->lot_link_warning }}</div>
+                                    @endif
+                                </td>
+                                <td style="font-family: monospace;">₱{{ number_format($buyer->financingRecord?->contract_price ?? 0, 2) }}</td>
+                                <td style="font-family: monospace;">₱{{ number_format($buyer->financingRecord?->paid_by_vendee_equity ?? 0, 2) }}</td>
                                 @php
                                     $reservation = $buyer->reservations->first();
                                 @endphp
@@ -164,7 +169,7 @@
                                         Edit
                                     </button>
                                     @php
-                                        $hasUserAccount = \App\Models\User::where('buyer_master_list_id', $buyer->id)->exists();
+                                        $hasUserAccount = $buyer->user && $buyer->user->password !== null;
                                     @endphp
                                     <form method="POST" action="{{ route('buyer.generate-account', $buyer->id) }}" id="generate-account-form-{{ $buyer->id }}" style="display:inline-block; margin: 0;">
                                         @csrf
@@ -236,7 +241,6 @@
                 <div style="display: flex; gap: 8px; border-bottom: 2px solid #e2e8f0; margin-bottom: 24px;">
                     <button type="button" class="tab-btn active" onclick="switchTab('tab-profile', this)">Profile &
                         Property</button>
-                    <button type="button" class="tab-btn" onclick="switchTab('tab-finance', this)">Financing & Loan</button>
                     <button type="button" class="tab-btn" onclick="switchTab('tab-title', this)">Titling Documents</button>
                 </div>
 
@@ -343,98 +347,6 @@
                                 name="description" id="inp_description" rows="4" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; resize:vertical; font-family:inherit;"
                                 class="view-readonly"></textarea></div>
-                    </div>
-                </div>
-
-                <div id="tab-finance" class="tab-content">
-                    <h4 style="color: #3b82f6; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-top: 0;">
-                        Contract Computations</h4>
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
-                        <div><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Contract Amount
-                                (₱)</label><input type="number" step="0.01" name="contract_amount" id="inp_contract_amount"
-                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly"></div>
-                        <div><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Equity
-                                (₱)</label><input type="number" step="0.01" name="equity" id="inp_equity"
-                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly"></div>
-                        <div><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Improvement Amt
-                                (₱)</label><input type="number" step="0.01" name="improvement_amount"
-                                id="inp_improvement_amount"
-                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly"></div>
-                    </div>
-
-                    <div style="margin-bottom: 16px;">
-                        <label class="form-label"
-                            style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Financing
-                            Method</label>
-                        <select name="financing_method" id="inp_financing_method" class="view-readonly"
-                            style="padding:8px; border:1px solid #cbd5e1; border-radius:8px; width: 100%; max-width: 300px;"
-                            onchange="toggleFinancingFields()">
-                            <option value="">-- Select Method --</option>
-                            <option value="Pag-IBIG">Pag-IBIG</option>
-                            <option value="Bank Loan">Bank Loan</option>
-                            <option value="Cash">Cash</option>
-                        </select>
-                    </div>
-
-                    <div id="loanSection">
-                        <h4 style="color: #3b82f6; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">Loan & Deductions
-                            Details</h4>
-                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
-                            <div><label class="form-label"
-                                    style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Loan Base
-                                    (₱)</label><input type="number" step="0.01" name="loan_base" id="inp_loan_base"
-                                    style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                    class="view-readonly"></div>
-                            <div><label class="form-label"
-                                    style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Loan Term
-                                    (Years)</label><input type="number" name="loan_term" id="inp_loan_term" max="100"
-                                    style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                    class="view-readonly"></div>
-                            <div><label class="form-label"
-                                    style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Monthly
-                                    Amort. (₱)</label><input type="number" step="0.01" name="monthly_amortization"
-                                    id="inp_monthly_amortization"
-                                    style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                    class="view-readonly"></div>
-                            <div><label class="form-label"
-                                    style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">MRI/SRI
-                                    (₱)</label><input type="number" step="0.01" name="mri_sri" id="inp_mri_sri"
-                                    style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                    class="view-readonly"></div>
-                            <div><label class="form-label"
-                                    style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Insurance
-                                    (₱)</label><input type="number" step="0.01" name="insurance" id="inp_insurance"
-                                    style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                    class="view-readonly"></div>
-                            <div><label class="form-label"
-                                    style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">MRI DS 1-Time
-                                    (₱)</label><input type="number" step="0.01" name="mri_ds_1time" id="inp_mri_ds_1time"
-                                    style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                    class="view-readonly"></div>
-                            <div><label class="form-label"
-                                    style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Non-Life
-                                    1-Time (₱)</label><input type="number" step="0.01" name="nonlife_1time"
-                                    id="inp_nonlife_1time"
-                                    style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                    class="view-readonly"></div>
-                            <div><label class="form-label"
-                                    style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Retention
-                                    (₱)</label><input type="number" step="0.01" name="retention" id="inp_retention"
-                                    style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                    class="view-readonly"></div>
-                            <div><label class="form-label"
-                                    style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Total
-                                    Deductions (₱)</label><input type="number" step="0.01" name="total_deductions"
-                                    id="inp_total_deductions"
-                                    style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                    class="view-readonly"></div>
-                        </div>
                     </div>
                 </div>
 
@@ -624,27 +536,6 @@
             spouse.style.cursor = isMarried ? '' : 'not-allowed';
         }
 
-        function toggleFinancingFields() {
-            const method = document.getElementById('inp_financing_method').value;
-            const loanSection = document.getElementById('loanSection');
-
-            if (method === 'Cash' || method === '') {
-                loanSection.style.display = 'none';
-                // Clear out optional fields so they dont get submitted
-                document.getElementById('inp_loan_base').value = '';
-                document.getElementById('inp_loan_term').value = '';
-                document.getElementById('inp_monthly_amortization').value = '';
-                document.getElementById('inp_mri_sri').value = '';
-                document.getElementById('inp_insurance').value = '';
-                document.getElementById('inp_mri_ds_1time').value = '';
-                document.getElementById('inp_nonlife_1time').value = '';
-                document.getElementById('inp_retention').value = '';
-                document.getElementById('inp_total_deductions').value = '';
-            } else {
-                loanSection.style.display = 'block';
-            }
-        }
-
         function openModal(mode, id = null) {
             const form = document.getElementById('buyerForm');
             form.reset();
@@ -655,8 +546,6 @@
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
             document.getElementById('tab-profile').classList.add('active');
             document.querySelector('.tab-btn').classList.add('active');
-
-            toggleFinancingFields();
 
             if (mode === 'add') {
                 document.getElementById('modalTitle').textContent = 'Add New Buyer';
@@ -692,23 +581,6 @@
                 document.getElementById('inp_floor_area').value = buyer.floor_area || '';
                 document.getElementById('inp_description').value = buyer.description || '';
 
-                document.getElementById('inp_contract_amount').value = buyer.contract_amount || '';
-                document.getElementById('inp_improvement_amount').value = buyer.improvement_amount || '';
-                document.getElementById('inp_equity').value = buyer.equity || '';
-
-                document.getElementById('inp_financing_method').value = buyer.financing_method || '';
-                toggleFinancingFields(); // Show/hide based on saved DB value
-
-                document.getElementById('inp_loan_base').value = buyer.loan_base || '';
-                document.getElementById('inp_loan_term').value = buyer.loan_term || '';
-                document.getElementById('inp_monthly_amortization').value = buyer.monthly_amortization || '';
-                document.getElementById('inp_mri_sri').value = buyer.mri_sri || '';
-                document.getElementById('inp_insurance').value = buyer.insurance || '';
-                document.getElementById('inp_mri_ds_1time').value = buyer.mri_ds_1time || '';
-                document.getElementById('inp_nonlife_1time').value = buyer.nonlife_1time || '';
-                document.getElementById('inp_retention').value = buyer.retention || '';
-                document.getElementById('inp_total_deductions').value = buyer.total_deductions || '';
-
                 document.getElementById('inp_tct_no').value = buyer.tct_no || '';
                 document.getElementById('inp_tax_dec_no').value = buyer.tax_dec_no || '';
                 document.getElementById('inp_pid').value = buyer.pid || '';
@@ -719,7 +591,6 @@
                     readOnlyElements.forEach(el => el.setAttribute('readonly', true));
                     document.getElementById('inp_block_no').setAttribute('disabled', true);
                     document.getElementById('inp_lot_no').setAttribute('disabled', true);
-                    document.getElementById('inp_financing_method').setAttribute('disabled', true);
                     document.getElementById('inp_civil_status').setAttribute('disabled', true);
                     syncSpouseField();
                 } else if (mode === 'edit') {
@@ -730,7 +601,6 @@
                     readOnlyElements.forEach(el => el.removeAttribute('readonly'));
                     document.getElementById('inp_block_no').removeAttribute('disabled');
                     document.getElementById('inp_lot_no').removeAttribute('disabled');
-                    document.getElementById('inp_financing_method').removeAttribute('disabled');
                     document.getElementById('inp_civil_status').removeAttribute('disabled');
                     syncSpouseField();
                 }
