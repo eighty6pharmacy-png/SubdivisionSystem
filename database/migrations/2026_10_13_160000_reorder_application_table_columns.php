@@ -1,7 +1,9 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Puts each application table into a formal column order:
@@ -93,6 +95,15 @@ return new class extends Migration
 
     public function up(): void
     {
+        // Older databases created this table before payment_method was added to the
+        // create migration, so the column was never applied. Add it before reordering.
+        if (Schema::hasTable('financing_payment_histories')
+            && ! Schema::hasColumn('financing_payment_histories', 'payment_method')) {
+            Schema::table('financing_payment_histories', function (Blueprint $table) {
+                $table->string('payment_method')->nullable()->default('Office Payment');
+            });
+        }
+
         $driver = DB::getDriverName();
 
         if ($driver === 'pgsql') {
