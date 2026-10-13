@@ -4,6 +4,11 @@ echo "Running optimizations and migrations..."
 php artisan optimize:clear
 php artisan migrate --force
 
+echo "Linking public storage and preparing upload folders..."
+mkdir -p storage/app/public/incidents
+php artisan storage:link --force
+chmod -R a+rX storage/app/public
+
 echo "🚀 Starting Laravel Queue Worker..."
 php artisan queue:work --sleep=3 --tries=3 &
 
