@@ -44,3 +44,7 @@ Schedule::call(function () {
 })->dailyAt('08:00');
 
 Schedule::command('sms:buyer-due')->dailyAt('09:00');
+
+Schedule::call(function () {
+    expirePastAppointments();
+})->everyFifteenMinutes();

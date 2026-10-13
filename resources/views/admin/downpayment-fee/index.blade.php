@@ -381,6 +381,7 @@
                     </tbody>
                 </table>
             </div>
+            @include('partials.admin-client-pagination', ['prefix' => 'downpaymentTable'])
         </div>
     </div>
 
@@ -492,16 +493,28 @@
                     style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
             </div>
 
+            @if($masterListBuyers->isEmpty())
+                <div role="status"
+                    style="margin-bottom: 16px; padding: 14px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; border: 1px solid #fde68a; background: #fffbeb; color: #92400e;">
+                    No buyers are ready for downpayment yet. Each buyer needs an active reservation on the Reservation Fee page first.
+                </div>
+            @endif
+
             <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Select
-                    Buyer from Master List</label>
+                    buyer (reservation required)</label>
                 <select id="dpBuyerMasterList" class="filter-select" style="width: 100%; padding: 12px;"
                     onchange="autoFillDownpaymentBuyer(this)">
                     <option value="">-- Choose Buyer --</option>
                     @foreach($masterListBuyers as $b)
+                        @php
+                            $readyReservation = $b->reservations->first();
+                        @endphp
                         <option value="{{ $b->id }}" data-first="{{ $b->first_name }}" data-last="{{ $b->last_name }}"
                             data-block="{{ $b->block_no }}" data-lot="{{ $b->lot_no }}" data-tcp="{{ $b->financingRecord?->contract_price ?? '' }}"
-                            data-equity="{{ $b->financingRecord?->paid_by_vendee_equity ?? '' }}">
+                            data-equity="{{ $b->financingRecord?->paid_by_vendee_equity ?? '' }}"
+                            data-reservation-id="{{ $readyReservation?->id ?? '' }}"
+                            data-reservation-amount="{{ $readyReservation?->amount ?? '' }}">
                             {{ $b->last_name }}, {{ $b->first_name }}
                             {{ $b->middle_name ? substr($b->middle_name, 0, 1) . '.' : '' }} — (Block {{ $b->block_no ?? '?' }}, Lot {{ $b->lot_no ?? '?' }})
                         </option>
@@ -670,10 +683,20 @@
             }
         }
 
-        function openContractModal() {
-            if (new URLSearchParams(window.location.search).get('action') !== 'add') {
-                window.history.pushState(null, '', '?action=add');
+        function preselectDownpaymentBuyer(buyerId) {
+            const select = document.getElementById('dpBuyerMasterList');
+            if (!select || !buyerId) return false;
+            const hasOption = Array.from(select.options).some(o => o.value === String(buyerId));
+            if (!hasOption) return false;
+            select.value = String(buyerId);
+            if (window.jQuery && $.fn.select2) {
+                $('#dpBuyerMasterList').val(String(buyerId)).trigger('change');
             }
+            autoFillDownpaymentBuyer(select);
+            return true;
+        }
+
+        function openContractModal() {
             document.getElementById('newContractModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
             calculateAmortization();
@@ -704,11 +727,11 @@
         }
 
         function printDpReceipt(historyId) {
-            const bill = allBillsRaw.find(b => b.id === currentModalId);
+            const bill = allBillsRaw.find(b => String(b.id) === String(currentModalId));
             if (!bill) return;
             const ledger = bill.installment_ledger || [];
-            const row = ledger.find(r => r.history_id === historyId)
-                || (bill.history || []).find(h => h.id === historyId);
+            const row = ledger.find(r => String(r.history_id) === String(historyId))
+                || (bill.history || []).find(h => String(h.id) === String(historyId));
             if (!row) return;
 
             const money = (n) => '₱' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -890,10 +913,10 @@
         }
 
         function viewDetail(id) {
-            const bill = allBillsRaw.find(b => b.id === id);
+            const bill = allBillsRaw.find(b => String(b.id) === String(id));
             if (!bill) return;
 
-            currentModalId = id;
+            currentModalId = bill.id;
             const balance = bill.total_dp - bill.paid_amount;
             const np = bill.next_payable;
 
@@ -1049,7 +1072,10 @@
                 btn.style.opacity = '0.7';
             }
 
-            const buyerId = document.getElementById('dpBuyerMasterList').value;
+            const buyerSelect = document.getElementById('dpBuyerMasterList');
+            const buyerId = buyerSelect.value;
+            const selectedOption = buyerSelect.options[buyerSelect.selectedIndex];
+            const reservationId = selectedOption?.getAttribute('data-reservation-id') || '';
             const firstName = document.getElementById('calcFirstName').value || 'New';
             const lastName = document.getElementById('calcLastName').value || 'Buyer';
             const contractDate = new Date().toISOString().split('T')[0];
@@ -1086,6 +1112,7 @@
                     },
                     body: JSON.stringify({
                         buyer_master_list_id: buyerId,
+                        reservation_id: reservationId || null,
                         first_name: firstName,
                         last_name: lastName,
                         contract_date: contractDate,
@@ -1102,7 +1129,7 @@
                 });
 
                 if (res.ok) {
-                    window.location.reload();
+                    window.location.href = '/admin/downpayment-fee';
                 } else {
                     const errorData = await res.json().catch(() => null);
                     Swal.fire(errorData && errorData.message ? errorData.message : 'Failed to save contract to database');
@@ -1179,10 +1206,6 @@
         window.addEventListener('DOMContentLoaded', () => {
             bindGisDropdowns('calcBlk', 'calcLot');
 
-            if (new URLSearchParams(window.location.search).get('action') === 'add') {
-                openContractModal();
-            }
-
             if (window.jQuery && $.fn.select2) {
                 $('#dpBuyerMasterList').select2({
                     placeholder: "-- Choose Buyer --",
@@ -1190,6 +1213,30 @@
                     width: '100%'
                 });
             }
+
+            const params = new URLSearchParams(window.location.search);
+            const shouldOpenCreate = params.get('create') === '1' || params.get('action') === 'add';
+            if (shouldOpenCreate) {
+                openContractModal();
+                const buyerId = params.get('buyer_id');
+                const preselected = buyerId ? preselectDownpaymentBuyer(buyerId) : false;
+                if (buyerId && !preselected) {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Buyer not available',
+                        text: 'That buyer has no active reservation ready for downpayment, or a contract already exists.',
+                    });
+                }
+            }
+
+            window.downpaymentTablePagination = initTablePagination({
+                rowSelector: '.bill-row',
+                infoEl: '#downpaymentTablePageInfo',
+                prevEl: '#downpaymentTablePagePrev',
+                nextEl: '#downpaymentTablePageNext',
+                perPage: 15,
+            });
+            filterTable();
 
             document.getElementById('billingSearch')?.addEventListener('input', filterTable);
             document.getElementById('behaviorFilter')?.addEventListener('change', filterTable);
@@ -1206,8 +1253,10 @@
                 const matchesSearch = text.includes(search);
                 const matchesBehavior = behavior === 'all' || row.dataset.behavior === behavior;
                 const matchesBlock = block === 'all' || row.dataset.block === block;
-                row.style.display = (matchesSearch && matchesBehavior && matchesBlock) ? '' : 'none';
+                row.classList.toggle('pagination-match', matchesSearch && matchesBehavior && matchesBlock);
             });
+
+            window.downpaymentTablePagination?.resetPage();
         }
     </script>
 @endsection

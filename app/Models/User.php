@@ -14,7 +14,6 @@ use Spatie\Permission\Traits\HasRoles;
 
 /**
  * @property int $id
- * @property string|null $external_id
  * @property string|null $first_name
  * @property string|null $middle_name
  * @property string|null $last_name
@@ -40,7 +39,6 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
-        'external_id',
         'name',
         'first_name',
         'middle_name',

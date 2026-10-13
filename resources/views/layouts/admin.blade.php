@@ -322,6 +322,7 @@
             });
         });
     </script>
+    <script src="{{ asset('js/admin-table-pagination.js') }}"></script>
 </body>
 
 </html>

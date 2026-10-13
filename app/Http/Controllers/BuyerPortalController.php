@@ -19,17 +19,11 @@ class BuyerPortalController extends Controller
             abort(403, 'No buyer record found for your account.');
         }
 
-        // Fetch downpayments for Reserved/Active/Converted reservations
-        $reservations = $buyer->reservations()->whereIn('status', ['Reserved', 'Pending', 'Converted'])->with('downpayments')->get();
-        $downpayments = collect();
-        foreach ($reservations as $res) {
-            foreach ($res->downpayments as $dp) {
-                $downpayments->push($dp);
-            }
-        }
+        $downpayments = $this->downpaymentsForBuyer($buyer, 'dashboard');
 
-        // Fetch financing record
-        $financing = FinancingRecord::where('buyer_id', $buyer->id)->first();
+        $financing = $downpayments->isNotEmpty()
+            ? FinancingRecord::where('buyer_id', $buyer->id)->first()
+            : null;
 
         return view('buyer.dashboard', compact('buyer', 'downpayments', 'financing'));
     }
@@ -43,15 +37,11 @@ class BuyerPortalController extends Controller
             abort(403, 'No buyer record found for your account.');
         }
 
-        $reservations = $buyer->reservations()->whereIn('status', ['Reserved', 'Pending', 'Converted'])->with('downpayments')->get();
-        $downpayments = collect();
-        foreach ($reservations as $res) {
-            foreach ($res->downpayments as $dp) {
-                $downpayments->push($dp);
-            }
-        }
+        $downpayments = $this->downpaymentsForBuyer($buyer, 'payments');
 
-        $financing = FinancingRecord::where('buyer_id', $buyer->id)->first();
+        $financing = $downpayments->isNotEmpty()
+            ? FinancingRecord::where('buyer_id', $buyer->id)->first()
+            : null;
 
         $finHistories = collect();
         if ($financing) {
@@ -73,13 +63,7 @@ class BuyerPortalController extends Controller
             abort(403, 'No buyer record found for your account.');
         }
 
-        $reservations = $buyer->reservations()->whereIn('status', ['Reserved', 'Pending', 'Converted'])->with('downpayments')->get();
-        $downpayments = collect();
-        foreach ($reservations as $res) {
-            foreach ($res->downpayments as $dp) {
-                $downpayments->push($dp);
-            }
-        }
+        $downpayments = $this->downpaymentsForBuyer($buyer, 'history');
 
         $dpHistories = \Illuminate\Support\Facades\DB::table('downpayment_histories')
             ->whereIn('downpayment_id', $downpayments->pluck('id'))
@@ -156,6 +140,25 @@ class BuyerPortalController extends Controller
         ]];
 
         return $this->createCheckoutSession($lineItems, 'FIN-' . $fin->id, 'Subdivision Financing Shortfall', $fin);
+    }
+
+    /**
+     * A cancelled reservation still keeps its downpayment contract. The buyer account must show that schedule.
+     */
+    private function downpaymentsForBuyer(BuyerMasterList $buyer, string $surface)
+    {
+        $reservations = $buyer->reservations()
+            ->where(function ($query) {
+                $query->whereIn('status', ['Reserved', 'Pending', 'Converted'])
+                    ->orWhereHas('downpayments');
+            })
+            ->with('downpayments')
+            ->get();
+
+        $downpayments = $reservations->flatMap->downpayments->values();
+
+
+        return $downpayments;
     }
 
     private function createCheckoutSession($lineItems, $reference, $description, $record = null)

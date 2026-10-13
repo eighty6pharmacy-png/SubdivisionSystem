@@ -285,6 +285,7 @@
                 </tbody>
             </table>
         </div>
+        @include('partials.admin-client-pagination', ['prefix' => 'waterTable'])
         @endif
     </div>
 </div>
@@ -901,12 +902,6 @@
         if (!bill) {
             bill = allBillsRaw.find(b => b.db_id && String(b.db_id).trim() === String(id).trim());
         }
-        if (!bill) {
-            bill = allBillsRaw.find(b => String(b.id).includes(String(id)) || String(id).includes(String(b.id)));
-        }
-        if (!bill && allBillsRaw.length > 0) {
-            bill = allBillsRaw[0];
-        }
         if (!bill) return;
         _currentBill = bill;
 
@@ -1260,7 +1255,7 @@
         rows.forEach(row => {
             const res = row.dataset.resident;
             const s = row.dataset.status;
-            const t = row.dataset.trend;
+            const t = row.dataset.behavior || row.dataset.trend;
             const b = row.dataset.block;
 
             const matchesSearch = res.includes(search);
@@ -1268,11 +1263,22 @@
             const matchesTrend = trend === 'all' || t === trend;
             const matchesBlock = block === 'all' || b === block;
 
-            row.style.display = (matchesSearch && matchesStatus && matchesTrend && matchesBlock) ? '' : 'none';
+            row.classList.toggle('pagination-match', matchesSearch && matchesStatus && matchesTrend && matchesBlock);
         });
+
+        window.waterTablePagination?.resetPage();
     }
 
     document.addEventListener('DOMContentLoaded', function() {
+        window.waterTablePagination = initTablePagination({
+            rowSelector: '.bill-row',
+            infoEl: '#waterTablePageInfo',
+            prevEl: '#waterTablePagePrev',
+            nextEl: '#waterTablePageNext',
+            perPage: 15,
+        });
+        applyFilters();
+
         const ctx = document.getElementById('waterSalesChart')?.getContext('2d');
         if (ctx) {
             @php

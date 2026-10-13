@@ -241,7 +241,8 @@ class DatabaseConstraintsTest extends TestCase
             ->assertJson(['success' => true]);
 
         $this->assertSoftDeleted('buyers', ['id' => $buyer->id]);
-        $this->assertSoftDeleted('reservations', ['id' => $reservation->id]);
+        $this->assertNull($reservation->fresh()->deleted_at);
+        $this->assertSame('Converted', $reservation->fresh()->status);
         $this->assertDatabaseHas('downpayments', ['id' => $dp->id]);
         $this->assertSame(1, DownpaymentHistory::where('downpayment_id', $dp->id)->count());
     }
@@ -298,7 +299,8 @@ class DatabaseConstraintsTest extends TestCase
             ->assertJson(['success' => true]);
 
         $this->assertNull($buyer->fresh()->deleted_at);
-        $this->assertSoftDeleted('reservations', ['id' => $reservation->id]);
+        $this->assertSame('Cancelled', $reservation->fresh()->status);
+        $this->assertNull($reservation->fresh()->deleted_at);
     }
 
     public function test_restore_skips_user_when_email_is_reused(): void
@@ -332,22 +334,46 @@ class DatabaseConstraintsTest extends TestCase
         $this->assertSoftDeleted('buyers', ['id' => $buyer->id]);
     }
 
-    public function test_index_does_not_auto_archive_good_standing_overdue_reservation(): void
+    public function test_second_active_buyer_on_same_lot_is_rejected_via_api(): void
     {
-        $lot = $this->lot('9', '9');
-        $buyer = $this->buyer(['first_name' => 'Paid', 'last_name' => 'Buyer']);
-        $reservation = Reservation::create([
-            'lot_id' => $lot->id,
-            'buyer_master_list_id' => $buyer->id,
-            'status' => 'Reserved',
-            'reservation_date' => now()->subMonths(2),
-            'deadline_date' => now()->subDay()->toDateString(),
-            'amount' => 20000,
-        ]);
-        $this->downpayment($reservation);
+        $lot = $this->lot('4', '4');
+        $this->buyer(['first_name' => 'First', 'last_name' => 'Owner', 'email' => 'first.owner@gmail.com', 'lot_id' => $lot->id]);
 
-        $this->actingAs($this->admin())->get('/admin/buyer-master-list')->assertOk();
-        $this->assertNull($buyer->fresh()->deleted_at);
+        $this->actingAs($this->admin())
+            ->postJson('/admin/buyer-master-list', [
+                'first_name' => 'Second',
+                'middle_name' => 'X',
+                'last_name' => 'Buyer',
+                'email' => 'second.buyer@gmail.com',
+                'civil_status' => 'Single',
+                'present_address' => 'Addr',
+                'postal_address' => 'Addr',
+                'contact_number' => '09171234567',
+                'proof_of_id' => 'ID',
+                'id_type' => 'Passport',
+                'pagibig_number' => '123',
+                'block_no' => '4',
+                'lot_no' => '4',
+                'lot_area' => 100,
+                'floor_area' => 80,
+                'description' => 'House',
+            ])
+            ->assertStatus(422)
+            ->assertJson(['success' => false]);
+    }
+
+    public function test_archiving_buyer_cancels_reservation_without_deleting_row(): void
+    {
+        $lot = $this->lot('2', '2');
+        $buyer = $this->buyer(['lot_id' => $lot->id]);
+        $reservation = $this->reservation($lot, 'Reserved', $buyer);
+
+        $this->actingAs($this->admin())
+            ->deleteJson("/admin/buyer-master-list/{$buyer->id}")
+            ->assertOk();
+
+        $this->assertSoftDeleted('buyers', ['id' => $buyer->id]);
+        $this->assertSame('Cancelled', $reservation->fresh()->status);
         $this->assertNull($reservation->fresh()->deleted_at);
     }
 
@@ -386,7 +412,8 @@ class DatabaseConstraintsTest extends TestCase
                 'civil_status' => 'Single',
                 'present_address' => 'Block 5 Lot 12',
                 'postal_address' => 'Block 5 Lot 12',
-                'proof_of_id' => 'Passport',
+                'id_type' => 'Passport',
+                'proof_of_id' => 'P1234567',
                 'pagibig_number' => '1234-5678-9012',
                 'block_no' => '5',
                 'lot_no' => '12',
@@ -396,12 +423,121 @@ class DatabaseConstraintsTest extends TestCase
             ])
             ->assertOk();
 
-        $this->assertSame($lot->id, BuyerMasterList::whereHas('user', fn ($q) => $q->where('first_name', 'Maria'))->value('lot_id'));
+        $buyer = BuyerMasterList::whereHas('user', fn ($q) => $q->where('first_name', 'Maria'))->first();
+        $this->assertSame($lot->id, $buyer->lot_id);
+        $this->assertSame('Passport', $buyer->id_type);
+        $this->assertSame('P1234567', $buyer->proof_of_id);
         $this->assertSame(1, Lot::count());
+    }
+
+    public function test_blank_mri_on_financing_update(): void
+    {
+        $lot = $this->lot('9', '4');
+        $buyer = $this->buyer();
+        $record = $this->financing($buyer, $lot);
+        $record->update([
+            'financing_method' => 'Pag-IBIG',
+            'contract_price' => 1000000,
+            'sri_mri' => 5000,
+            'interim_mri' => 2500,
+            'loan_release' => 800000,
+            'status' => 'Pending',
+        ]);
+
+        $response = $this->actingAs($this->admin())->put(route('financing.update', $record->id), [
+            'financing_method' => 'Pag-IBIG',
+            'status' => 'Pending',
+            'contract_price' => '1000000',
+            'paid_by_vendee_equity' => '100000',
+            'mbrdc_add_fees' => '',
+            'other_exp_annotation' => '',
+            'improvements_fee' => '',
+            'mbrdc_turn_over_fee' => '',
+            'loan_release' => '800000',
+            'loan_base' => '',
+            'loan_term' => '',
+            'monthly_amortization' => '',
+            'inspection_fee' => '',
+            'retention_fee' => '',
+            'retention_on_hold' => '1',
+            'sri_mri' => '',
+            'pag_ibig_non_life' => '',
+            'interim_mri' => '',
+            'net_loan_proceeds' => '',
+        ]);
+
+        $response->assertRedirect(route('financing.show', $record->id));
+        $fresh = $record->fresh();
+        $this->assertSame('0.00', number_format((float) $fresh->sri_mri, 2));
+        $this->assertSame('0.00', number_format((float) $fresh->interim_mri, 2));
+        $this->assertSame('0.00', number_format((float) $fresh->mbrdc_add_fees, 2));
+
+        $cash = $this->put(route('financing.update', $record->id), [
+            'financing_method' => 'Cash',
+            'status' => 'Pending',
+            'contract_price' => '1000000',
+            'paid_by_vendee_equity' => '100000',
+            'loan_release' => '800000',
+            'sri_mri' => '5000',
+            'interim_mri' => '2500',
+            'retention_on_hold' => '1',
+        ]);
+        $cash->assertRedirect(route('financing.show', $record->id));
+        $cleared = $record->fresh();
+        $this->assertSame('Cash', $cleared->financing_method);
+        $this->assertSame('0.00', number_format((float) $cleared->sri_mri, 2));
+        $this->assertSame('0.00', number_format((float) $cleared->loan_release, 2));
+
+        $this->get(route('financing.show', $record->id))
+            ->assertOk()
+            ->assertSee('id="loanFields" style="display:none"', false)
+            ->assertSee('value="1" selected', false);
     }
 
     public function test_appointment_status_update_rejects_unknown_status(): void
     {
         $this->putJson('/api/appointments/abc/status', ['status' => 'Bogus'])->assertStatus(422);
+    }
+
+    public function test_reservation_uses_the_master_list_lot(): void
+    {
+        $lot = $this->lot('8', '3');
+        $other = $this->lot('9', '4');
+        $buyer = $this->buyer(['lot_id' => $lot->id, 'email' => 'reserved.buyer@gmail.com']);
+        $admin = $this->admin();
+
+        $this->actingAs($admin)
+            ->get('/admin/reservation-fee')
+            ->assertOk()
+            ->assertDontSee('id="resBlock"', false)
+            ->assertDontSee('id="resLot"', false)
+            ->assertSee('id="resAssignedLot"', false);
+
+        $this->actingAs($admin)
+            ->postJson('/admin/reservation-fee', [
+                'buyer_master_list_id' => $buyer->id,
+                'block' => $other->block,
+                'lot' => $other->lot_number,
+                'amount' => 20000,
+                'deadline_date' => now()->addDays(30)->toDateString(),
+            ])
+            ->assertOk()
+            ->assertJson(['success' => true]);
+
+        $reservation = Reservation::where('buyer_id', $buyer->id)->first();
+        $this->assertNotNull($reservation);
+        $this->assertSame($lot->id, $reservation->lot_id);
+        $this->assertSame($lot->id, $buyer->fresh()->lot_id);
+        $this->assertSame('Reserved', $lot->fresh()->status);
+        $this->assertSame('Available', $other->fresh()->status);
+
+        $unassigned = $this->buyer(['email' => 'nolot.buyer@gmail.com']);
+        $this->actingAs($admin)
+            ->postJson('/admin/reservation-fee', [
+                'buyer_master_list_id' => $unassigned->id,
+                'amount' => 20000,
+            ])
+            ->assertStatus(422)
+            ->assertJson(['success' => false]);
     }
 }

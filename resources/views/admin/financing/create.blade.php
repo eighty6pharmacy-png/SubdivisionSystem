@@ -76,7 +76,7 @@
                         @endforeach
                     </select>
                     <p style="font-size: 12px; color: #64748b; margin-top: 8px;">
-                        Contract price, equity, and loan terms are entered on the financing record after it is created.
+                        Only buyers who already have a downpayment contract are listed. A financing record is not created without that contract.
                     </p>
                 </div>
                 <div style="margin-top: 24px; text-align: right;">

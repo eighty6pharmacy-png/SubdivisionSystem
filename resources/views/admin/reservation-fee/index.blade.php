@@ -55,14 +55,14 @@
                     </div>
                 </div>
                 <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid #f59e0b;">
-                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Active Holds
+                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Active
                     </div>
                     <div style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">
-                        {{ collect($bills)->where('status', 'Reserved')->count() }}
+                        {{ collect($bills)->whereIn('status', ['Reserved', 'Pending'])->count() }}
                     </div>
                 </div>
                 <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid #94a3b8;">
-                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Paid</div>
+                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Converted</div>
                     <div style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">
                         {{ collect($bills)->where('status', 'Converted')->count() }}
                     </div>
@@ -96,7 +96,7 @@
                 <span class="filter-label" style="display: block; font-size: 12px; color: #64748b; margin-bottom: 4px;">Status</span>
                 <select id="statusFilter" class="filter-select" style="padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;">
                     <option value="all">All Statuses</option>
-                    <option value="reserved">Reserved</option>
+                    <option value="active">Active</option>
                     <option value="converted">Converted</option>
                     <option value="cancelled">Cancelled</option>
                 </select>
@@ -118,7 +118,7 @@
         <!-- Reservation Ledger -->
         <div class="analytic-card">
             <div class="card-title">
-                <span>Recent Reservations</span>
+                <span>Reservation</span>
             </div>
             <div class="bill-table-container">
                 <table class="bill-table">
@@ -129,13 +129,28 @@
                             <th>Contact Info</th>
                             <th>Amount Paid</th>
                             <th>Date Reserved</th>
+                            <th>Deadline</th>
                             <th>Status</th>
                             <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="reservationTableBody">
                         @foreach($bills as $bill)
-                            <tr class="bill-row">
+                            @php
+                                $statusKey = match ($bill['status']) {
+                                    'Reserved', 'Pending' => 'active',
+                                    'Converted' => 'converted',
+                                    'Cancelled' => 'cancelled',
+                                    default => strtolower((string) $bill['status']),
+                                };
+                                $statusLabel = match ($statusKey) {
+                                    'active' => 'Active',
+                                    'converted' => 'Converted',
+                                    'cancelled' => 'Cancelled',
+                                    default => $bill['status'],
+                                };
+                            @endphp
+                            <tr class="bill-row" data-status="{{ $statusKey }}" data-block="{{ $bill['block'] }}">
                                 <td>
                                     <div style="font-weight: 700;">{{ $bill['buyer'] }}</div>
                                     <div style="font-size: 11px; color: #64748b;">ID: {{ $bill['id'] }}</div>
@@ -154,13 +169,36 @@
                                     <div style="font-size: 13px;">{{ date('M d, Y', strtotime($bill['date'])) }}</div>
                                 </td>
                                 <td>
-                                    @if($bill['status'] == 'Reserved')
-                                        <span class="badge badge-warning" style="background: #fef3c7; color: #d97706;">Active
-                                            Hold</span>
-                                    @elseif($bill['status'] == 'Converted')
-                                        <span class="badge badge-success">Paid</span>
+                                    @php
+                                        $deadlineNote = 'No deadline';
+                                        $deadlineOverdue = false;
+                                        if (!empty($bill['deadline'])) {
+                                            $deadlineDate = \Carbon\Carbon::parse($bill['deadline'])->startOfDay();
+                                            $today = now()->startOfDay();
+                                            if ($deadlineDate->lt($today)) {
+                                                $deadlineOverdue = true;
+                                                $overdueDays = (int) $deadlineDate->diffInDays($today);
+                                                $deadlineNote = 'Overdue '.$overdueDays.' '.($overdueDays === 1 ? 'day' : 'days');
+                                            } elseif ($deadlineDate->equalTo($today)) {
+                                                $deadlineNote = 'Due today';
+                                            } else {
+                                                $daysLeft = (int) $today->diffInDays($deadlineDate);
+                                                $deadlineNote = $daysLeft.' '.($daysLeft === 1 ? 'day' : 'days').' left';
+                                            }
+                                        }
+                                    @endphp
+                                    <div style="font-size: 13px; font-weight: 700; color: {{ $deadlineOverdue ? '#dc2626' : '#0f172a' }};">
+                                        {{ !empty($bill['deadline']) ? date('M d, Y', strtotime($bill['deadline'])) : '—' }}
+                                    </div>
+                                    <div style="font-size: 11px; margin-top: 4px; font-weight: 700; color: {{ $deadlineOverdue ? '#dc2626' : '#64748b' }};">{{ $deadlineNote }}</div>
+                                </td>
+                                <td class="status-cell">
+                                    @if($statusKey === 'active')
+                                        <span class="badge badge-warning" style="background: #fef3c7; color: #d97706;">{{ $statusLabel }}</span>
+                                    @elseif($statusKey === 'converted')
+                                        <span class="badge badge-success">{{ $statusLabel }}</span>
                                     @else
-                                        <span class="badge badge-danger">Cancelled</span>
+                                        <span class="badge badge-danger">{{ $statusLabel }}</span>
                                     @endif
                                 </td>
                                 <td class="action-cell">
@@ -174,6 +212,7 @@
                     </tbody>
                 </table>
             </div>
+            @include('partials.admin-client-pagination', ['prefix' => 'reservationTable'])
         </div>
     </div>
 
@@ -213,12 +252,21 @@
                                 style="font-size: 24px; font-weight: 700; color: var(--bill-primary); margin-top: 4px;">
                             </div>
                         </div>
+                        <div id="modalDeadlineCard" style="grid-column: 1 / -1; background: #f8fafc; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0;">
+                            <span style="font-size: 12px; color: #64748b;">Deadline</span>
+                            <div id="modalDeadline" style="font-size: 24px; font-weight: 700; color: #0f172a; margin-top: 4px;"></div>
+                            <div id="modalDeadlineNote" style="font-size: 13px; font-weight: 700; margin-top: 8px;"></div>
+                        </div>
                     </div>
 
-                    <div
+                    <div id="modalStatusAlert" role="status"
+                        style="display: none; margin-top: 32px; padding: 14px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; line-height: 1.5; border: 1px solid #e2e8f0; background: #f8fafc; color: #475569;">
+                    </div>
+
+                    <div id="modalReservationActions"
                         style="display: flex; gap: 16px; margin-top: 40px; border-top: 1px solid var(--bill-border); padding-top: 32px;">
-                        <button class="btn btn-primary" onclick="convertReservation()">Convert to Downpayment</button>
-                        <button class="btn btn-outline" style="color: var(--bill-danger); border-color: #fee2e2;"
+                        <button type="button" class="btn btn-primary" onclick="convertReservation()">Convert to Downpayment</button>
+                        <button type="button" class="btn btn-outline" style="color: var(--bill-danger); border-color: #fee2e2;"
                             onclick="cancelReservation()">Cancel Reservation</button>
                     </div>
                 </div>
@@ -270,50 +318,9 @@
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-                <div>
-                    <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Block</label>
-                    <select id="resBlock" class="filter-select" style="width: 100%; padding: 12px;">
-                        <option value="1">Block 1</option>
-                        <option value="2">Block 2</option>
-                        <option value="3">Block 3</option>
-                        <option value="4">Block 4</option>
-                        <option value="5">Block 5</option>
-                        <option value="6">Block 6</option>
-                        <option value="7">Block 7</option>
-                        <option value="8">Block 8</option>
-                        <option value="9">Block 9</option>
-                        <option value="10">Block 10</option>
-                        <option value="11">Block 11</option>
-                        <option value="12">Block 12</option>
-                        <option value="13">Block 13</option>
-                        <option value="14">Block 14</option>
-                        <option value="15">Block 15</option>
-                        <option value="16">Block 16</option>
-                    </select>
-                </div>
-                <div>
-                    <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Lot</label>
-                    <select id="resLot" class="filter-select" style="width: 100%; padding: 12px;">
-                        <option value="1">Lot 1</option>
-                        <option value="2">Lot 2</option>
-                        <option value="3">Lot 3</option>
-                        <option value="4">Lot 4</option>
-                        <option value="5">Lot 5</option>
-                        <option value="6">Lot 6</option>
-                        <option value="7">Lot 7</option>
-                        <option value="8">Lot 8</option>
-                        <option value="9">Lot 9</option>
-                        <option value="10">Lot 10</option>
-                        <option value="11">Lot 11</option>
-                        <option value="12">Lot 12</option>
-                        <option value="13">Lot 13</option>
-                        <option value="14">Lot 14</option>
-                        <option value="15">Lot 15</option>
-                    </select>
-                </div>
+            <div id="resAssignedLot"
+                style="margin-bottom: 16px; padding: 12px 14px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 14px; font-weight: 700; color: #64748b;">
+                Select a buyer to use their block and lot from the Master List.
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
                 <div>
@@ -339,7 +346,6 @@
         </div>
     </div>
 
-    <script src="{{ asset('js/gis-dropdowns.js') }}"></script>
     <script>
         const allBillsRaw = @json($bills);
 
@@ -354,21 +360,24 @@
 
         function autoFillReservationBuyer(select) {
             const option = select.options[select.selectedIndex];
-            if (option.value) {
-                document.getElementById('resName').value = option.getAttribute('data-name');
-                document.getElementById('resContact').value = option.getAttribute('data-contact');
+            const label = document.getElementById('resAssignedLot');
+            if (!option || !option.value) {
+                label.textContent = 'Select a buyer to use their block and lot from the Master List.';
+                label.style.color = '#64748b';
+                return;
+            }
 
-                // Try to auto-select block and lot
-                const blk = option.getAttribute('data-block');
-                const lot = option.getAttribute('data-lot');
-                if (blk) {
-                    const bOpt = Array.from(document.getElementById('resBlock').options).find(o => o.text.includes(blk) || o.value == blk);
-                    if (bOpt) bOpt.selected = true;
-                }
-                if (lot) {
-                    const lOpt = Array.from(document.getElementById('resLot').options).find(o => o.text.includes(lot) || o.value == lot);
-                    if (lOpt) lOpt.selected = true;
-                }
+            document.getElementById('resName').value = option.getAttribute('data-name');
+            document.getElementById('resContact').value = option.getAttribute('data-contact');
+
+            const blk = option.getAttribute('data-block');
+            const lot = option.getAttribute('data-lot');
+            if (blk && lot) {
+                label.textContent = `Block ${blk}, Lot ${lot}`;
+                label.style.color = '#0f172a';
+            } else {
+                label.textContent = 'This buyer has no block and lot on the Master List. Set them there before reserving.';
+                label.style.color = '#b45309';
             }
         }
 
@@ -399,17 +408,27 @@
                 btn.style.opacity = '0.7';
             }
 
-            const buyerId = document.getElementById('resBuyerMasterList').value;
+            const buyerSelect = document.getElementById('resBuyerMasterList');
+            const buyerId = buyerSelect.value;
+            const buyerOption = buyerSelect.options[buyerSelect.selectedIndex];
             const name = document.getElementById('resName').value.trim();
             const contact = document.getElementById('resContact').value.trim();
-            const block = document.getElementById('resBlock').value;
-            const lot = document.getElementById('resLot').value;
             const deadline = document.getElementById('resDeadline').value;
             const amountStr = document.getElementById('resAmount').value.replace(/,/g, '');
             const amount = parseFloat(amountStr);
 
             if (!buyerId) {
                 Swal.fire('Please select a buyer from the Master List.');
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Save Reservation Record';
+                    btn.style.opacity = '1';
+                }
+                return;
+            }
+
+            if (!buyerOption.getAttribute('data-block') || !buyerOption.getAttribute('data-lot')) {
+                Swal.fire('This buyer has no block and lot on the Master List. Set them there before reserving.');
                 if (btn) {
                     btn.disabled = false;
                     btn.textContent = 'Save Reservation Record';
@@ -439,17 +458,16 @@
                         buyer_master_list_id: buyerId,
                         name: name,
                         contact: contact,
-                        block: block,
-                        lot: lot,
                         amount: amount,
                         deadline_date: deadline
                     })
                 });
 
+                const data = await res.json().catch(() => ({}));
                 if (res.ok) {
                     window.location.reload();
                 } else {
-                    Swal.fire('Failed to save reservation to database');
+                    Swal.fire(data.message || 'Failed to save reservation to database');
                     if (btn) {
                         btn.disabled = false;
                         btn.textContent = 'Save Reservation Record';
@@ -467,25 +485,91 @@
             }
         }
 
+        function reservationStatusLabel(status) {
+            if (status === 'Reserved' || status === 'Pending') return 'Active';
+            if (status === 'Converted') return 'Converted';
+            if (status === 'Cancelled') return 'Cancelled';
+            return status || '—';
+        }
+
         function viewDetail(id) {
-            const bill = allBillsRaw.find(b => b.id === id);
+            const bill = allBillsRaw.find(b => String(b.id) === String(id));
             if (!bill) return;
 
-            currentModalId = id;
+            currentModalId = bill.id;
 
             document.getElementById('modalResident').textContent = bill.buyer;
             document.getElementById('modalLot').textContent = `Block ${bill.block} - Lot ${bill.lot}`;
-            document.getElementById('modalAmount').textContent = `₱${bill.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            document.getElementById('modalAmount').textContent = `₱${Number(bill.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-            const dateObj = new Date(bill.date);
+            const dateObj = new Date(bill.date + 'T00:00:00');
             document.getElementById('modalDate').textContent = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            const deadlineEl = document.getElementById('modalDeadline');
+            const deadlineNoteEl = document.getElementById('modalDeadlineNote');
+            const deadlineCard = document.getElementById('modalDeadlineCard');
+            if (bill.deadline) {
+                const deadlineObj = new Date(bill.deadline + 'T00:00:00');
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const days = Math.round((deadlineObj - today) / 86400000);
+                deadlineEl.textContent = deadlineObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                if (days < 0) {
+                    const overdueDays = Math.abs(days);
+                    deadlineNoteEl.textContent = `Overdue ${overdueDays} ${overdueDays === 1 ? 'day' : 'days'}.`;
+                    deadlineNoteEl.style.color = '#dc2626';
+                    deadlineCard.style.borderColor = '#fecaca';
+                    deadlineCard.style.background = '#fef2f2';
+                } else if (days === 0) {
+                    deadlineNoteEl.textContent = 'Due today.';
+                    deadlineNoteEl.style.color = '#d97706';
+                    deadlineCard.style.borderColor = '#fde68a';
+                    deadlineCard.style.background = '#fffbeb';
+                } else {
+                    deadlineNoteEl.textContent = `${days} ${days === 1 ? 'day' : 'days'} left from today.`;
+                    deadlineNoteEl.style.color = '#047857';
+                    deadlineCard.style.borderColor = '#e2e8f0';
+                    deadlineCard.style.background = '#f8fafc';
+                }
+            } else {
+                deadlineEl.textContent = '—';
+                deadlineNoteEl.textContent = 'No deadline was set for this reservation.';
+                deadlineNoteEl.style.color = '#64748b';
+                deadlineCard.style.borderColor = '#e2e8f0';
+                deadlineCard.style.background = '#f8fafc';
+            }
 
             const trendEl = document.getElementById('modalTrend');
-            trendEl.textContent = bill.status;
-            trendEl.className = 'trend-chip ' + (bill.status === 'Converted' ? 'trend-early' : (bill.status === 'Cancelled' ? 'trend-late' : 'trend-early'));
-            if (bill.status === 'Reserved') {
+            const label = reservationStatusLabel(bill.status);
+            trendEl.textContent = label;
+            trendEl.className = 'trend-chip ' + (bill.status === 'Cancelled' ? 'trend-late' : 'trend-early');
+            trendEl.style.background = '';
+            trendEl.style.color = '';
+            if (bill.status === 'Reserved' || bill.status === 'Pending') {
                 trendEl.style.background = '#fef3c7';
                 trendEl.style.color = '#d97706';
+            }
+
+            const actionsEl = document.getElementById('modalReservationActions');
+            const alertEl = document.getElementById('modalStatusAlert');
+            const terminal = bill.status === 'Cancelled' || bill.status === 'Converted';
+            if (terminal) {
+                actionsEl.style.display = 'none';
+                alertEl.style.display = 'block';
+                if (bill.status === 'Cancelled') {
+                    alertEl.style.background = '#fef2f2';
+                    alertEl.style.borderColor = '#fecaca';
+                    alertEl.style.color = '#991b1b';
+                    alertEl.textContent = 'This reservation is cancelled. It stays on record for reference; no further actions apply here.';
+                } else {
+                    alertEl.style.background = '#ecfdf5';
+                    alertEl.style.borderColor = '#a7f3d0';
+                    alertEl.style.color = '#065f46';
+                    alertEl.innerHTML = 'This reservation was converted to downpayment. Manage the contract on the <a href="/admin/downpayment-fee" style="color:#047857;font-weight:800;">Downpayment Fee</a> page.';
+                }
+            } else {
+                actionsEl.style.display = 'flex';
+                alertEl.style.display = 'none';
+                alertEl.textContent = '';
             }
 
             document.getElementById('billModal').style.display = 'flex';
@@ -494,12 +578,13 @@
 
         function convertReservation() {
             if (!currentModalId) return;
-            const bill = allBillsRaw.find(b => b.id === currentModalId);
-            if (bill) bill.status = 'Converted';
-
-            updateRowStatus(currentModalId, '<span class="badge badge-success">Paid</span>');
-            closeModal();
-            if (window.pushSystemNotification) pushSystemNotification("Paid", "Reservation successfully marked as Paid.", "System");
+            const bill = allBillsRaw.find(b => String(b.id) === String(currentModalId));
+            if (!bill) return;
+            if (!bill.buyer_id) {
+                Swal.fire('This reservation is not linked to a Master List buyer. Assign a buyer before converting.');
+                return;
+            }
+            window.location.href = `/admin/downpayment-fee?create=1&buyer_id=${encodeURIComponent(bill.buyer_id)}&reservation_id=${encodeURIComponent(bill.id)}`;
         }
         async function cancelReservation() {
             if (!currentModalId) return;
@@ -525,10 +610,11 @@
             }
         }
 
-        function updateRowStatus(id, badgeHtml) {
+        function updateRowStatus(id, badgeHtml, statusKey) {
             const row = Array.from(document.querySelectorAll('.bill-row')).find(r => r.innerHTML.includes(id));
             if (row) {
-                const statusCell = row.querySelector('.status-cell') || row.cells[5];
+                if (statusKey) row.setAttribute('data-status', statusKey);
+                const statusCell = row.querySelector('.status-cell');
                 if (statusCell) statusCell.innerHTML = badgeHtml;
             }
         }
@@ -587,13 +673,11 @@
             }
         });
         window.addEventListener('DOMContentLoaded', () => {
-            bindGisDropdowns('resBlock', 'resLot', { blockPrefix: 'Block ', lotPrefix: 'Lot ' });
-
             if (new URLSearchParams(window.location.search).get('action') === 'add') {
                 openReservationModal();
             }
 
-            if ($.fn.select2) {
+            if (window.jQuery && $.fn.select2) {
                 $('#resBuyerMasterList').select2({
                     placeholder: "-- Choose Buyer --",
                     allowClear: true,
@@ -602,6 +686,15 @@
             }
 
             // Bind filter events
+            window.reservationTablePagination = initTablePagination({
+                rowSelector: '.bill-row',
+                infoEl: '#reservationTablePageInfo',
+                prevEl: '#reservationTablePagePrev',
+                nextEl: '#reservationTablePageNext',
+                perPage: 15,
+            });
+            filterTable();
+
             document.getElementById('billingSearch')?.addEventListener('input', filterTable);
             document.getElementById('statusFilter')?.addEventListener('change', filterTable);
             document.getElementById('blockFilter')?.addEventListener('change', filterTable);
@@ -614,15 +707,17 @@
             
             document.querySelectorAll('.bill-row').forEach(row => {
                 const text = row.innerText.toLowerCase();
-                const rowStatus = row.getAttribute('data-status') ? row.getAttribute('data-status').toLowerCase() : text;
-                const rowBlock = row.getAttribute('data-block') || text;
-                
+                const rowStatus = (row.getAttribute('data-status') || '').toLowerCase();
+                const rowBlock = (row.getAttribute('data-block') || '').toLowerCase();
+
                 const matchesSearch = text.includes(search);
-                const matchesStatus = status === 'all' || rowStatus.includes(status);
-                const matchesBlock = block === 'all' || rowBlock.includes('block ' + block.toLowerCase());
-                
-                row.style.display = (matchesSearch && matchesStatus && matchesBlock) ? '' : 'none';
+                const matchesStatus = status === 'all' || rowStatus === status;
+                const matchesBlock = block === 'all' || rowBlock === block.toLowerCase();
+
+                row.classList.toggle('pagination-match', matchesSearch && matchesStatus && matchesBlock);
             });
+
+            window.reservationTablePagination?.resetPage();
         }
     </script>
 @endsection

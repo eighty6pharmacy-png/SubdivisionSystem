@@ -46,11 +46,11 @@
     <div class="filter-bar">
         <div class="filter-group">
             <span class="filter-label">Search Client</span>
-            <input type="text" id="aptSearch" class="filter-select" placeholder="Name or Contact..." style="min-width: 200px;">
+            <input type="text" id="aptSearch" class="filter-select" placeholder="Name or Contact..." style="min-width: 200px;" oninput="applyAptFilters()">
         </div>
         <div class="filter-group">
             <span class="filter-label">Status</span>
-            <select id="statusFilter" class="filter-select">
+            <select id="statusFilter" class="filter-select" onchange="applyAptFilters()">
                 <option value="all">All Pipeline</option>
                 <option value="Pending">Pending</option>
                 <option value="Scheduled">Scheduled</option>
@@ -58,8 +58,9 @@
                 <option value="Cancelled">Cancelled</option>
             </select>
         </div>
-        <div style="margin-left: auto;">
-            <button class="btn btn-primary" onclick="applyAptFilters()">Apply Filters</button>
+        <div class="filter-group">
+            <span class="filter-label">Date</span>
+            <input type="date" id="dateFilter" class="filter-select" onchange="applyAptFilters()" title="Show appointments on this date. Clear it to show every date.">
         </div>
     </div>
 
@@ -347,6 +348,27 @@
     const itemsPerPage = 5;
     let calendar;
 
+    function manilaNow() {
+        return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+    }
+
+    function appointmentSlotDate(dateRaw, hour) {
+        const parts = String(hour).match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+        if (!parts) return null;
+        let h = parseInt(parts[1], 10);
+        const min = parseInt(parts[2], 10);
+        const mer = parts[3].toUpperCase();
+        if (mer === 'PM' && h !== 12) h += 12;
+        if (mer === 'AM' && h === 12) h = 0;
+        return new Date(`${dateRaw}T${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}:00`);
+    }
+
+    function appointmentLeadMs(dateRaw, hour) {
+        const slot = appointmentSlotDate(dateRaw, hour);
+        if (!slot) return -1;
+        return slot.getTime() - manilaNow().getTime();
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         renderAppointmentsFromStore();
     });
@@ -623,7 +645,8 @@
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'Accept': 'application/json'
             },
             body: JSON.stringify({
                 first_name: firstName,
@@ -637,7 +660,16 @@
                 status: 'Scheduled',
                 notes: ''
             })
-        }).then(() => {
+        }).then(res => res.json().then(data => ({ ok: res.ok, data })).catch(() => ({ ok: res.ok, data: {} })))
+        .then(({ ok, data }) => {
+            if (!ok || data.success === false) {
+                Swal.fire(data.message || 'Could not schedule this appointment.');
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = 'Schedule Appointment';
+                }
+                return;
+            }
             window.location.reload();
         }).catch(err => {
             console.error(err);
@@ -700,11 +732,14 @@
     function applyAptFilters() {
         const search = document.getElementById('aptSearch').value.toLowerCase();
         const status = document.getElementById('statusFilter').value;
+        const date = document.getElementById('dateFilter').value;
         
         filteredAppointments = allAppointments.filter(apt => {
             const clientMatch = (apt.client + ' ' + (apt.contact || '') + ' ' + (apt.email || '')).toLowerCase().includes(search);
             const statusMatch = status === 'all' || apt.status === status;
-            return clientMatch && statusMatch;
+            const aptDate = String(apt.date || '').split('T')[0];
+            const dateMatch = !date || aptDate === date;
+            return clientMatch && statusMatch && dateMatch;
         });
 
         currentPage = 1;
@@ -929,9 +964,10 @@
                             ];
                             availableHours.forEach(hour => {
                                 const isTaken = takenTimeslots.some(apt => 
-                                    (apt.date.split('T')[0] === dateRaw) && 
+                                    (String(apt.date).split('T')[0] === dateRaw) && 
                                     apt.time === hour
                                 );
+                                const lead = appointmentLeadMs(dateRaw, hour);
 
                                 const option = document.createElement('option');
                                 option.value = hour;
@@ -940,6 +976,12 @@
                                     option.disabled = true;
                                     option.style.color = '#dc2626';
                                     option.style.backgroundColor = '#fef2f2';
+                                } else if (lead <= 0) {
+                                    option.textContent = `${hour} (Past)`;
+                                    option.disabled = true;
+                                    option.style.color = '#6b7280';
+                                } else if (lead < 60 * 60 * 1000) {
+                                    return;
                                 } else {
                                     option.textContent = hour;
                                 }

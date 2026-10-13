@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Enums\DownpaymentStatus;
+use App\Enums\LotStatus;
 use App\Enums\ReservationStatus;
 use App\Http\Controllers\Controller;
 use App\Models\BuyerMasterList;
@@ -17,28 +17,6 @@ class BuyerMasterListController extends Controller
 {
     public function index(Request $request)
     {
-        // Auto-archive overdue reservations without any paid downpayments
-        $paidDownpaymentStatuses = [
-            DownpaymentStatus::FullyPaid->value,
-            DownpaymentStatus::GoodStanding->value,
-            'Paid',
-            'Delinquent',
-        ];
-        $overdueReservations = Reservation::where('deadline_date', '<', now()->format('Y-m-d'))
-            ->whereIn('status', ReservationStatus::activeValues())
-            ->whereDoesntHave('downpayments', function ($query) use ($paidDownpaymentStatuses) {
-                $query->whereIn('status', $paidDownpaymentStatuses);
-            })->get();
-
-        foreach ($overdueReservations as $res) {
-            $buyer = $res->buyerMasterList;
-            if ($buyer) {
-                $buyer->user?->delete();
-                $buyer->delete();
-            }
-            $res->delete();
-        }
-
         $query = BuyerMasterList::query();
 
         if ($request->status === 'cancelled') {
@@ -60,7 +38,7 @@ class BuyerMasterListController extends Controller
             $query->whereHas('lot', fn ($q) => $q->where('block', $request->block));
         }
 
-        $buyers = $query->orderBy('created_at', 'desc')->get();
+        $buyers = $query->orderBy('created_at', 'desc')->paginate(15)->withQueryString();
         $totalBuyers = BuyerMasterList::count();
         $cancelledBuyersCount = BuyerMasterList::onlyTrashed()->count();
         $availableLots = Lot::where('status', 'Available')->orderBy('block')->orderBy('lot_number')->get();
@@ -84,9 +62,34 @@ class BuyerMasterListController extends Controller
             ], 409);
         }
 
-        $validated['lot_id'] = $this->matchingLotId($validated['block_no'] ?? null, $validated['lot_no'] ?? null);
+        if (User::where('email', $validated['email'])->exists()) {
 
-        BuyerMasterList::create($validated);
+            return response()->json([
+                'success' => false,
+                'message' => 'That email address is already used by a buyer account. Edit that buyer to set the block and lot. Do not add them again.',
+            ], 422);
+        }
+
+        $lotId = $this->matchingLotId($validated['block_no'] ?? null, $validated['lot_no'] ?? null);
+        if ($message = $this->lotAssignmentConflictMessage($lotId, null)) {
+            return response()->json(['success' => false, 'message' => $message], 422);
+        }
+
+        try {
+            $buyer = DB::transaction(function () use ($validated, $lotId) {
+                $validated['lot_id'] = $lotId;
+
+                return BuyerMasterList::create($validated);
+            });
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'That email address is already used by a buyer account. Edit that buyer to set the block and lot. Do not add them again.',
+            ], 422);
+        }
+
+        $buyer->unsetRelation('lot');
+
 
         return response()->json(['success' => true, 'message' => 'Buyer added successfully to the Master List.']);
     }
@@ -101,6 +104,9 @@ class BuyerMasterListController extends Controller
         $lotId = $this->matchingLotId($validated['block_no'] ?? null, $validated['lot_no'] ?? null);
         $lotChanged = ($validated['block_no'] ?? null) != $buyer->block_no || ($validated['lot_no'] ?? null) != $buyer->lot_no;
         if ($lotId || $lotChanged) {
+            if ($message = $this->lotAssignmentConflictMessage($lotId, (int) $buyer->id)) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
             $validated['lot_id'] = $lotId;
         }
 
@@ -115,7 +121,78 @@ class BuyerMasterListController extends Controller
             return null;
         }
 
-        return \App\Models\Lot::where('block', $block)->where('lot_number', $lotNumber)->value('id');
+        $existing = Lot::where('block', $block)->where('lot_number', $lotNumber)->first();
+        $lot = $existing ?? Lot::create([
+            'block' => $block,
+            'lot_number' => $lotNumber,
+            'status' => LotStatus::VacantLot->value,
+            'provider_managed' => false,
+        ]);
+
+
+        return (string) $lot->id;
+    }
+
+    private function lotAssignmentConflictMessage(?string $lotId, ?int $exceptBuyerId): ?string
+    {
+        if ($lotId === null || $lotId === '') {
+            return null;
+        }
+
+        $otherBuyer = BuyerMasterList::where('lot_id', $lotId)
+            ->when($exceptBuyerId, fn ($q) => $q->where('id', '!=', $exceptBuyerId))
+            ->exists();
+        if ($otherBuyer) {
+            return 'That block and lot is already assigned to another buyer on the Master List. Choose a different lot or archive the other buyer first.';
+        }
+
+        $reservationBlocks = Reservation::where('lot_id', $lotId)
+            ->whereIn('status', ReservationStatus::activeValues())
+            ->when($exceptBuyerId, fn ($q) => $q->where(fn ($inner) => $inner
+                ->whereNull('buyer_id')
+                ->orWhere('buyer_id', '!=', $exceptBuyerId)))
+            ->exists();
+        if ($reservationBlocks) {
+            return 'That lot has an active reservation. Cancel or convert it before assigning another buyer.';
+        }
+
+        return null;
+    }
+
+    private function cancelReservationsOnArchive(BuyerMasterList $buyer): void
+    {
+        $preserveStatuses = $buyer->financingRecord !== null;
+
+        foreach ($buyer->reservations as $reservation) {
+            if ($preserveStatuses || $reservation->downpayments->isNotEmpty()) {
+                continue;
+            }
+
+            if (! in_array($reservation->status, ReservationStatus::activeValues(), true)) {
+                continue;
+            }
+
+            $reservation->update(['status' => ReservationStatus::Cancelled->value]);
+            $this->releaseLotIfIdle($reservation->lot_id);
+        }
+    }
+
+    private function releaseLotIfIdle(?string $lotId): void
+    {
+        if ($lotId === null || $lotId === '') {
+            return;
+        }
+
+        $stillHeld = BuyerMasterList::where('lot_id', $lotId)->exists()
+            || Reservation::where('lot_id', $lotId)
+                ->whereIn('status', ReservationStatus::activeValues())
+                ->exists();
+
+        if ($stillHeld) {
+            return;
+        }
+
+        Lot::whereKey($lotId)->update(['status' => LotStatus::Available->value]);
     }
 
     private function prepareBuyerContactEmail(Request $request): void
@@ -146,6 +223,7 @@ class BuyerMasterListController extends Controller
             'present_address' => 'required|string|max:1000',
             'postal_address' => 'required|string|max:1000',
             'contact_number' => ['required', 'regex:/^(09\d{9}|\+639\d{9}|639\d{9})$/'],
+            'id_type' => ['required', 'string', Rule::in(BuyerMasterList::ID_TYPES)],
             'proof_of_id' => 'required|string|max:255',
             'pagibig_number' => 'required|string|max:255',
 
@@ -172,26 +250,36 @@ class BuyerMasterListController extends Controller
             'email.email' => 'Please enter a real email address on a domain that can receive mail (Gmail, Outlook, company mail, etc.).',
             'contact_number.required' => 'Contact / Mobile Number is required.',
             'contact_number.regex' => 'Use a Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX.',
+            'id_type.required' => 'Select the type of ID.',
+            'id_type.in' => 'Select a valid ID type.',
+            'proof_of_id.required' => 'The ID number is required.',
         ];
+    }
+
+    private function proofOfIdForDocument(BuyerMasterList $buyer): string
+    {
+        return strtoupper(trim(implode(' ', array_filter([
+            $buyer->id_type,
+            $buyer->proof_of_id,
+        ]))));
     }
 
     public function destroy($id)
     {
-        $buyer = BuyerMasterList::withTrashed()->findOrFail($id);
+        $buyer = BuyerMasterList::with(['reservations.downpayments', 'financingRecord'])->findOrFail($id);
 
         if ($buyer->trashed()) {
             return response()->json(['success' => false, 'message' => 'Buyer is already archived.']);
         }
 
-        $buyer->user?->delete();
+        DB::transaction(function () use ($buyer) {
+            $this->cancelReservationsOnArchive($buyer);
 
-        // Archive related reservations
-        foreach($buyer->reservations as $res) {
-             $res->delete();
-        }
+            $buyer->user?->delete();
+            $buyer->delete();
+        });
 
-        $buyer->delete();
-        return response()->json(['success' => true, 'message' => 'Buyer record and account archived safely.']);
+        return response()->json(['success' => true, 'message' => 'Buyer archived. Reservation and payment records were kept on file.']);
     }
 
     public function restore($id)
@@ -230,33 +318,30 @@ class BuyerMasterListController extends Controller
                 }
             }
 
-            $archivedReservations = Reservation::onlyTrashed()
-                ->where('buyer_id', $buyer->id)
+            $cancelledReservations = Reservation::where('buyer_id', $buyer->id)
+                ->where('status', ReservationStatus::Cancelled->value)
                 ->orderByDesc('created_at')
                 ->get();
 
             $restoredReservations = 0;
             $lotBlocked = false;
-            foreach ($archivedReservations as $reservation) {
+            foreach ($cancelledReservations as $reservation) {
                 $lotHeld = Reservation::where('lot_id', $reservation->lot_id)
                     ->whereIn('status', ReservationStatus::activeValues())
                     ->exists();
-                if ($lotHeld) {
+                if ($lotHeld || $this->lotAssignmentConflictMessage((string) $reservation->lot_id, (int) $buyer->id)) {
                     $lotBlocked = true;
                     continue;
                 }
 
-                $reservation->restore();
-                $updates = [];
-                if ($reservation->status === ReservationStatus::Cancelled->value) {
-                    $updates['status'] = ReservationStatus::Reserved->value;
-                }
+                $updates = ['status' => ReservationStatus::Reserved->value];
                 $deadline = $reservation->deadline_date;
                 if ($deadline && \Carbon\Carbon::parse($deadline)->startOfDay()->lt(now()->startOfDay())) {
                     $updates['deadline_date'] = now()->addDays(30)->toDateString();
                 }
-                if ($updates) {
-                    $reservation->update($updates);
+                $reservation->update($updates);
+                if ($reservation->lot) {
+                    $reservation->lot->update(['status' => LotStatus::Reserved->value]);
                 }
                 $restoredReservations++;
             }
@@ -474,7 +559,8 @@ class BuyerMasterListController extends Controller
         $templateProcessor->setValue('contact_no', $buyer->contact_number ?? ''); // alias for old MSVS compatibility
         $templateProcessor->setValue('pagibig_number', strtoupper($buyer->pagibig_number ?? ''));
         $templateProcessor->setValue('pagibig_no', strtoupper($buyer->pagibig_number ?? '')); // alias for old MSVS compatibility
-        $templateProcessor->setValue('proof_of_id', strtoupper($buyer->proof_of_id ?? ''));
+        $templateProcessor->setValue('id_type', strtoupper($buyer->id_type ?? ''));
+        $templateProcessor->setValue('proof_of_id', $this->proofOfIdForDocument($buyer));
         $templateProcessor->setValue('financing_method', strtoupper($finance?->financing_method ?? ''));
         
         // Map all property fields
@@ -550,7 +636,8 @@ class BuyerMasterListController extends Controller
         $templateProcessor->setValue('block_no', strtoupper($buyer->block_no ?? ''));
         $templateProcessor->setValue('lot_no', strtoupper($buyer->lot_no ?? ''));
         $templateProcessor->setValue('tct_no', strtoupper($buyer->tct_no ?? ''));
-        $templateProcessor->setValue('proof_of_id', strtoupper($buyer->proof_of_id ?? ''));
+        $templateProcessor->setValue('id_type', strtoupper($buyer->id_type ?? ''));
+        $templateProcessor->setValue('proof_of_id', $this->proofOfIdForDocument($buyer));
 
         $fileName = 'Buyer_Conformity_' . $buyer->last_name . '_' . $buyer->first_name . '.docx';
         $tempFile = tempnam(sys_get_temp_dir(), 'PHPWord');

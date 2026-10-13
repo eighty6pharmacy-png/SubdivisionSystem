@@ -94,6 +94,13 @@
             {{ session('success') }}
         </div>
     @endif
+    @if($errors->any())
+        <div style="background: #fee2e2; color: #991b1b; border-left: 4px solid #dc2626; padding: 12px 16px; border-radius: 8px; margin-bottom: 24px; font-weight: 600; font-size: 14px;">
+            @foreach($errors->all() as $error)
+                <div>{{ $error }}</div>
+            @endforeach
+        </div>
+    @endif
 
     <div class="responsive-grid grid-2-1">
         <!-- 1. Base Financials & Update Form -->
@@ -112,7 +119,7 @@
                             <h4 style="font-size: 14px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">Base Information & Add-ons</h4>
                             <div class="form-group">
                                 <label>Financing Method</label>
-                                <select name="financing_method" class="form-control">
+                                <select name="financing_method" id="financingMethod" class="form-control">
                                     <option value="">-- Select Method --</option>
                                     <option value="Pag-IBIG" {{ $record->financing_method == 'Pag-IBIG' ? 'selected' : '' }}>Pag-IBIG</option>
                                     <option value="Bank Loan" {{ $record->financing_method == 'Bank Loan' ? 'selected' : '' }}>Bank Loan</option>
@@ -136,7 +143,7 @@
                             </div>
                         </div>
                         
-                        <div>
+                        <div id="loanFields" style="{{ $record->financing_method === 'Cash' ? 'display:none' : '' }}">
                             <div style="font-size: 14px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">&nbsp;</div>
                             <div class="form-group"><label>Gross Loan Released</label><input type="number" step="0.01" name="loan_release" class="form-control" style="border-color: #3b82f6;" value="{{ $record->loan_release }}"></div>
                             <div class="form-group"><label>Loan Base</label><input type="number" step="0.01" name="loan_base" class="form-control" value="{{ $record->loan_base }}"></div>
@@ -146,7 +153,7 @@
                             <div class="form-group"><label>Retention/Conversion</label><input type="number" step="0.01" name="retention_fee" class="form-control" style="color: #dc2626;" value="{{ $record->retention_fee }}"></div>
                             <div class="form-group"><label>Retention/Conversion Status</label>
                                 <select name="retention_on_hold" id="retentionOnHold" class="form-control">
-                                    <option value="1" {{ $record->retention_on_hold ?? true ? 'selected' : '' }}>On Hold (deducted from net proceeds)</option>
+                                    <option value="1" {{ ($record->retention_on_hold ?? true) ? 'selected' : '' }}>On Hold (deducted from net proceeds)</option>
                                     <option value="0" {{ ($record->retention_on_hold ?? true) ? '' : 'selected' }}>Unheld / Released (not deducted)</option>
                                 </select>
                             </div>
@@ -182,15 +189,15 @@
                         <strong style="color:#0f172a;">Due for Financing</strong>
                         <strong style="color:#0f172a;">₱{{ number_format($record->mbrdc_amt_due_for_financing, 2) }}</strong>
                     </div>
-                    <div class="list-item" style="margin-top: 12px;">
+                    <div class="list-item loan-only" style="margin-top: 12px; {{ $record->financing_method === 'Cash' ? 'display:none;' : '' }}">
                         <span style="color:#64748b;">Gross Loan Release</span>
                         <span style="font-weight:700; color:#3b82f6;">₱{{ number_format($record->loan_release, 2) }}</span>
                     </div>
-                    <div class="list-item">
+                    <div class="list-item loan-only" style="{{ $record->financing_method === 'Cash' ? 'display:none;' : '' }}">
                         <span style="color:#64748b;">Total Loan Deductions</span>
                         <span style="font-weight:700; color:#dc2626;">- ₱{{ number_format($record->total_amt_due, 2) }}</span>
                     </div>
-                    <div class="list-item" style="background: #dcfce7; margin: 0 -24px -24px -24px; padding: 16px 24px; border-radius: 0 0 16px 16px;">
+                    <div class="list-item loan-only" style="background: #dcfce7; margin: 0 -24px -24px -24px; padding: 16px 24px; border-radius: 0 0 16px 16px; {{ $record->financing_method === 'Cash' ? 'display:none;' : '' }}">
                         <strong style="color:#065f46;">Net Loan Proceeds (Dev Gets)</strong>
                         <strong style="color:#059669; font-size: 16px;">₱{{ number_format($record->net_loan_proceeds, 2) }}</strong>
                     </div>
@@ -203,11 +210,13 @@
                     Receivables
                 </div>
                 <div class="card-section-body" style="text-align: center;">
+                    <div class="loan-only" style="{{ $record->financing_method === 'Cash' ? 'display:none;' : '' }}">
                     <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 4px;">Retention/Conversion Hold</div>
                     <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">₱{{ number_format($record->retention_fee, 2) }}</div>
-                    @php $isHeld = $record->retention_on_hold ?? true; @endphp
+                    @php $isHeld = (bool) ($record->retention_on_hold ?? true); @endphp
                     <div style="font-size: 12px; font-weight: 700; margin-bottom: 8px; color: {{ $isHeld ? '#b45309' : '#059669' }};">{{ $isHeld ? 'ON HOLD (Pag-IBIG/Bank)' : 'UNHELD / RELEASED' }}</div>
                     <button type="button" onclick="toggleRetentionHold()" class="btn-submit" style="width: 100%; margin-bottom: 16px; background: {{ $isHeld ? '#059669' : '#b45309' }};">{{ $isHeld ? 'Unhold' : 'Hold Again' }}</button>
+                    </div>
                     
                     <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 4px;">Remaining Balance</div>
                     <div style="font-size: 32px; font-weight: 800; margin-bottom: 24px; color: {{ $record->balance > 0 ? '#dc2626' : '#059669' }}">₱{{ number_format($record->balance, 2) }}</div>
@@ -247,7 +256,25 @@
     </div>
 </div>
 <script>
+    function toggleCashFields() {
+        const method = document.getElementById('financingMethod');
+        const isCash = method && method.value === 'Cash';
+        const loanFields = document.getElementById('loanFields');
+        if (loanFields) {
+            loanFields.style.display = isCash ? 'none' : '';
+        }
+        document.querySelectorAll('.loan-only').forEach(function(el) {
+            el.style.display = isCash ? 'none' : '';
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
+        const method = document.getElementById('financingMethod');
+        if (method) {
+            method.addEventListener('change', toggleCashFields);
+        }
+        toggleCashFields();
+
         const numberInputs = document.querySelectorAll('input[type="number"]');
         
         numberInputs.forEach(input => {

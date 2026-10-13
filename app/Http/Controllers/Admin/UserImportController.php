@@ -18,14 +18,13 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class UserImportController extends Controller
 {
-    private const ALLOWED_ROLES = ['Resident', 'Security Guard', 'Finance Officer', 'Buyer'];
+    private const ALLOWED_ROLES = ['Resident', 'Security Guard', 'Finance Officer'];
 
     private const STAFF_ROLES = ['Security Guard', 'Finance Officer'];
 
     public function downloadTemplate(): StreamedResponse
     {
         $headers = [
-            'external_id',
             'first_name',
             'middle_name',
             'last_name',
@@ -34,14 +33,12 @@ class UserImportController extends Controller
             'role',
             'block',
             'lot',
-            'buyer_master_list_id',
         ];
 
         return response()->streamDownload(function () use ($headers) {
             $out = fopen('php://output', 'w');
             fputcsv($out, $headers);
             fputcsv($out, [
-                '1001',
                 'Juan',
                 '',
                 'Dela Cruz',
@@ -50,18 +47,15 @@ class UserImportController extends Controller
                 'Resident',
                 '5',
                 '12',
-                '',
             ]);
             fputcsv($out, [
-                '2001',
                 'Maria',
                 '',
                 'Santos',
                 'maria.santos@example.com',
                 '09181234567',
-                'Buyer',
-                '3',
-                '7',
+                'Security Guard',
+                '',
                 '',
             ]);
             fclose($out);
@@ -87,7 +81,7 @@ class UserImportController extends Controller
         $headers = array_map('strtolower', array_map('trim', $headers));
         $headers[0] = preg_replace('/[\x00-\x1F\x80-\xFF]/', '', $headers[0]);
 
-        $required = ['external_id', 'first_name', 'last_name', 'email', 'contact_number', 'role'];
+        $required = ['first_name', 'last_name', 'email', 'contact_number', 'role'];
         foreach ($required as $req) {
             if (!in_array($req, $headers, true)) {
                 return response()->json(['success' => false, 'message' => "Missing required column: {$req}"]);
@@ -98,7 +92,6 @@ class UserImportController extends Controller
         $created = 0;
         $updated = 0;
         $errors = [];
-        $seenExternalIds = [];
         $seenEmails = [];
 
         while (($row = fgetcsv($file)) !== false) {
@@ -112,7 +105,7 @@ class UserImportController extends Controller
                 continue;
             }
 
-            $result = $this->processRow($processed, $data, $seenExternalIds, $seenEmails);
+            $result = $this->processRow($processed, $data, $seenEmails);
             if ($result['error']) {
                 $errors[] = $result['error'];
                 continue;
@@ -138,29 +131,21 @@ class UserImportController extends Controller
 
     /**
      * @param  array<string, string>  $data
-     * @param  array<string, true>  $seenExternalIds
      * @param  array<string, true>  $seenEmails
      * @return array{error: string|null, created: bool, updated: bool}
      */
-    private function processRow(int $rowNumber, array $data, array &$seenExternalIds, array &$seenEmails): array
+    private function processRow(int $rowNumber, array $data, array &$seenEmails): array
     {
-        $externalId = trim((string) ($data['external_id'] ?? ''));
         $firstName = trim((string) ($data['first_name'] ?? ''));
         $middleName = trim((string) ($data['middle_name'] ?? ''));
         $lastName = trim((string) ($data['last_name'] ?? ''));
         $email = strtolower(trim((string) ($data['email'] ?? '')));
         $contact = $this->normalizePhone((string) ($data['contact_number'] ?? ''));
         $role = trim((string) ($data['role'] ?? ''));
-        $buyerMasterListId = trim((string) ($data['buyer_master_list_id'] ?? ''));
 
-        if ($externalId === '' || $firstName === '' || $lastName === '' || $email === '' || $contact === '' || $role === '') {
-            return ['error' => "Row {$rowNumber}: Missing required fields (external_id, first_name, last_name, email, contact_number, or role).", 'created' => false, 'updated' => false];
+        if ($firstName === '' || $lastName === '' || $email === '' || $contact === '' || $role === '') {
+            return ['error' => "Row {$rowNumber}: Missing required fields (first_name, last_name, email, contact_number, or role).", 'created' => false, 'updated' => false];
         }
-
-        if (isset($seenExternalIds[$externalId])) {
-            return ['error' => "Row {$rowNumber}: Duplicate external_id \"{$externalId}\" in CSV.", 'created' => false, 'updated' => false];
-        }
-        $seenExternalIds[$externalId] = true;
 
         if (isset($seenEmails[$email])) {
             return ['error' => "Row {$rowNumber}: Duplicate email \"{$email}\" in CSV.", 'created' => false, 'updated' => false];
@@ -168,34 +153,32 @@ class UserImportController extends Controller
         $seenEmails[$email] = true;
 
         if (!in_array($role, self::ALLOWED_ROLES, true)) {
-            return ['error' => "Row {$rowNumber}: Invalid role \"{$role}\". Allowed: ".implode(', ', self::ALLOWED_ROLES).'.', 'created' => false, 'updated' => false];
+            return ['error' => "Row {$rowNumber}: Invalid role \"{$role}\". Allowed: ".implode(', ', self::ALLOWED_ROLES).'. Buyers are added from the buyer master list.', 'created' => false, 'updated' => false];
         }
 
         $block = $this->normalizeLotComponent($data['block'] ?? null);
         $lot = $this->normalizeLotComponent($data['lot'] ?? null);
-        $needsLot = $role === 'Resident' || ($role === 'Buyer' && $buyerMasterListId === '');
 
-        if ($needsLot && ($block === null || $lot === null)) {
-            return ['error' => "Row {$rowNumber}: block and lot are required for {$role} when buyer_master_list_id is empty.", 'created' => false, 'updated' => false];
+        if ($role === 'Resident' && ($block === null || $lot === null)) {
+            return ['error' => "Row {$rowNumber}: block and lot are required for a resident.", 'created' => false, 'updated' => false];
         }
 
-        $existingByExternal = User::where('external_id', $externalId)->first();
-
-        $buyer = null;
-        if ($role === 'Buyer') {
-            $buyerResult = $this->resolveBuyer($rowNumber, $buyerMasterListId, $block, $lot);
-            if ($buyerResult['error']) {
-                return ['error' => $buyerResult['error'], 'created' => false, 'updated' => false];
+        $accountUser = User::query()->whereRaw('LOWER(email) = ?', [$email])->first();
+        if ($accountUser) {
+            $currentRoles = $accountUser->roles()->pluck('name');
+            if ($currentRoles->contains('Buyer')) {
+                return ['error' => "Row {$rowNumber}: {$email} belongs to a buyer account. Add buyers from the buyer master list.", 'created' => false, 'updated' => false];
             }
-            $buyer = $buyerResult['buyer'];
-        }
-
-        $accountUser = $existingByExternal;
-        if ($role === 'Buyer' && $buyer?->user) {
-            if ($accountUser && $accountUser->id !== $buyer->user->id) {
-                return ['error' => "Row {$rowNumber}: This external_id belongs to a different account than the matched buyer.", 'created' => false, 'updated' => false];
+            if ($currentRoles->contains('Admin')) {
+                return ['error' => "Row {$rowNumber}: {$email} belongs to an admin account.", 'created' => false, 'updated' => false];
             }
-            $accountUser = $buyer->user;
+            if ($accountUser->status === 'Archived') {
+                return ['error' => "Row {$rowNumber}: {$email} belongs to an archived account.", 'created' => false, 'updated' => false];
+            }
+            $roleRefusal = $accountUser->refusalForRoleChange($role);
+            if ($roleRefusal) {
+                return ['error' => "Row {$rowNumber}: {$roleRefusal}", 'created' => false, 'updated' => false];
+            }
         }
 
         $validator = Validator::make(
@@ -229,7 +212,7 @@ class UserImportController extends Controller
             return ['error' => "Row {$rowNumber}: ".$validator->errors()->first(), 'created' => false, 'updated' => false];
         }
 
-        if ($role === 'Resident' || $role === 'Buyer') {
+        if ($role === 'Resident') {
             $lotConflict = $this->lotOccupancyError($rowNumber, $block, $lot, $accountUser?->id);
             if ($lotConflict) {
                 return ['error' => $lotConflict, 'created' => false, 'updated' => false];
@@ -239,19 +222,14 @@ class UserImportController extends Controller
         try {
             if ($accountUser) {
                 $passwordWasNull = $accountUser->password === null;
-                $this->updateExistingUser($accountUser, $externalId, $firstName, $middleName, $lastName, $email, $contact, $role, $block, $lot, $buyer, $passwordWasNull);
+                $this->updateExistingUser($accountUser, $firstName, $middleName, $lastName, $email, $contact, $role, $block, $lot, $passwordWasNull);
 
                 return ['error' => null, 'created' => false, 'updated' => true];
-            }
-
-            if (User::where('email', $email)->exists()) {
-                return ['error' => "Row {$rowNumber}: Email {$email} already exists.", 'created' => false, 'updated' => false];
             }
 
             $password = 'Alth'.strtoupper(Str::random(6)).'!';
 
             $user = User::create([
-                'external_id' => $externalId,
                 'first_name' => $firstName,
                 'middle_name' => $middleName !== '' ? $middleName : null,
                 'last_name' => $lastName,
@@ -263,7 +241,7 @@ class UserImportController extends Controller
 
             Role::findOrCreate($role, 'web');
             $user->syncRoles([$role]);
-            $this->syncUserLot($user, $role, $block, $lot, $buyer);
+            $this->syncUserLot($user, $role, $block, $lot);
 
             SendNewUserCredentialsJob::dispatch($user, $password);
 
@@ -292,36 +270,7 @@ class UserImportController extends Controller
         return (string) (int) $value;
     }
 
-    /**
-     * @return array{error: string|null, buyer: BuyerMasterList|null}
-     */
-    private function resolveBuyer(int $rowNumber, string $buyerMasterListId, ?string $block, ?string $lot): array
-    {
-        if ($buyerMasterListId !== '') {
-            $buyer = BuyerMasterList::find($buyerMasterListId);
-            if (!$buyer) {
-                return ['error' => "Row {$rowNumber}: buyer_master_list_id not found.", 'buyer' => null];
-            }
-
-            return ['error' => null, 'buyer' => $buyer];
-        }
-
-        if ($block === null || $lot === null) {
-            return ['error' => "Row {$rowNumber}: Provide buyer_master_list_id or block and lot to match a buyer.", 'buyer' => null];
-        }
-
-        $buyer = BuyerMasterList::query()
-            ->whereHas('lot', fn ($q) => $q->where('block', $block)->where('lot_number', $lot))
-            ->first();
-
-        if (!$buyer) {
-            return ['error' => "Row {$rowNumber}: No buyer master list record for block {$block} lot {$lot}.", 'buyer' => null];
-        }
-
-        return ['error' => null, 'buyer' => $buyer];
-    }
-
-    private function lotOccupancyError(int $rowNumber, ?string $block, ?string $lot, ?string $ignoreUserId): ?string
+    private function lotOccupancyError(int $rowNumber, ?string $block, ?string $lot, int|string|null $ignoreUserId): ?string
     {
         if ($block === null || $lot === null) {
             return null;
@@ -357,7 +306,6 @@ class UserImportController extends Controller
 
     private function updateExistingUser(
         User $user,
-        string $externalId,
         string $firstName,
         string $middleName,
         string $lastName,
@@ -366,14 +314,8 @@ class UserImportController extends Controller
         string $role,
         ?string $block,
         ?string $lot,
-        ?BuyerMasterList $buyer,
         bool $setPassword = false
     ): void {
-        if ($buyer && $buyer->user_id !== $user->id) {
-            throw new \InvalidArgumentException('Cannot reassign user to a different buyer record.');
-        }
-
-        $user->external_id = $externalId;
         $user->first_name = $firstName;
         $user->middle_name = $middleName !== '' ? $middleName : null;
         $user->last_name = $lastName;
@@ -389,36 +331,16 @@ class UserImportController extends Controller
 
         Role::findOrCreate($role, 'web');
         $user->syncRoles([$role]);
-        $this->syncUserLot($user, $role, $block, $lot, $buyer);
+        $this->syncUserLot($user, $role, $block, $lot);
 
         if ($plainPassword) {
             SendNewUserCredentialsJob::dispatch($user, $plainPassword);
         }
     }
 
-    private function syncUserLot(User $user, string $role, ?string $block, ?string $lot, ?BuyerMasterList $buyer): void
+    private function syncUserLot(User $user, string $role, ?string $block, ?string $lot): void
     {
         if (in_array($role, self::STAFF_ROLES, true)) {
-            return;
-        }
-
-        if ($role === 'Buyer') {
-            $buyer = $buyer ?? $user->buyerMasterList;
-            if (! $buyer) {
-                return;
-            }
-            if ($block !== null && $lot !== null) {
-                $lotModel = Lot::firstOrCreate([
-                    'block' => $block,
-                    'lot_number' => $lot,
-                ]);
-                $buyer->lot_id = $lotModel->id;
-                $buyer->save();
-                $lotModel->update(['status' => 'Occupied']);
-            } elseif ($buyer->lot_id) {
-                Lot::whereKey($buyer->lot_id)->update(['status' => 'Occupied']);
-            }
-
             return;
         }
 

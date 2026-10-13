@@ -4,7 +4,8 @@
 if (!function_exists('getIncidents')) {
     function getIncidents() {
         try {
-            if (\Illuminate\Support\Facades\Schema::hasTable('incidents') && \App\Models\Incident::count() > 0) {
+            $incidentCount = \Illuminate\Support\Facades\Schema::hasTable('incidents') ? \App\Models\Incident::count() : 0;
+            if (\Illuminate\Support\Facades\Schema::hasTable('incidents') && $incidentCount > 0) {
                 return \App\Models\Incident::with('user')->get()->map(function ($inc) {
                     $resName = 'Anonymous';
                     if ($inc->user) {
@@ -35,7 +36,8 @@ if (!function_exists('getIncidents')) {
                     ];
                 })->toArray();
             }
-        } catch (\Exception $e) {} 
+        } catch (\Exception $e) {
+        }
         return [];
     }
 }
@@ -288,6 +290,7 @@ if (!function_exists('getElectricalBills')) {
                         'db_id' => $bill ? $bill->id : null,
                         'lot' => $lot ? 'B' . $lot->block . ' L' . $lot->lot_number : 'N/A',
                         'block' => $lot ? $lot->block : 'N/A',
+                        'lot_number' => $lot ? $lot->lot_number : null,
                         'resident' => $resident->name,
                         'provider_managed' => $lot ? $lot->provider_managed : false,
                         'amount' => $bill ? ($bill->amount + $bill->previous_balance + (($bill->is_at_risk && $bill->status !== 'Paid') ? (($bill->amount + $bill->previous_balance) * 0.05) : 0)) : 0,
@@ -478,18 +481,20 @@ if (!function_exists('getReservationFees')) {
     function getReservationFees() {
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('reservations') && \App\Models\Reservation::count() > 0) {
-                return \App\Models\Reservation::with(['lot'])
+                return \App\Models\Reservation::with(['lot', 'buyerMasterList'])
                     ->where('amount', '>', 0)
                     ->get()
                     ->map(function ($res) {
                     return [
                         'id' => $res->id,
+                        'buyer_id' => $res->buyer_id,
                         'buyer' => ($res->buyerMasterList ? trim($res->buyerMasterList->first_name . ' ' . $res->buyerMasterList->last_name) : null) ?: ($res->notes ?? 'Guest'),
                         'contact' => $res->buyerMasterList->contact_number ?? '0917-000-0000',
                         'block' => $res->lot->block ?? 'N/A',
                         'lot' => $res->lot->lot_number ?? 'N/A',
                         'amount' => $res->amount,
                         'date' => \Carbon\Carbon::parse($res->reservation_date)->format('Y-m-d'),
+                        'deadline' => $res->deadline_date ? \Carbon\Carbon::parse($res->deadline_date)->format('Y-m-d') : null,
                         'status' => $res->status,
                         'agent' => 'Admin',
                         'notes' => 'Database record',
@@ -824,9 +829,113 @@ if (!function_exists('getUsers')) {
     }
 }
 
+if (!function_exists('appointmentBookingError')) {
+    /**
+     * A same-day slot must start at least one hour from now. Past slots are closed too.
+     */
+    function appointmentBookingError(string $date, string $time): ?string
+    {
+        $tz = config('app.timezone', 'Asia/Manila');
+        try {
+            $slotAt = \Carbon\Carbon::parse($date.' '.$time, $tz);
+        } catch (\Throwable) {
+            return 'Please select a valid appointment time slot.';
+        }
+
+        $now = now($tz);
+        if ($slotAt->lte($now)) {
+            return 'That time slot has already passed. Please choose a later time.';
+        }
+        if ($slotAt->lt($now->copy()->addHour())) {
+            return 'Please choose a time at least 1 hour from now.';
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('sendAppointmentCancellationEmail')) {
+    function sendAppointmentCancellationEmail(\App\Models\Appointment $apt, string $reason): void
+    {
+        if (empty($apt->email)) {
+            return;
+        }
+
+        try {
+            $name = e($apt->client_name);
+            $safeReason = e($reason);
+            \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($apt, $name, $safeReason) {
+                $message->to($apt->email)
+                    ->subject('Appointment Cancellation Notice — Althesa Subdivision')
+                    ->html("
+                        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff;'>
+                            <div style='background: #dc2626; padding: 20px; border-radius: 12px; text-align: center;'>
+                                <h2 style='color: #ffffff; margin: 0;'>Althesa Subdivision</h2>
+                                <p style='color: #fef2f2; margin: 4px 0 0 0; font-size: 13px;'>Appointment Status Update</p>
+                            </div>
+                            <div style='padding: 20px 0;'>
+                                <p style='font-size: 16px; color: #0f172a;'>Dear <strong>{$name}</strong>,</p>
+                                <p style='color: #475569;'>We regret to inform you that your appointment request has been cancelled.</p>
+                                <div style='background: #fef2f2; padding: 16px; border-radius: 12px; border-left: 4px solid #dc2626; margin: 20px 0;'>
+                                    <p style='margin: 0; color: #991b1b;'><strong>Reason:</strong> {$safeReason}</p>
+                                </div>
+                                <p style='color: #475569;'>If you would like to reschedule, please visit our website and submit a new booking request.</p>
+                            </div>
+                            <div style='border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 12px; color: #94a3b8; text-align: center;'>
+                                Althesa Subdivision Management Office
+                            </div>
+                        </div>
+                    ");
+            });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to send cancellation email: '.$e->getMessage());
+        }
+    }
+}
+
+if (!function_exists('expirePastAppointments')) {
+    /**
+     * Cancel pending and scheduled appointments whose start time has already passed, then email the client.
+     */
+    function expirePastAppointments(): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('appointments')) {
+            return;
+        }
+
+        $tz = config('app.timezone', 'Asia/Manila');
+        $now = now($tz);
+        $open = \App\Models\Appointment::query()
+            ->whereIn('status', [
+                \App\Enums\AppointmentStatus::Pending->value,
+                \App\Enums\AppointmentStatus::Scheduled->value,
+            ])
+            ->whereDate('date', '<=', $now->toDateString())
+            ->get();
+
+        foreach ($open as $apt) {
+            $date = $apt->date instanceof \Carbon\CarbonInterface
+                ? $apt->date->format('Y-m-d')
+                : (string) $apt->date;
+            try {
+                $slotAt = \Carbon\Carbon::parse($date.' '.$apt->time, $tz);
+            } catch (\Throwable) {
+                continue;
+            }
+            if ($slotAt->gt($now)) {
+                continue;
+            }
+
+            $apt->update(['status' => \App\Enums\AppointmentStatus::Cancelled->value]);
+            sendAppointmentCancellationEmail($apt, 'The appointment time has already passed.');
+        }
+    }
+}
+
 if (!function_exists('getAppointments')) {
     function getAppointments() {
         try {
+            expirePastAppointments();
             if (\Illuminate\Support\Facades\Schema::hasTable('appointments') && \App\Models\Appointment::count() > 0) {
                 return \App\Models\Appointment::orderBy('created_at', 'desc')->get()->map(function ($apt) {
                     return [

@@ -469,7 +469,7 @@
             window.history.pushState(null, '', '?incident=' + id);
         }
         const incidents = rawIncidents;
-        const inc = incidents.find(i => i.id === id);
+        const inc = incidents.find(i => String(i.id) === String(id));
         if (!inc) return;
 
         currentIncidentId = id;

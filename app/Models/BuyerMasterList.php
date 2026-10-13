@@ -14,9 +14,48 @@ class BuyerMasterList extends Model
 {
     use SoftDeletes;
 
+    /**
+     * Government and commonly accepted IDs for a buyer record.
+     *
+     * @var list<string>
+     */
+    public const ID_TYPES = [
+        'Philippine National ID',
+        'Driver\'s License',
+        'Passport',
+        'UMID',
+        'SSS ID',
+        'GSIS eCard',
+        'PRC ID',
+        'Postal ID',
+        'Voter\'s ID',
+        'PhilHealth ID',
+        'TIN ID',
+        'Senior Citizen ID',
+        'Pag-IBIG Loyalty Card',
+        'Company ID',
+        'School ID',
+        'Barangay ID',
+    ];
+
     protected $table = 'buyers';
 
     protected $with = ['user', 'lot'];
+
+    /**
+     * These values live on the linked user account or lot. The master-list modal reads them from the buyer payload.
+     *
+     * @var list<string>
+     */
+    protected $appends = [
+        'first_name',
+        'middle_name',
+        'last_name',
+        'email',
+        'contact_number',
+        'block_no',
+        'lot_no',
+    ];
 
     /**
      * Identity columns are not stored here. They are read and written through the user account.
@@ -29,6 +68,7 @@ class BuyerMasterList extends Model
         'spouse_name',
         'present_address',
         'postal_address',
+        'id_type',
         'proof_of_id',
         'pagibig_number',
         'lot_id',
@@ -64,7 +104,7 @@ class BuyerMasterList extends Model
     public static function create(array $attributes = [])
     {
         return DB::transaction(function () use ($attributes) {
-            $userKeys = ['first_name', 'middle_name', 'last_name', 'email', 'contact_number', 'password', 'name', 'external_id', 'status', 'joined_at'];
+            $userKeys = ['first_name', 'middle_name', 'last_name', 'email', 'contact_number', 'password', 'name', 'status', 'joined_at'];
             $userAttributes = array_intersect_key($attributes, array_flip($userKeys));
             $buyerAttributes = array_diff_key($attributes, array_flip(array_merge($userKeys, ['id'])));
 

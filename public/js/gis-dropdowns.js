@@ -40,7 +40,10 @@ async function fetchGisBlockLotMap() {
                         if (dbLot.status !== 'Available' && dbLot.status !== 'Vacant Lot') {
                             available = false;
                         }
-                        if (dbLot.isNotConnected === false) { // has a user
+                        if (dbLot.isNotConnected === false) { // resident or master-list buyer
+                            available = false;
+                        }
+                        if (dbLot.hasActiveBuyer) {
                             available = false;
                         }
                     }

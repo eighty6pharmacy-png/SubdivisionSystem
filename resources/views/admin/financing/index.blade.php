@@ -107,12 +107,19 @@
                 <input type="text" name="search" placeholder="Search buyer name..." value="{{ request('search') }}"
                     style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; width: 200px;">
 
-                <select name="status" style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: white;">
+                <select name="status" onchange="this.form.submit()" style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: white;">
                     <option value="">All Statuses</option>
                     <option value="Pending" {{ request('status') == 'Pending' ? 'selected' : '' }}>Pending</option>
                     <option value="Processing" {{ request('status') == 'Processing' ? 'selected' : '' }}>Processing</option>
                     <option value="Released" {{ request('status') == 'Released' ? 'selected' : '' }}>Released</option>
                     <option value="Cleared" {{ request('status') == 'Cleared' ? 'selected' : '' }}>Cleared</option>
+                </select>
+
+                <select name="block" onchange="this.form.submit()" style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: white;">
+                    <option value="">All Blocks</option>
+                    @foreach($blocks as $block)
+                        <option value="{{ $block }}" {{ (string) request('block') === (string) $block ? 'selected' : '' }}>Block {{ $block }}</option>
+                    @endforeach
                 </select>
 
                 <button type="submit" class="pay-button" style="padding: 6px 12px; font-size: 13px;">Filter</button>
@@ -166,6 +173,7 @@
                 </tbody>
             </table>
         </div>
+        {{ $records->links('pagination.admin') }}
     </div>
 </div>
 

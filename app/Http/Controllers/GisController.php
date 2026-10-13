@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Models\BuyerMasterList;
 use App\Models\Lot;
 
 class GisController extends Controller
@@ -16,13 +16,8 @@ class GisController extends Controller
         $lotData = [];
         foreach ($lots as $lot) {
             $user = $lot->users->first();
-            if (! $user) {
-                $buyerUser = $lot->buyer?->user;
-                if ($buyerUser && $buyerUser->status !== 'Archived' && ! $buyerUser->trashed()) {
-                    $user = $buyerUser;
-                }
-            }
-            $isNotConnected = $user === null;
+            $hasActiveBuyer = BuyerMasterList::where('lot_id', $lot->id)->exists();
+            $isNotConnected = $user === null && ! $hasActiveBuyer;
             $owner = $user ? $user->name : 'Unassigned';
             $userId = $user ? $user->id : null;
             $userEmail = $user ? $user->email : '';
@@ -37,6 +32,7 @@ class GisController extends Controller
                 'block' => $lot->block,
                 'lot_number' => $lot->lot_number,
                 'status' => $lot->status,
+                'hasActiveBuyer' => $hasActiveBuyer,
                 'isNotConnected' => $isNotConnected,
                 'owner' => $owner,
                 'user_id' => $userId,

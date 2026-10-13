@@ -140,9 +140,6 @@
                             <span class="badge {{ $user['status'] === 'Active' ? 'badge-success' : 'badge-danger' }}" style="padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700;">
                                 {{ strtoupper($user['status']) }}
                             </span>
-                            @if(empty($user['can_log_in']))
-                                <div style="margin-top: 6px; font-size: 11px; font-weight: 700; color: #92400e;">No login yet</div>
-                            @endif
                         </td>
                         <td>
                             <div style="display: flex; gap: 8px;">
@@ -161,6 +158,7 @@
                 </tbody>
             </table>
         </div>
+        @include('partials.admin-client-pagination', ['prefix' => 'userTable'])
     </div>
 </div>
 
@@ -380,7 +378,7 @@
         <div class="modal-header" style="padding: 0; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start;">
             <div>
                 <h2 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">Import Users from CSV</h2>
-                <p style="font-size: 13px; font-weight: 400; color: #64748b; margin-top: 4px;">Upload a CSV to create or update users by <strong>external_id</strong> (your spreadsheet primary key). Internal system IDs are assigned automatically.</p>
+                <p style="font-size: 13px; font-weight: 400; color: #64748b; margin-top: 4px;">Upload a CSV to create or update residents, security guards, and finance officers. The same <strong>email</strong> updates that account.</p>
             </div>
             <button class="ann-btn-icon" onclick="closeImportModal()" style="background: none; border: none; cursor: pointer; color: #64748b;">
                 <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
@@ -391,10 +389,10 @@
 
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; font-size: 12px; color: #475569; line-height: 1.5;">
                 <div style="font-weight: 700; color: #334155; margin-bottom: 6px;">Required columns</div>
-                <code style="font-size: 11px;">external_id, first_name, last_name, email, contact_number, role</code>
-                <div style="margin-top: 8px;"><strong>Residents:</strong> include <code>block</code> and <code>lot</code>.</div>
-                <div><strong>Buyers:</strong> use role <code>Buyer</code> and either <code>buyer_master_list_id</code> or <code>block</code> + <code>lot</code> to match the master list. An optional <code>middle_name</code> column is accepted. Matching a buyer updates that account instead of creating a second one.</div>
-                <div><strong>Staff:</strong> <code>Security Guard</code> or <code>Finance Officer</code> — block/lot optional.</div>
+                <code style="font-size: 11px;">first_name, middle_name, last_name, email, contact_number, role, block, lot</code>
+                <div style="margin-top: 8px;"><strong>Residents:</strong> include <code>block</code> and <code>lot</code>. <code>middle_name</code> is optional.</div>
+                <div><strong>Staff:</strong> <code>Security Guard</code> or <code>Finance Officer</code>. Leave block and lot blank.</div>
+                <div><strong>Buyers</strong> are added from the buyer master list, not this file.</div>
                 <a href="/admin/users/import/template" class="btn btn-outline" style="margin-top: 12px; width: 100%; justify-content: center; padding: 10px; border-radius: 10px; font-size: 12px; font-weight: 700; text-decoration: none;">Download CSV template</a>
             </div>
 
@@ -606,7 +604,16 @@
 
     window.addEventListener('DOMContentLoaded', () => {
         bindGisDropdowns('resBlock', 'resLot');
-        
+
+        window.userTablePagination = initTablePagination({
+            rowSelector: '.user-row',
+            infoEl: '#userTablePageInfo',
+            prevEl: '#userTablePagePrev',
+            nextEl: '#userTablePageNext',
+            perPage: 15,
+        });
+        applyUserFilters();
+
         const params = new URLSearchParams(window.location.search);
         if (params.get('action') === 'add') {
             openAddUserModal();
@@ -661,8 +668,13 @@
                 matchesBlock = (b === block);
             }
 
-            row.style.display = (matchesSearch && matchesRole && matchesStatus && matchesBlock) ? '' : 'none';
+            const matches = matchesSearch && matchesRole && matchesStatus && matchesBlock;
+            row.classList.toggle('pagination-match', matches);
         });
+
+        if (window.userTablePagination) {
+            window.userTablePagination.resetPage();
+        }
     }
 
     async function submitNewUser(e) {
@@ -771,7 +783,7 @@
             if(data && data.success) {
                 let msg = `Successfully processed ${data.processed} rows.\n\nCreated ${data.created} new users.`;
                 if (typeof data.updated === 'number' && data.updated > 0) {
-                    msg += `\nUpdated ${data.updated} existing users (matched by external_id).`;
+                    msg += `\nUpdated ${data.updated} existing users (matched by email).`;
                 }
                 if (data.errors && data.errors.length > 0) {
                     msg += `\n\nThere were ${data.errors.length} errors/skipped rows (e.g., duplicates or missing data).`;

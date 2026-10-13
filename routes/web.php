@@ -22,6 +22,8 @@ Route::get('/home', function () {
 });
 
 Route::get('/appointment', function () {
+    expirePastAppointments();
+
     return view('appointment');
 });
 
@@ -524,13 +526,13 @@ Route::post('/api/appointments', function (\Illuminate\Http\Request $request) {
 
     $tz = config('app.timezone', 'Asia/Manila');
     $appointmentDate = \Carbon\Carbon::parse($request->input('date'), $tz)->startOfDay();
-    $slotAt = \Carbon\Carbon::parse($request->input('date').' '.$request->input('time'), $tz);
-    if ($slotAt->lte(now($tz))) {
+    if ($bookingError = appointmentBookingError($request->input('date'), $request->input('time'))) {
         return response()->json([
             'success' => false,
-            'message' => 'That time slot has already passed. Please choose a later time.',
+            'message' => $bookingError,
         ], 422);
     }
+    expirePastAppointments();
 
     $unavailableDates = json_decode(\App\Models\Setting::where('key', 'unavailable_dates')->value('value') ?? '[]', true) ?: [];
     $dateYmd = $appointmentDate->format('Y-m-d');
@@ -676,36 +678,8 @@ Route::put('/api/appointments/{id}/status', function (\Illuminate\Http\Request $
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error('Failed to send approval email: ' . $e->getMessage());
             }
-        } elseif ($request->input('status') === 'Cancelled' && $oldStatus !== 'Cancelled' && !empty($apt->email)) {
-            try {
-                $name = $apt->client_name;
-                $reason = $request->input('reason', 'Schedule conflict / fully booked.');
-                \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($apt, $name, $reason) {
-                    $message->to($apt->email)
-                        ->subject('⚠️ Appointment Cancellation Notice — Althesa Subdivision')
-                        ->html("
-                            <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff;'>
-                                <div style='background: #dc2626; padding: 20px; border-radius: 12px; text-align: center;'>
-                                    <h2 style='color: #ffffff; margin: 0;'>Althesa Subdivision</h2>
-                                    <p style='color: #fef2f2; margin: 4px 0 0 0; font-size: 13px;'>Appointment Status Update</p>
-                                </div>
-                                <div style='padding: 20px 0;'>
-                                    <p style='font-size: 16px; color: #0f172a;'>Dear <strong>{$name}</strong>,</p>
-                                    <p style='color: #475569;'>We regret to inform you that your appointment request has been cancelled by the administration.</p>
-                                    <div style='background: #fef2f2; padding: 16px; border-radius: 12px; border-left: 4px solid #dc2626; margin: 20px 0;'>
-                                        <p style='margin: 0; color: #991b1b;'><strong>Reason:</strong> {$reason}</p>
-                                    </div>
-                                    <p style='color: #475569;'>If you would like to reschedule, please visit our website and submit a new booking request.</p>
-                                </div>
-                                <div style='border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 12px; color: #94a3b8; text-align: center;'>
-                                    Althesa Subdivision Management Office
-                                </div>
-                            </div>
-                        ");
-                });
-            } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::error('Failed to send cancellation email: ' . $e->getMessage());
-            }
+        } elseif ($request->input('status') === 'Cancelled' && $oldStatus !== 'Cancelled') {
+            sendAppointmentCancellationEmail($apt, $request->input('reason', 'Schedule conflict / fully booked.'));
         }
     }
     return response()->json(['success' => true]);
@@ -862,11 +836,8 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             $role = $u->roles->first()->name ?? 'Resident';
             $lot = $u->lots->first() ?? $u->buyerMasterList?->lot;
             return [
-                'id' => $u->external_id
-                    ? 'USR-' . $u->external_id
-                    : 'USR-' . strtoupper(substr(str_replace('-', '', $u->id), 0, 8)),
+                'id' => 'USR-' . $u->id,
                 'db_id' => $u->id,
-                'external_id' => $u->external_id,
                 'name' => $u->name,
                 'first_name' => $u->first_name,
                 'middle_name' => $u->middle_name,
@@ -876,7 +847,6 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                 'status' => $u->status ?? 'Active',
                 'joined' => $u->created_at->format('Y-m-d'),
                 'contact_number' => $u->contact_number,
-                'can_log_in' => $u->password !== null,
                 'block' => $lot ? $lot->block : '',
                 'lot' => $lot ? $lot->lot_number : '',
                 'meta' => $lot ? 'Block ' . $lot->block . ', Lot ' . $lot->lot_number : ''
@@ -1087,28 +1057,27 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     });
 
     Route::post('/reservation-fee', function (\Illuminate\Http\Request $request) {
-        $name = $request->input('name');
-        $contact = $request->input('contact');
-        
-        $buyer = null;
-        if ($request->input('buyer_master_list_id')) {
-            $buyer = \App\Models\BuyerMasterList::find($request->input('buyer_master_list_id'));
-            if ($buyer) {
-                $name = trim($buyer->first_name . ' ' . $buyer->last_name);
-                $contact = $buyer->contact_number;
-            }
+        $buyer = \App\Models\BuyerMasterList::with('lot')->find($request->input('buyer_master_list_id'));
+        if (! $buyer) {
+            return response()->json(['success' => false, 'message' => 'Select a buyer from the Master List.'], 422);
         }
-        
-        try {
-            $res = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $buyer, $name, $contact) {
-                $lot = \App\Models\Lot::firstOrCreate(
-                    ['block' => $request->input('block'), 'lot_number' => $request->input('lot')],
-                    ['status' => \App\Enums\LotStatus::Reserved->value, 'provider_managed' => false]
-                );
 
+        $lot = $buyer->lot;
+        if (! $lot) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This buyer has no block and lot on the Master List. Set them there before recording a reservation.',
+            ], 422);
+        }
+
+        $name = trim($buyer->first_name . ' ' . $buyer->last_name);
+        $contact = $buyer->contact_number;
+
+        try {
+            $res = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $buyer, $lot, $name, $contact) {
                 $res = \App\Models\Reservation::create([
                     'lot_id' => $lot->id,
-                    'buyer_master_list_id' => $request->input('buyer_master_list_id'),
+                    'buyer_master_list_id' => $buyer->id,
                     'status' => \App\Enums\ReservationStatus::Reserved->value,
                     'reservation_date' => now(),
                     'deadline_date' => $request->input('deadline_date') ? \Carbon\Carbon::parse($request->input('deadline_date')) : null,
@@ -1116,10 +1085,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                     'notes' => ($name ?: 'New Buyer') . ' | ' . ($contact ?: 'N/A')
                 ]);
 
-                if ($buyer) {
-                    $buyer->lot_id = $lot->id;
-                    $buyer->save();
-                }
+                $lot->update(['status' => \App\Enums\LotStatus::Reserved->value]);
 
                 return $res;
             });
@@ -1153,33 +1119,31 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             return response()->json(['success' => false, 'message' => 'Buyer already has an active downpayment schedule.'], 403);
         }
 
-        try {
-            $dp = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $buyerId) {
-                // Use existing reservation without downpayment, or create a structural one
-                $res = \App\Models\Reservation::where('buyer_id', $buyerId)
-                    ->whereDoesntHave('downpayments')
-                    ->first();
+        $resQuery = \App\Models\Reservation::where('buyer_id', $buyerId)
+            ->whereIn('status', [
+                \App\Enums\ReservationStatus::Reserved->value,
+                \App\Enums\ReservationStatus::Pending->value,
+                \App\Enums\ReservationStatus::Converted->value,
+            ])
+            ->whereDoesntHave('downpayments')
+            ->orderByDesc('created_at');
 
-                if (!$res) {
-                    $lot = \App\Models\Lot::firstOrCreate(
-                        ['block' => $request->input('block'), 'lot_number' => $request->input('lot')],
-                        ['status' => \App\Enums\LotStatus::Reserved->value, 'provider_managed' => false]
-                    );
-                    $res = \App\Models\Reservation::create([
-                        'lot_id' => $lot->id,
-                        'buyer_master_list_id' => $buyerId,
-                        'status' => \App\Enums\ReservationStatus::Pending->value,
-                        'reservation_date' => now(),
-                        'amount' => 0,
-                        'notes' => $request->input('name') ?? 'New Buyer',
-                        'first_name' => $request->input('first_name'),
-                        'last_name' => $request->input('last_name')
-                    ]);
-                } else {
-                    // Update the existing reservation's status to converted since they now have a downpayment
-                    $res->status = \App\Enums\ReservationStatus::Converted->value;
-                    $res->save();
-                }
+        if ($request->filled('reservation_id')) {
+            $resQuery->whereKey($request->input('reservation_id'));
+        }
+
+        $res = $resQuery->first();
+        if (! $res) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Record a reservation for this buyer before creating a downpayment contract.',
+            ], 422);
+        }
+
+        try {
+            $dp = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $buyerId, $res) {
+                $res->status = \App\Enums\ReservationStatus::Converted->value;
+                $res->save();
 
                 $dp = \App\Models\Downpayment::create([
                     'reservation_id' => $res->id,
@@ -1262,6 +1226,10 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     });
 
     Route::get('/reservation-fee', function () {
+        \App\Models\Reservation::whereHas('downpayments')
+            ->where('status', '!=', \App\Enums\ReservationStatus::Converted->value)
+            ->update(['status' => \App\Enums\ReservationStatus::Converted->value]);
+
         $yearly_stats = [
             '2026' => [
                 'May' => 400000,
@@ -1311,8 +1279,25 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'today_paid' => 15000.00
         ];
         
-        // Only fetch buyers who DO NOT have any downpayments yet
-        $masterListBuyers = \App\Models\BuyerMasterList::with('financingRecord')->whereDoesntHave('reservations.downpayments')->get()->sortBy(fn ($buyer) => $buyer->last_name)->values();
+        \App\Models\Reservation::whereHas('downpayments')
+            ->where('status', '!=', \App\Enums\ReservationStatus::Converted->value)
+            ->update(['status' => \App\Enums\ReservationStatus::Converted->value]);
+
+        // Buyers with a reservation and no downpayment contract yet.
+        // Converted reservations stay here until the contract is saved, so both buttons use the same list.
+        $readyReservation = function ($q) {
+            $q->whereIn('status', [
+                \App\Enums\ReservationStatus::Reserved->value,
+                \App\Enums\ReservationStatus::Pending->value,
+                \App\Enums\ReservationStatus::Converted->value,
+            ])->whereDoesntHave('downpayments');
+        };
+        $masterListBuyers = \App\Models\BuyerMasterList::with(['financingRecord', 'reservations' => $readyReservation])
+            ->whereHas('reservations', $readyReservation)
+            ->whereDoesntHave('reservations.downpayments')
+            ->get()
+            ->sortBy(fn ($buyer) => $buyer->last_name)
+            ->values();
 
         return view('admin.downpayment-fee.index', [
             'bills' => getDownpaymentFees(),
@@ -1391,8 +1376,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $occupiedByResident = $lot->users()->where(function ($q) {
             $q->where('status', '!=', 'Archived')->orWhereNull('status');
         })->exists();
-        $occupiedByBuyer = \App\Models\BuyerMasterList::where('lot_id', $lot->id)->exists();
-        if ($occupiedByResident || $occupiedByBuyer) {
+        if ($occupiedByResident) {
             return response()->json(['success' => false, 'message' => 'Lot is occupied and cannot be changed.'], 403);
         }
 
@@ -2044,7 +2028,7 @@ Route::post('/admin/api/billing/disconnect', function (\Illuminate\Http\Request 
     $lotNumber = $request->input('lot');
     $lot = $request->filled('block')
         ? \App\Models\Lot::where('block', $request->input('block'))->where('lot_number', $lotNumber)->first()
-        : \App\Models\Lot::where('lot_number', $lotNumber)->orWhere('block', 'like', "%$lotNumber%")->first();
+        : null;
     if ($lot) {
         $lot->provider_managed = true;
         $lot->save();
@@ -2057,7 +2041,7 @@ Route::post('/admin/api/billing/reconnect', function (\Illuminate\Http\Request $
     $lotNumber = $request->input('lot');
     $lot = $request->filled('block')
         ? \App\Models\Lot::where('block', $request->input('block'))->where('lot_number', $lotNumber)->first()
-        : \App\Models\Lot::where('lot_number', $lotNumber)->orWhere('block', 'like', "%$lotNumber%")->first();
+        : null;
     if ($lot) {
         $lot->provider_managed = false;
         $lot->save();
@@ -2304,6 +2288,7 @@ Route::post('/api/settings', function (\Illuminate\Http\Request $request) {
 });
 
 Route::get('/api/appointments/availability', function () {
+    expirePastAppointments();
     $unavailableDates = json_decode(\App\Models\Setting::where('key', 'unavailable_dates')->value('value') ?? '[]', true);
 
     $appointments = \App\Models\Appointment::where('status', '!=', 'Cancelled')

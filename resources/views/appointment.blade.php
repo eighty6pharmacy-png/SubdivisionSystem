@@ -125,10 +125,10 @@
             return dateRaw < todayYmd();
         }
 
-        function isPastSlot(dateRaw, hour) {
+        function slotLeadMs(dateRaw, hour) {
             const slot = slotDateTime(dateRaw, hour);
-            if (!slot) return true;
-            return slot.getTime() <= manilaNow().getTime();
+            if (!slot) return -1;
+            return slot.getTime() - manilaNow().getTime();
         }
 
         function normalizePhone(raw) {
@@ -226,7 +226,7 @@
 
                     availableHours.forEach(hour => {
                         const isTaken = isTakenSlot(dateRaw, hour);
-                        const past = isPastSlot(dateRaw, hour);
+                        const lead = slotLeadMs(dateRaw, hour);
 
                         const option = document.createElement('option');
                         option.value = hour;
@@ -235,11 +235,13 @@
                             option.disabled = true;
                             option.style.color = '#dc2626';
                             option.style.backgroundColor = '#fef2f2';
-                        } else if (past) {
+                        } else if (lead <= 0) {
                             option.textContent = `${hour} (Past)`;
                             option.disabled = true;
                             option.style.color = '#6b7280';
                             option.style.backgroundColor = '#f3f4f6';
+                        } else if (lead < 60 * 60 * 1000) {
+                            return;
                         } else {
                             option.textContent = hour;
                         }
@@ -304,8 +306,13 @@
                         return;
                     }
 
-                    if (isPastSlot(selectedDate, selectedTime)) {
+                    const lead = slotLeadMs(selectedDate, selectedTime);
+                    if (lead <= 0) {
                         showFormError('Invalid time', 'That time slot has already passed. Please choose a later time.');
+                        return;
+                    }
+                    if (lead < 60 * 60 * 1000) {
+                        showFormError('Invalid time', 'Please choose a time at least 1 hour from now.');
                         return;
                     }
 

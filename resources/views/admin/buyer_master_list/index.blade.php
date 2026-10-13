@@ -116,7 +116,7 @@
                 </form>
             </div>
             <div class="bill-table-container" style="overflow-x: auto;">
-                <table class="bill-table" style="min-width: 1500px;">
+                <table class="bill-table" style="min-width: 1240px;">
                     <thead>
                         <tr>
                             <th>First Name</th>
@@ -126,7 +126,6 @@
                             <th>Lot</th>
                             <th>Contract Amount</th>
                             <th>Equity</th>
-                            <th>Reservation Date</th>
                             <th>Reservation Deadline</th>
                             <th>Action</th>
                         </tr>
@@ -147,15 +146,42 @@
                                 <td style="font-family: monospace;">₱{{ number_format($buyer->financingRecord?->contract_price ?? 0, 2) }}</td>
                                 <td style="font-family: monospace;">₱{{ number_format($buyer->financingRecord?->paid_by_vendee_equity ?? 0, 2) }}</td>
                                 @php
-                                    $reservation = $buyer->reservations->first();
+                                    $reservation = $buyer->reservations
+                                        ->filter(fn ($item) => filled($item->deadline_date))
+                                        ->sortByDesc(fn ($item) => [
+                                            in_array($item->status, ['Pending', 'Reserved'], true),
+                                            $item->id,
+                                        ])
+                                        ->first();
+                                    $deadlineLabel = null;
+                                    $deadlineNote = null;
+                                    $deadlineColor = '#64748b';
+                                    if ($reservation) {
+                                        $deadlineDate = \Carbon\Carbon::parse($reservation->deadline_date)->startOfDay();
+                                        $today = now()->startOfDay();
+                                        $deadlineLabel = $deadlineDate->format('M d, Y');
+                                        if ($deadlineDate->lt($today)) {
+                                            $overdueDays = (int) $deadlineDate->diffInDays($today);
+                                            $deadlineNote = 'Overdue '.$overdueDays.' '.($overdueDays === 1 ? 'day' : 'days');
+                                            $deadlineColor = '#dc2626';
+                                        } elseif ($deadlineDate->equalTo($today)) {
+                                            $deadlineNote = 'Due today';
+                                            $deadlineColor = '#d97706';
+                                        } else {
+                                            $daysLeft = (int) $today->diffInDays($deadlineDate);
+                                            $deadlineNote = $daysLeft.' '.($daysLeft === 1 ? 'day' : 'days').' left';
+                                            $deadlineColor = '#059669';
+                                        }
+                                    }
                                 @endphp
-                                <td>{{ $reservation && $reservation->reservation_date ? \Carbon\Carbon::parse($reservation->reservation_date)->format('M d, Y') : '-' }}
+                                <td style="color: {{ $deadlineColor }}; font-weight: 600; white-space: nowrap;">
+                                    {{ $deadlineLabel ?? '-' }}
+                                    @if($deadlineNote)
+                                        <div style="margin-top: 4px; font-size: 11px; font-weight: 700;">{{ $deadlineNote }}</div>
+                                    @endif
                                 </td>
-                                <td
-                                    style="color: {{ $reservation && $reservation->deadline_date && \Carbon\Carbon::parse($reservation->deadline_date)->isPast() ? '#dc2626' : '#059669' }}; font-weight: 600;">
-                                    {{ $reservation && $reservation->deadline_date ? \Carbon\Carbon::parse($reservation->deadline_date)->format('M d, Y') : '-' }}
-                                </td>
-                                <td style="display: flex; gap: 8px;">
+                                <td>
+                                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                                     <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="viewBuyer('{{ $buyer->id }}')">
                                         View
                                     </button>
@@ -184,11 +210,12 @@
                                         Archive
                                     </button>
                                     @endunless
+                                    </div>
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="10" style="text-align: center; padding: 40px; color: #64748b;">
+                                <td colspan="9" style="text-align: center; padding: 40px; color: #64748b;">
                                     {{ request('status') === 'cancelled' ? 'No cancelled buyers.' : 'No buyers in the Master List yet.' }}
                                 </td>
                             </tr>
@@ -196,6 +223,7 @@
                     </tbody>
                 </table>
             </div>
+            {{ $buyers->links('pagination.admin') }}
         </div>
     </div>
 
@@ -301,9 +329,19 @@
                                 Address *</label><input type="text" name="postal_address" id="inp_postal_address" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
-                        <div style="grid-column: span 2;"><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Proof of
-                                Identification (ID Type/No) *</label><input type="text" name="proof_of_id"
+                        <div><label class="form-label"
+                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Type of ID *</label>
+                            <select name="id_type" id="inp_id_type" required
+                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
+                                class="view-readonly">
+                                <option value="">-- Select ID Type --</option>
+                                @foreach(\App\Models\BuyerMasterList::ID_TYPES as $idType)
+                                    <option value="{{ $idType }}">{{ $idType }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div><label class="form-label"
+                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">ID Number *</label><input type="text" name="proof_of_id"
                                 id="inp_proof_of_id" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
@@ -462,7 +500,7 @@
 
     <script src="{{ asset('js/gis-dropdowns.js') }}"></script>
     <script>
-        const buyersData = @json($buyers);
+        const buyersData = @json($buyers->items());
         function isArchivedBuyer(id) {
             const buyer = buyersData.find(b => b.id == id);
             return !!(buyer && buyer.deleted_at);
@@ -571,6 +609,7 @@
                 document.getElementById('inp_email').value = buyer.email || '';
                 document.getElementById('inp_present_address').value = buyer.present_address || '';
                 document.getElementById('inp_postal_address').value = buyer.postal_address || '';
+                document.getElementById('inp_id_type').value = buyer.id_type || '';
                 document.getElementById('inp_proof_of_id').value = buyer.proof_of_id || '';
                 document.getElementById('inp_pagibig_number').value = buyer.pagibig_number || '';
 
@@ -592,6 +631,7 @@
                     document.getElementById('inp_block_no').setAttribute('disabled', true);
                     document.getElementById('inp_lot_no').setAttribute('disabled', true);
                     document.getElementById('inp_civil_status').setAttribute('disabled', true);
+                    document.getElementById('inp_id_type').setAttribute('disabled', true);
                     syncSpouseField();
                 } else if (mode === 'edit') {
                     document.getElementById('modalTitle').textContent = 'Edit Buyer Details';
@@ -602,6 +642,7 @@
                     document.getElementById('inp_block_no').removeAttribute('disabled');
                     document.getElementById('inp_lot_no').removeAttribute('disabled');
                     document.getElementById('inp_civil_status').removeAttribute('disabled');
+                    document.getElementById('inp_id_type').removeAttribute('disabled');
                     syncSpouseField();
                 }
             }
@@ -722,7 +763,7 @@
             if (blockIfArchived(id)) return;
             Swal.fire({
                 title: 'Archive Buyer?',
-                text: "Are you sure you want to archive this buyer? The buyer account and related reservations will also be archived.",
+                text: "Archive this buyer? Their login will be deactivated. Open reservations are marked Cancelled (records kept). Downpayment and financing data stay on file.",
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#ef4444',

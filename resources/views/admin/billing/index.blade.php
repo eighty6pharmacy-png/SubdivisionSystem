@@ -302,6 +302,7 @@
                 </tbody>
             </table>
         </div>
+        @include('partials.admin-client-pagination', ['prefix' => 'billingTable'])
         @endif
     </div>
 </div>
@@ -943,6 +944,8 @@
     async function disconnectCasureco() {
         const lotNumber = document.getElementById('modalLot').textContent;
         const resident = document.getElementById('modalResident').textContent;
+        const lotKey = _currentBill && _currentBill.lot_number != null ? String(_currentBill.lot_number) : '';
+        const blockKey = _currentBill && _currentBill.block != null && _currentBill.block !== 'N/A' ? String(_currentBill.block) : '';
         
         const confirmed = await promptAsync(
             "Confirm Disconnection",
@@ -951,6 +954,10 @@
         );
         
         if (!confirmed) return;
+        if (!lotKey || !blockKey) {
+            Swal.fire('Could not identify this lot. Nothing was changed.');
+            return;
+        }
 
         try {
             const res = await fetch('/admin/api/billing/disconnect', {
@@ -959,12 +966,14 @@
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}'
                 },
-                body: JSON.stringify({ resident: resident, lot: lotNumber })
+                body: JSON.stringify({ resident: resident, lot: lotKey, block: blockKey })
             });
             const data = await res.json();
             if(data.success) {
                 Swal.fire(`Successfully disconnected ${resident}. They are now managed by CASURECO.`);
                 window.location.reload();
+            } else {
+                Swal.fire(data.message || 'Failed to disconnect lot.');
             }
         } catch(e) {
             console.error(e);
@@ -975,6 +984,8 @@
     async function reconnectGrid() {
         const lotNumber = document.getElementById('modalLot').textContent;
         const resident = document.getElementById('modalResident').textContent;
+        const lotKey = _currentBill && _currentBill.lot_number != null ? String(_currentBill.lot_number) : '';
+        const blockKey = _currentBill && _currentBill.block != null && _currentBill.block !== 'N/A' ? String(_currentBill.block) : '';
         
         const confirmed = await promptAsync(
             "Confirm Reconnection",
@@ -983,6 +994,10 @@
         );
         
         if (!confirmed) return;
+        if (!lotKey || !blockKey) {
+            Swal.fire('Could not identify this lot. Nothing was changed.');
+            return;
+        }
 
         try {
             const res = await fetch('/admin/api/billing/reconnect', {
@@ -991,12 +1006,14 @@
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}'
                 },
-                body: JSON.stringify({ resident: resident, lot: lotNumber })
+                body: JSON.stringify({ resident: resident, lot: lotKey, block: blockKey })
             });
             const data = await res.json();
             if(data.success) {
                 Swal.fire(`Successfully reconnected ${resident}. They are now managed by the Internal Grid.`);
                 window.location.reload();
+            } else {
+                Swal.fire(data.message || 'Failed to reconnect lot.');
             }
         } catch(e) {
             console.error(e);
@@ -1010,12 +1027,6 @@
         let bill = allBillsRaw.find(b => String(b.id).trim() === String(id).trim());
         if (!bill) {
             bill = allBillsRaw.find(b => b.db_id && String(b.db_id).trim() === String(id).trim());
-        }
-        if (!bill) {
-            bill = allBillsRaw.find(b => String(b.id).includes(String(id)) || String(id).includes(String(b.id)));
-        }
-        if (!bill && allBillsRaw.length > 0) {
-            bill = allBillsRaw[0];
         }
         if (!bill) return;
         _currentBill = bill;
@@ -1375,11 +1386,22 @@
             const matchesBlock = block === 'all' || b === block;
             const matchesConn = connFilter === 'all' || c === connFilter;
 
-            row.style.display = (matchesSearch && matchesStatus && matchesTrend && matchesBlock && matchesConn) ? '' : 'none';
+            row.classList.toggle('pagination-match', matchesSearch && matchesStatus && matchesTrend && matchesBlock && matchesConn);
         });
+
+        window.billingTablePagination?.resetPage();
     }
 
     document.addEventListener('DOMContentLoaded', function() {
+        window.billingTablePagination = initTablePagination({
+            rowSelector: '.bill-row',
+            infoEl: '#billingTablePageInfo',
+            prevEl: '#billingTablePagePrev',
+            nextEl: '#billingTablePageNext',
+            perPage: 15,
+        });
+        applyFilters();
+
         const ctx = document.getElementById('electricitySalesChart')?.getContext('2d');
         if (ctx) {
             @php

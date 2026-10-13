@@ -78,8 +78,6 @@
 
                 <div class="login-forgot" onclick="openForgotModal()">Forgot your password?</div>
 
-                <p style="font-size: 12px; color: #64748b; line-height: 1.45; margin: 0;">After 5 incorrect sign-in attempts, this sign-in is paused for 15 minutes.</p>
-
                 <button class="login-submit" id="login-btn" onclick="doLogin()">
                     <span id="login-btn-text">Sign In →</span>
                 </button>
