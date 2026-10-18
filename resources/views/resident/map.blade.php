@@ -17,7 +17,10 @@
                 </div>
                 <input type="range" id="rotateZ" min="-180" max="180" value="-15" oninput="updateMapBearing(this.value)" style="width: 100%; accent-color: #3b82f6;">
             </div>
-            <button class="btn btn-secondary" onclick="resetMap()" style="padding: 10px 20px; font-weight: 600; border-radius: 8px; height: 100%;">Reset Route</button>
+            <button class="btn btn-secondary" onclick="resetMap()" style="padding: 10px 20px; font-weight: 600; border-radius: 8px; height: 100%; display: inline-flex; align-items: center; gap: 8px;">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                Reset Route
+            </button>
         </div>
     </div>
 
@@ -51,7 +54,11 @@
     }
 
     function resetMap() {
-        location.reload();
+        if (window.gisMap && typeof window.gisMap.clearRouting === 'function') {
+            window.gisMap.clearRouting();
+        } else {
+            location.reload();
+        }
     }
 </script>
 @endsection

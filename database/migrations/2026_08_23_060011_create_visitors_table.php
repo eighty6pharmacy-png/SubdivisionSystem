@@ -13,7 +13,9 @@ return new class extends Migration
             $table->uuid('host_id')->nullable();
             $table->string('visitor_name');
             $table->string('visitor_address')->nullable();
+            $table->string('contact_number', 30)->nullable();
             $table->string('pin')->nullable();
+            $table->string('access_token', 64)->nullable()->unique();
             $table->string('purpose');
             $table->string('validity');
             $table->string('arrival_time')->nullable();

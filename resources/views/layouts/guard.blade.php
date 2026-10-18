@@ -59,10 +59,16 @@
                 </button>
                 <div class="topbar-title">@yield('title', 'Security Station')</div>
             </div>
-            <div class="topbar-actions">
-                <div style="background: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <div class="topbar-actions" style="display: flex; align-items: center; gap: 12px;">
+                <div style="background: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
                     <span style="display: inline-block; width: 6px; height: 6px; background: #ef4444; border-radius: 50%; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.3);"></span>
                     Station: Main Gate
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="font-size: 13px; font-weight: 700; color: #1e293b;">{{ auth()->user()->name ?? 'Security Guard' }}</div>
+                    <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--guard-primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800;">
+                        {{ strtoupper(substr(auth()->user()->name ?? 'SG', 0, 2)) }}
+                    </div>
                 </div>
             </div>
         </header>

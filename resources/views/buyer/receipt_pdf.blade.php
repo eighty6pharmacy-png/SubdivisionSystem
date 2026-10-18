@@ -5,32 +5,37 @@
     <meta charset="UTF-8">
     <title>Downpayment Receipt - {{ \Carbon\Carbon::parse($hist->created_at)->format('M d, Y') }}</title>
     <style>
+        @page {
+            size: a4 portrait;
+            margin: 12mm 15mm 15mm 15mm;
+        }
         body {
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            color: #333;
-            font-size: 14px;
+            font-family: 'DejaVu Sans', sans-serif;
+            color: #000;
+            font-size: 13px;
             margin: 0;
-            padding: 20px;
+            padding: 0;
         }
 
         .header {
             text-align: center;
-            border-bottom: 2px solid #0057B8;
+            border-bottom: 2px solid #000;
             padding-bottom: 10px;
             margin-bottom: 20px;
             position: relative;
         }
 
         .header h1 {
-            color: #0057B8;
+            color: #000;
             margin: 0;
-            font-size: 24px;
+            font-size: 22px;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .header p {
             margin: 5px 0 0 0;
-            color: #666;
+            color: #000;
             font-size: 12px;
         }
 
@@ -38,15 +43,16 @@
             position: absolute;
             top: 5px;
             right: 10px;
-            border: 4px solid;
-            padding: 8px 16px;
-            font-size: 28px;
+            border: 3px solid #10b981;
+            padding: 6px 14px;
+            font-size: 24px;
             font-weight: bold;
-            border-radius: 8px;
-            transform: rotate(15deg);
-            opacity: 0.7;
+            border-radius: 6px;
+            transform: rotate(12deg);
+            opacity: 0.85;
             color: #10b981;
-            border-color: #10b981;
+            letter-spacing: 2px;
+            text-transform: uppercase;
         }
 
         .row {
@@ -61,18 +67,19 @@
         }
 
         .box {
-            border: 1px solid #ddd;
-            padding: 15px;
-            border-radius: 5px;
-            background-color: #f9f9f9;
+            border: 1px solid #000;
+            padding: 12px;
+            border-radius: 4px;
+            background-color: #fff;
         }
 
         .box h3 {
             margin-top: 0;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid #000;
             padding-bottom: 5px;
-            font-size: 16px;
-            color: #0057B8;
+            font-size: 14px;
+            color: #000;
+            text-transform: uppercase;
         }
 
         table {
@@ -83,14 +90,16 @@
 
         th,
         td {
-            padding: 10px;
-            border-bottom: 1px solid #eee;
+            padding: 8px;
+            border: 1px solid #000;
+            color: #000;
         }
 
         th {
             text-align: left;
-            color: #555;
+            color: #000;
             background-color: #f0f0f0;
+            font-weight: bold;
         }
 
         .text-right {
@@ -102,26 +111,28 @@
         }
 
         .total-row td {
-            border-top: 2px solid #0057B8;
-            font-size: 16px;
+            border-top: 2px solid #000;
+            border-bottom: 2px solid #000;
+            font-size: 14px;
             font-weight: bold;
-            color: #0057B8;
+            color: #000;
+            background-color: #f5f5f5;
         }
 
         .footer {
-            margin-top: 40px;
+            margin-top: 30px;
             text-align: center;
             font-size: 12px;
-            color: #888;
-            border-top: 1px solid #eee;
-            padding-top: 20px;
+            color: #000;
+            border-top: 1px solid #000;
+            padding-top: 14px;
         }
     </style>
 </head>
 
 <body>
     <div class="header">
-        <h1>Althesa Subdivision</h1>
+        <h1>Mayon Builders Realty & Development Corporation</h1>
         <p>Z1, Tagbong, Pili, Camarines Sur</p>
         <p><strong>OFFICIAL DOWNPAYMENT RECEIPT</strong></p>
 
@@ -157,7 +168,8 @@
         $term = (int) ($dp->months_to_pay ?? 0);
         $dueThis = 'N/A';
         if ($dp->due_date && $installmentNo > 0) {
-            $dueThis = \Carbon\Carbon::parse($dp->due_date)->subMonths($all->count() - $installmentNo + 1)->format('M d, Y');
+            $monthsBack = max(0, $all->count() - $installmentNo + 1);
+            $dueThis = \Carbon\Carbon::parse($dp->due_date)->subMonths($monthsBack)->format('M d, Y');
         }
         $tcp = (float) ($buyer->financingRecord?->contract_price ?? 0);
     @endphp
@@ -246,7 +258,6 @@
     </div>
 
     <div class="footer">
-        <p>This is a system-generated receipt. No signature required.</p>
     </div>
 </body>
 

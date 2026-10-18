@@ -45,12 +45,21 @@ class SyncPaymongoCheckouts
 
     private function syncResidentBills($user)
     {
-        $pendingBills = \App\Models\UtilityBill::where('resident_id', $user->id)
+        $userLotIds = $user->lots()->pluck('lots.id');
+        $pendingBills = \App\Models\UtilityBill::where(function ($q) use ($user, $userLotIds) {
+            $q->where('resident_id', $user->id);
+            if ($userLotIds->isNotEmpty()) {
+                $q->orWhereIn('lot_id', $userLotIds);
+            }
+        })
             ->where('status', '!=', BillStatus::Paid->value)
             ->whereNotNull('paymongo_checkout_id')
             ->get();
             
         foreach ($pendingBills as $bill) {
+            if (!$bill->resident_id) {
+                $bill->update(['resident_id' => $user->id]);
+            }
             try {
                 $sessionData = $this->fetchCheckoutSession($bill->paymongo_checkout_id);
                 
@@ -59,8 +68,8 @@ class SyncPaymongoCheckouts
                     $paidPayment = PaymentRecorder::paidPayment($sessionAttributes['payments'] ?? []);
                     
                     if ($paidPayment) {
-                        $method = PaymentRecorder::methodFromSource($paidPayment['attributes']['source']['type'] ?? '', 'PayMongo');
-                        $trn = PaymentRecorder::onlineTrn($paidPayment['attributes']['payment_intent_id'] ?? null, $bill->id);
+                        $method = PaymentRecorder::methodFromSource($paidPayment['attributes']['source']['type'] ?? '', 'GCash');
+                        $trn = PaymentRecorder::onlineTrn($paidPayment['attributes']['payment_intent_id'] ?? null, (string) $bill->id);
                         $exactAmount = isset($paidPayment['attributes']['amount']) ? ($paidPayment['attributes']['amount'] / 100) : ($bill->amount + $bill->previous_balance);
                         $paidAt = isset($paidPayment['attributes']['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paidPayment['attributes']['paid_at'], config('app.timezone')) : now();
 
@@ -72,6 +81,11 @@ class SyncPaymongoCheckouts
                             $trn,
                             $paidAt
                         );
+                    } elseif (($sessionAttributes['status'] ?? '') === 'expired') {
+                        $bill->update([
+                            'paymongo_checkout_id' => null,
+                            'paymongo_checkout_url' => null,
+                        ]);
                     }
                 }
             } catch (\Exception $e) {
@@ -117,6 +131,10 @@ class SyncPaymongoCheckouts
                             PaymentRecorder::paymongoPaymentId($paidPayment, $sessionAttributes),
                             $trn
                         );
+                    } elseif (($sessionAttributes['status'] ?? '') === 'expired') {
+                        $dp->update([
+                            'paymongo_checkout_id' => null,
+                        ]);
                     }
                 }
             } catch (\Exception $e) {
@@ -152,6 +170,10 @@ class SyncPaymongoCheckouts
                             PaymentRecorder::paymongoPaymentId($paidPayment, $sessionAttributes),
                             $trn
                         );
+                    } elseif (($sessionAttributes['status'] ?? '') === 'expired') {
+                        $fin->update([
+                            'paymongo_checkout_id' => null,
+                        ]);
                     }
                 }
             } catch (\Exception $e) {

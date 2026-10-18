@@ -73,7 +73,7 @@
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span style="color: #64748b; font-size: 14px; font-weight: 500;">Next Due Date:</span>
-                            <strong style="color: #dc2626; font-size: 15px;">{{ \Carbon\Carbon::parse($dp->due_date)->format('F d, Y h:i A') }}</strong>
+                            <strong style="color: #dc2626; font-size: 15px;">{{ \Carbon\Carbon::parse($dp->due_date)->format('F d, Y') }}</strong>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span style="color: #64748b; font-size: 14px; font-weight: 500;">Penalty Rate:</span>
@@ -92,7 +92,7 @@
                     @if($dp->balance > 0)
                     <div style="margin-top: 24px;">
                         <button id="payDpBtn_{{ $dp->id }}" class="btn btn-primary" style="width: 100%; padding: 14px; font-weight: 700; background: #0057B8; cursor: pointer; border: none; border-radius: 8px; color: #fff; text-transform: uppercase; font-size: 14px; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'" onclick="payDownpayment('{{ $dp->id }}')">
-                            Pay ₱{{ number_format($payNow, 2) }} via GCash
+                            Pay ₱{{ number_format($payNow, 2) }} Online
                         </button>
                     </div>
                     @endif
@@ -177,7 +177,7 @@
                     @if($financing->balance > 0)
                         <div style="margin-top: 24px;">
                             <button id="payFinBtn_{{ $financing->id }}" class="btn btn-primary" style="width: 100%; padding: 14px; font-weight: 700; background: #10b981; cursor: pointer; border: none; border-radius: 8px; color: #fff; text-transform: uppercase; font-size: 14px; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'" onclick="payFinancing('{{ $financing->id }}')">
-                                📱 Pay Shortfall via GCash
+                                💳 Pay Shortfall Online
                             </button>
                         </div>
                     @endif
@@ -285,7 +285,7 @@
             console.error(e);
             Swal.fire('⚠️ Unable to initiate secure payment. ' + e.message);
             btn.disabled = false;
-            btn.innerHTML = 'Pay with GCash';
+            btn.innerHTML = 'Pay Online';
         }
     }
 
@@ -314,7 +314,7 @@
             console.error(e);
             Swal.fire('⚠️ Unable to initiate secure payment. ' + e.message);
             btn.disabled = false;
-            btn.innerHTML = 'Pay Shortfall with GCash';
+            btn.innerHTML = 'Pay Shortfall Online';
         }
     }
 </script>

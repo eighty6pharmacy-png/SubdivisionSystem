@@ -469,16 +469,16 @@
     </div>
 
     <div id="receiptModal" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(15,23,42,0.75); backdrop-filter:blur(6px); align-items:center; justify-content:center; padding:24px; box-sizing:border-box;">
-        <div style="background:#fff; max-width:720px; width:100%; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35); overflow:hidden; display:flex; flex-direction:column; max-height:90vh;">
-            <div style="display:flex; align-items:center; justify-content:space-between; padding:20px 28px; border-bottom:1px solid #e2e8f0; background:#f8fafc;">
-                <span style="font-size:14px; font-weight:800; color:#047857; text-transform:uppercase; letter-spacing:0.05em;">Downpayment Receipt</span>
+        <div style="background:#fff; max-width:680px; width:100%; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35); overflow:hidden; display:flex; flex-direction:column; height:90vh; max-height:860px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:18px 24px; border-bottom:1px solid #e2e8f0; background:#f8fafc;">
+                <span style="font-size:14px; font-weight:800; color:#0f172a; text-transform:uppercase; letter-spacing:0.05em;">Downpayment Receipt</span>
                 <div style="display:flex; gap:10px; align-items:center;">
                     <button type="button" onclick="printReceiptFrame()" style="background:#047857; color:#fff; border:none; padding:8px 18px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;">Print</button>
                     <button type="button" onclick="closeReceiptModal()" style="background:#f1f5f9; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; font-size:18px; line-height:1; color:#64748b;">✕</button>
                 </div>
             </div>
             <div style="overflow-y:auto; flex:1; padding:0;">
-                <iframe id="receiptFrame" style="width:100%; min-height:560px; border:none; display:block;"></iframe>
+                <iframe id="receiptFrame" style="width:100%; height:100%; min-height:560px; border:none; display:block;"></iframe>
             </div>
         </div>
     </div>
@@ -748,12 +748,17 @@
             const mop = row.payment_method || 'Office Payment';
             const paidDate = row.paid_at || row.date || 'N/A';
             const dueDate = row.due_label || row.month || 'N/A';
-            const installmentNo = row.index || '—';
+            let installmentIdx = Number(row.index || 0);
+            if (!installmentIdx && bill.history) {
+                const hIdx = (bill.history || []).findIndex(h => String(h.id) === String(historyId));
+                if (hIdx !== -1) installmentIdx = bill.history.length - hIdx;
+            }
+            const installmentNo = installmentIdx > 0 ? installmentIdx : (row.index || '—');
             const behavior = row.behavior && row.behavior !== 'Not available yet' ? row.behavior : '—';
             const totalDp = Number(bill.total_dp || 0);
             let principalThroughThis = 0;
             ledger.forEach((r) => {
-                if (r.status === 'Paid' && Number(r.index || 0) <= Number(installmentNo || 0)) {
+                if (r.status === 'Paid' && Number(r.index || 0) <= Number(installmentIdx || 0)) {
                     const p = Number(r.principal || 0) || (Number(r.amount || 0) > monthly + 0.009 ? monthly : Number(r.amount || 0));
                     principalThroughThis += p;
                 }
@@ -772,27 +777,40 @@
 <meta charset="UTF-8">
 <title>Downpayment Receipt</title>
 <style>
-  body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#333;font-size:14px;margin:0;padding:24px;}
-  .header{text-align:center;border-bottom:2px solid #047857;padding-bottom:12px;margin-bottom:20px;position:relative;}
-  .header h1{color:#047857;margin:0;font-size:22px;text-transform:uppercase;}
-  .header p{margin:4px 0 0;color:#666;font-size:12px;}
-  .watermark{position:absolute;top:8px;right:12px;border:4px solid #10b981;color:#10b981;padding:6px 14px;font-size:26px;font-weight:bold;border-radius:8px;transform:rotate(15deg);opacity:0.75;}
-  .row{width:100%;margin-bottom:20px;}
+  @page { size: portrait; margin: 0; }
+  body {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    color: #000;
+    font-size: 13px;
+    padding: 12mm 15mm;
+    background: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    box-sizing: border-box;
+  }
+  .header{text-align:center;border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:18px;position:relative;}
+  .header h1{color:#000;margin:0;font-size:22px;text-transform:uppercase;letter-spacing:0.5px;}
+  .header p{margin:4px 0 0;color:#000;font-size:12px;}
+  .watermark{position:absolute;top:8px;right:12px;border:3px solid #10b981;color:#10b981;padding:6px 14px;font-size:22px;font-weight:bold;border-radius:6px;transform:rotate(12deg);opacity:0.85;letter-spacing:2px;text-transform:uppercase;}
+  .row{width:100%;margin-bottom:16px;}
   .col-half{width:48%;display:inline-block;vertical-align:top;}
-  .box{border:1px solid #ddd;padding:14px;border-radius:6px;background:#f9f9f9;}
-  .box h3{margin-top:0;border-bottom:1px solid #ddd;padding-bottom:5px;font-size:15px;color:#047857;}
+  .box{border:1px solid #000;padding:12px;border-radius:4px;background:#fff;box-sizing:border-box;}
+  .box h3{margin-top:0;border-bottom:1px solid #000;padding-bottom:5px;font-size:14px;color:#000;text-transform:uppercase;}
   table{width:100%;border-collapse:collapse;margin-bottom:16px;}
-  th,td{padding:9px;border-bottom:1px solid #eee;}
-  th{text-align:left;color:#555;background:#f0f0f0;}
+  th,td{padding:7px 9px;border:1px solid #000;color:#000;}
+  th{text-align:left;color:#000;background:#f0f0f0;font-weight:bold;}
   .text-right{text-align:right;}
-  .total-row td{border-top:2px solid #047857;font-size:15px;font-weight:bold;color:#047857;}
-  .note{font-size:12px;color:#64748b;margin:0 0 16px;}
-  .footer{margin-top:24px;text-align:center;font-size:12px;color:#888;border-top:1px solid #eee;padding-top:16px;}
+  .total-row td{border-top:2px solid #000;border-bottom:2px solid #000;font-size:14px;font-weight:bold;color:#000;background:#f5f5f5;}
+  .note{font-size:12px;color:#000;margin:0 0 14px;}
+  .footer{margin-top:24px;text-align:center;font-size:12px;color:#000;border-top:1px solid #000;padding-top:12px;}
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>Althesa Subdivision</h1>
+  <h1>Mayon Builders Realty & Development Corporation</h1>
   <p>Z1, Tagbong, Pili, Camarines Sur</p>
   <p><strong>OFFICIAL DOWNPAYMENT RECEIPT</strong></p>
   <div class="watermark">PAID</div>
@@ -801,25 +819,25 @@
   <div class="col-half box" style="margin-right:2%;">
     <h3>Buyer Details</h3>
     <table style="border:none;margin-bottom:0;">
-      <tr><td style="padding:5px;border:none;width:42%;"><strong>Name:</strong></td><td style="padding:5px;border:none;">${bill.buyer}</td></tr>
-      <tr><td style="padding:5px;border:none;"><strong>Contact:</strong></td><td style="padding:5px;border:none;">${bill.contact || 'N/A'}</td></tr>
-      <tr><td style="padding:5px;border:none;"><strong>Address:</strong></td><td style="padding:5px;border:none;">Block ${bill.block} Lot ${bill.lot}</td></tr>
-      <tr><td style="padding:5px;border:none;"><strong>Contract date:</strong></td><td style="padding:5px;border:none;">${formatIsoDate(bill.contract_date, true)}</td></tr>
+      <tr><td style="padding:4px;border:none;width:42%;"><strong>Name:</strong></td><td style="padding:4px;border:none;">${bill.buyer}</td></tr>
+      <tr><td style="padding:4px;border:none;"><strong>Contact:</strong></td><td style="padding:4px;border:none;">${bill.contact || 'N/A'}</td></tr>
+      <tr><td style="padding:4px;border:none;"><strong>Address:</strong></td><td style="padding:4px;border:none;">Block ${bill.block} Lot ${bill.lot}</td></tr>
+      <tr><td style="padding:4px;border:none;"><strong>Contract date:</strong></td><td style="padding:4px;border:none;">${formatIsoDate(bill.contract_date, true)}</td></tr>
     </table>
   </div>
   <div class="col-half box">
     <h3>Payment Details</h3>
     <table style="border:none;margin-bottom:0;">
-      <tr><td style="padding:5px;border:none;width:48%;"><strong>Installment:</strong></td><td style="padding:5px;border:none;">${installmentNo} of ${bill.total_months}</td></tr>
-      <tr><td style="padding:5px;border:none;"><strong>Due date:</strong></td><td style="padding:5px;border:none;color:#dc2626;">${dueDate}</td></tr>
-      <tr><td style="padding:5px;border:none;"><strong>Date paid:</strong></td><td style="padding:5px;border:none;">${paidDate}</td></tr>
-      <tr><td style="padding:5px;border:none;"><strong>Method:</strong></td><td style="padding:5px;border:none;">${mop}</td></tr>
-      <tr><td style="padding:5px;border:none;"><strong>Reference (TRN):</strong></td><td style="padding:5px;border:none;font-family:monospace;font-size:11px;">${trn}</td></tr>
-      <tr><td style="padding:5px;border:none;"><strong>Timing:</strong></td><td style="padding:5px;border:none;">${behavior}</td></tr>
+      <tr><td style="padding:4px;border:none;width:48%;"><strong>Installment:</strong></td><td style="padding:4px;border:none;">${installmentNo} of ${bill.total_months}</td></tr>
+      <tr><td style="padding:4px;border:none;"><strong>Due date:</strong></td><td style="padding:4px;border:none;font-weight:bold;">${dueDate}</td></tr>
+      <tr><td style="padding:4px;border:none;"><strong>Date paid:</strong></td><td style="padding:4px;border:none;">${paidDate}</td></tr>
+      <tr><td style="padding:4px;border:none;"><strong>Method:</strong></td><td style="padding:4px;border:none;">${mop}</td></tr>
+      <tr><td style="padding:4px;border:none;"><strong>Reference (TRN):</strong></td><td style="padding:4px;border:none;font-family:monospace;font-size:11px;">${trn}</td></tr>
+      <tr><td style="padding:4px;border:none;"><strong>Timing:</strong></td><td style="padding:4px;border:none;">${behavior}</td></tr>
     </table>
   </div>
 </div>
-<h3 style="color:#047857;border-bottom:1px solid #ddd;padding-bottom:5px;">Contract Snapshot</h3>
+<h3 style="color:#000;border-bottom:1px solid #000;padding-bottom:5px;margin:16px 0 10px 0;font-size:14px;text-transform:uppercase;">Contract Snapshot</h3>
 <table>
   <tbody>
     <tr><td>Total contract price (TCP)</td><td class="text-right">${money(bill.tcp)}</td></tr>
@@ -829,7 +847,7 @@
     <tr><td>Term</td><td class="text-right">${bill.total_months} months</td></tr>
   </tbody>
 </table>
-<h3 style="color:#047857;border-bottom:1px solid #ddd;padding-bottom:5px;">This Payment Breakdown</h3>
+<h3 style="color:#000;border-bottom:1px solid #000;padding-bottom:5px;margin:16px 0 10px 0;font-size:14px;text-transform:uppercase;">This Payment Breakdown</h3>
 <p class="note">Penalty is charged only when the installment is paid after its due date. It is collected in addition to the installment and is not applied to the remaining downpayment balance.</p>
 <table>
   <thead><tr><th>Description</th><th class="text-right">Amount (PHP)</th></tr></thead>
@@ -837,14 +855,13 @@
     <tr><td>Installment principal (month ${installmentNo})</td><td class="text-right">${money(principal)}</td></tr>
     ${penaltyRow}
     <tr class="total-row"><td>Total amount received</td><td class="text-right">${money(amount)}</td></tr>
-    <tr><td style="color:#10b981;font-weight:700;">Applied to downpayment</td><td class="text-right" style="color:#10b981;font-weight:700;">${money(principal)}</td></tr>
+    <tr><td>Applied to downpayment</td><td class="text-right">${money(principal)}</td></tr>
     <tr><td>Remaining downpayment after this payment</td><td class="text-right">${money(remainingAfter)}</td></tr>
     <tr><td>Months paid after this payment</td><td class="text-right">${monthsAfter}</td></tr>
   </tbody>
 </table>
 <div class="footer">
-  <p>This is a system-generated receipt. No signature required.</p>
-  <p style="color:#10b981;font-weight:bold;">This installment has been settled. Thank you for your payment.</p>
+  <p style="font-weight:bold;margin:0;">This installment has been settled. Thank you for your payment.</p>
 </div>
 </body>
 </html>`;

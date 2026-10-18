@@ -8,7 +8,10 @@
 <div class="fade-in">
     <div style="margin-bottom: 32px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div>
-            <h1 style="font-size: 28px; font-weight: 800; color: #0f172a; margin: 0;"><i class="fas fa-history" style="margin-right: 12px; color: var(--res-primary);"></i>{{ ucfirst($type) }} Billing History</h1>
+            <h1 style="font-size: 28px; font-weight: 800; color: #0f172a; margin: 0; display: flex; align-items: center;">
+                <svg width="26" height="26" fill="none" stroke="var(--res-primary)" stroke-width="2.5" viewBox="0 0 24 24" style="margin-right: 12px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                {{ ucfirst($type) }} Billing History
+            </h1>
             <p style="color: #64748b; margin-top: 8px;">View and download your past statements and payment history.</p>
         </div>
         <div>
@@ -21,7 +24,9 @@
 
     @if($bills->isEmpty())
         <div style="text-align: center; padding: 60px 20px; background: #ffffff; border-radius: 24px; border: 1px dashed #cbd5e1; margin-top: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-            <div style="font-size: 48px; margin-bottom: 16px;">📜</div>
+            <div style="width: 56px; height: 56px; border-radius: 14px; background: #f1f5f9; color: #94a3b8; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+                <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            </div>
             <h3 style="font-size: 20px; color: #0f172a; margin-bottom: 8px;">No Billing History</h3>
             <p style="color: #64748b; font-size: 14px;">You don't have any past {{ $type }} bills recorded yet.</p>
         </div>
@@ -47,10 +52,10 @@
                                 $currDate = $bill->current_reading_date ? \Carbon\Carbon::parse($bill->current_reading_date)->format('M d, Y') : \Carbon\Carbon::parse($bill->created_at)->format('M d, Y');
                                 $unit = $type === 'electricity' ? 'kWh' : 'm³';
                                 
+                                $isPaid = strtolower($bill->status) === 'paid';
                                 $totalBeforeDue = $bill->amount;
                                 $penalty = 0;
-                                // Simple penalty calc for UI display
-                                if ($bill->status !== 'paid' && $bill->due_date && \Carbon\Carbon::parse($bill->due_date)->isPast()) {
+                                if (!$isPaid && $bill->due_date && \Carbon\Carbon::parse($bill->due_date)->isPast()) {
                                     $penalty = ($totalBeforeDue + $bill->previous_balance) * 0.05;
                                 }
                                 $totalAfterDue = $totalBeforeDue + $bill->previous_balance + $penalty;
@@ -78,7 +83,7 @@
                                     @endif
                                 </td>
                                 <td style="padding: 16px 24px;">
-                                    @if($bill->status == 'paid')
+                                    @if($isPaid)
                                         <span style="background: #dcfce7; color: #166534; padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; border: 1px solid #bbf7d0;">Paid</span>
                                     @else
                                         <span style="background: #fef3c7; color: #b45309; padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; border: 1px solid #fde68a;">Unpaid</span>
@@ -86,7 +91,7 @@
                                 </td>
                                 <td style="padding: 16px 24px; text-align: right;">
                                     <a href="/resident/bills/history/{{ $type }}/pdf/{{ $bill->id }}" target="_blank" class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-color: var(--res-primary); color: var(--res-primary); display: inline-flex; align-items: center; justify-content: center;">
-                                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 6px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Receipt
+                                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 6px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> {{ $isPaid ? 'Receipt' : 'Statement' }}
                                     </a>
                                 </td>
                             </tr>

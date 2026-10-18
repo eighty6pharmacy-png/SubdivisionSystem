@@ -134,11 +134,15 @@
                     <td>
                         <div style="font-weight: 700; color: #0f172a;">${v.visitor}</div>
                         <div style="font-size: 12px; color: #64748b;">${v.purpose}</div>
+                        ${v.contact_number ? `<div style="font-size: 11px; color: #0284c7; font-weight: 600; margin-top: 2px;">📞 ${v.contact_number}</div>` : ''}
                     </td>
                     <td style="font-size: 13px; color: #64748b; font-weight: 600;">${v.validity || 'Today'}</td>
                     <td style="font-size: 12px; color: #0f172a; font-weight: 600;">${v.guard_name || (v.status === 'Entered' ? 'Gate Guard' : 'System / Pending')}</td>
                     <td>${statusBadge}</td>
-                    <td>${codeDisplay}</td>
+                    <td>
+                        ${codeDisplay}
+                        ${v.access_token && (v.status === 'Approved' || v.status === 'Entered') ? `<div style="margin-top: 4px;"><a href="/v/${v.access_token}" target="_blank" style="font-size: 10px; color: #0284c7; text-decoration: none; font-weight: 700;">Direct Pass ↗</a></div>` : ''}
+                    </td>
                     <td>${actionHtml}</td>
                 `;
 

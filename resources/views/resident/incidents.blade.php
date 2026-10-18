@@ -6,39 +6,60 @@
 <link rel="stylesheet" href="{{ asset('css/resident-incidents.css') }}">
 
 <div class="fade-in">
-@if(!empty($adminPhone))
-<a href="tel:{{ $adminPhone }}" id="emergencyCallBtn" style="
-    display: flex;
+@php
+    $emergencyNumber = !empty($dutyContact['phone']) ? $dutyContact['phone'] : ($adminPhone ?? null);
+    $contactName = $dutyContact['name'] ?? null;
+    $roleLabel = $dutyContact['role_label'] ?? 'Emergency Hotline';
+    $isGuard = !empty($dutyContact['is_guard']);
+@endphp
+@if(!empty($emergencyNumber))
+<a href="tel:{{ $emergencyNumber }}" id="emergencyCallBtn" style="
+    display: inline-flex;
     align-items: center;
-    gap: 10px;
-    background: #ef4444;
+    gap: 12px;
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
     color: #fff;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 800;
-    padding: 14px 28px;
+    padding: 12px 24px;
     border-radius: 14px;
     text-decoration: none;
-    margin-bottom: 20px;
-    box-shadow: 0 4px 20px rgba(239,68,68,0.45);
-    border: 2px solid #dc2626;
-    letter-spacing: 0.02em;
+    margin-bottom: 24px;
+    box-shadow: 0 6px 24px rgba(239,68,68,0.4);
+    border: 2px solid #b91c1c;
+    letter-spacing: 0.01em;
     animation: emergencyPulse 1.6s ease-in-out infinite;
     width: fit-content;
+    transition: all 0.2s ease;
 ">
-    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="flex-shrink:0;">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
-    </svg>
-    <span>🚨 Emergency Call — {{ $adminPhone }}</span>
+    <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+        <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+        </svg>
+    </div>
+    <div style="display: flex; flex-direction: column; text-align: left; line-height: 1.25;">
+        <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.95; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            {{ $roleLabel }}
+        </span>
+        <span style="font-size: 15px; font-weight: 800; margin-top: 2px;">
+            @if($contactName) {{ $contactName }} &bull; @endif{{ $emergencyNumber }}
+        </span>
+    </div>
 </a>
 <style>
 @keyframes emergencyPulse {
     0%, 100% { box-shadow: 0 4px 20px rgba(239,68,68,0.45); transform: scale(1); }
     50% { box-shadow: 0 6px 32px rgba(239,68,68,0.75); transform: scale(1.025); }
 }
+#emergencyCallBtn:hover {
+    transform: translateY(-2px) scale(1.03);
+    box-shadow: 0 8px 30px rgba(220,38,38,0.6);
+}
 </style>
 @endif
     <!-- Header Section -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; flex-wrap: wrap; gap: 16px;">
         <div>
             <h1 style="font-size: 28px; font-weight: 800; color: #0f172a; margin: 0;">Community Support</h1>
             <p style="color: #64748b; margin-top: 4px;">Track your reported issues and help maintain our shared environment.</p>
@@ -72,25 +93,37 @@
         </div>
         <div id="residentIncidentList" style="padding: 12px 24px;">
             @forelse($incidents as $inc)
+            @php
+                $incSub = is_array($inc) ? ($inc['subject'] ?? ($inc['sub'] ?? 'Untitled Incident')) : ($inc->subject ?? 'Untitled Incident');
+                $incDesc = is_array($inc) ? ($inc['description'] ?? ($inc['desc'] ?? '')) : ($inc->description ?? '');
+                $incType = is_array($inc) ? ($inc['type'] ?? 'General') : ($inc->type ?? 'General');
+                $incId = is_array($inc) ? ($inc['id'] ?? '') : ($inc->id ?? '');
+                $incStatus = strtolower(is_array($inc) ? ($inc['status'] ?? 'pending') : ($inc->status ?? 'pending'));
+                $incDate = is_array($inc) ? ($inc['created_at'] ?? null) : ($inc->created_at ?? null);
+                $timeAgo = $incDate ? \Carbon\Carbon::parse($incDate)->diffForHumans() : 'Recently';
+                $refDisplay = is_numeric($incId) ? 'INC-' . str_pad($incId, 5, '0', STR_PAD_LEFT) : $incId;
+            @endphp
             <div class="incident-card">
                 <div class="incident-info">
-                    <span style="font-size: 11px; font-weight: 700; color: #3b82f6; text-transform: uppercase;">{{ $inc['type'] }}</span>
-                    <h3>{{ $inc['sub'] }}</h3>
-                    <p>{{ \Illuminate\Support\Str::limit($inc['desc'], 80) }}</p>
+                    <span style="font-size: 11px; font-weight: 700; color: #3b82f6; text-transform: uppercase;">{{ $incType }}</span>
+                    <h3>{{ $incSub }}</h3>
+                    <p>{{ \Illuminate\Support\Str::limit($incDesc, 80) }}</p>
                     <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px; font-size: 12px; color: #94a3b8; font-weight: 600;">
-                        <span>Ref: {{ $inc['id'] }}</span>
+                        <span>Ref: {{ $refDisplay }}</span>
                         <span>•</span>
-                        <span>Just Now</span>
+                        <span>{{ $timeAgo }}</span>
                     </div>
                 </div>
                 <div class="incident-status">
-                    <span class="badge-status badge-{{ $inc['status'] }}">{{ ucfirst($inc['status']) }}</span>
-                    <button class="btn btn-outline" onclick="openDetailsModal('{{ $inc['id'] }}', '{{ $inc['sub'] }}', '{{ $inc['type'] }}', '{{ $inc['status'] }}', '{{ $inc['desc'] }}')" style="padding: 4px 12px; font-size: 11px; border-radius: 6px;">View Details</button>
+                    <span class="badge-status badge-{{ $incStatus }}">{{ ucfirst($incStatus) }}</span>
+                    <button class="btn btn-outline" onclick="openDetailsModal('{{ $incId }}')" style="padding: 4px 12px; font-size: 11px; border-radius: 6px;">View Details</button>
                 </div>
             </div>
             @empty
             <div style="padding: 48px; text-align: center; color: #64748b;">
-                <div style="font-size: 40px; margin-bottom: 16px;">🔍</div>
+                <div style="width: 56px; height: 56px; border-radius: 14px; background: #f1f5f9; color: #94a3b8; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+                    <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                </div>
                 <h3 style="font-size: 18px; font-weight: 700; color: #1e293b; margin: 0;">No Incidents Found</h3>
                 <p style="margin-top: 8px;">You haven't reported any issues yet. Click "Report New Issue" to get started.</p>
             </div>
@@ -113,19 +146,27 @@
                     <label>What type of issue is this?</label>
                     <div class="category-grid">
                         <div class="category-opt" onclick="selectCategory(this, 'Security')">
-                            <span class="category-icon">🛡️</span>
+                            <span class="category-icon" style="color: #3b82f6;">
+                                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin: 0 auto 4px; display: block;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            </span>
                             <span class="category-label">Security</span>
                         </div>
                         <div class="category-opt" onclick="selectCategory(this, 'Maintenance')">
-                            <span class="category-icon">🛠️</span>
+                            <span class="category-icon" style="color: #f59e0b;">
+                                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin: 0 auto 4px; display: block;"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+                            </span>
                             <span class="category-label">Maintenance</span>
                         </div>
                         <div class="category-opt" onclick="selectCategory(this, 'Utilities')">
-                            <span class="category-icon">💡</span>
+                            <span class="category-icon" style="color: #10b981;">
+                                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin: 0 auto 4px; display: block;"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                            </span>
                             <span class="category-label">Utilities</span>
                         </div>
                         <div class="category-opt" onclick="selectCategory(this, 'Others')">
-                            <span class="category-icon">📁</span>
+                            <span class="category-icon" style="color: #64748b;">
+                                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin: 0 auto 4px; display: block;"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                            </span>
                             <span class="category-label">Others</span>
                         </div>
                     </div>
@@ -161,12 +202,12 @@
                     <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
                 </div>
                 <h3 style="font-size: 20px; font-weight: 800; color: #1e293b; margin: 0;">Report Submitted</h3>
-                <p style="color: #64748b; margin-top: 8px;">Our maintenance and security team will review your report shortly. Your reference ID is <span style="font-family: monospace; font-weight: 800; color: #0f172a;">INC-{{ rand(2000, 2999) }}</span>.</p>
+                <p style="color: #64748b; margin-top: 8px;">Our maintenance and security team will review your report shortly. Your reference ID is <span id="successReferenceId" style="font-family: monospace; font-weight: 800; color: #0f172a;">INC-PENDING</span>.</p>
             </div>
         </div>
         <div class="modal-footer" id="modalFooter">
             <button class="btn btn-outline" onclick="closeReportModal()">Cancel</button>
-            <button class="btn btn-primary" onclick="submitReport()" style="background: var(--res-primary); border-color: var(--res-primary); padding: 10px 24px; font-weight: 700;">Submit Report</button>
+            <button class="btn btn-primary" id="btnSubmitReport" onclick="submitReport()" style="background: var(--res-primary); border-color: var(--res-primary); padding: 10px 24px; font-weight: 700;">Submit Report</button>
         </div>
     </div>
 </div>
@@ -223,24 +264,31 @@
     // Inject DB data
     const dbIncidents = @json($incidents);
     // Map DB fields to what JS expects
-    const mappedIncidents = dbIncidents.map(inc => {
+    const mappedIncidents = (dbIncidents || []).map(inc => {
         let parsedPhotos = [];
         if (inc.image_url) {
             try {
-                parsedPhotos = JSON.parse(inc.image_url);
+                parsedPhotos = typeof inc.image_url === 'string' ? JSON.parse(inc.image_url) : inc.image_url;
             } catch(e) {
                 parsedPhotos = [inc.image_url];
             }
         }
+        if (!Array.isArray(parsedPhotos)) {
+            parsedPhotos = parsedPhotos ? [parsedPhotos] : [];
+        }
+
+        const rawId = (inc.id || '').toString();
+        const refId = inc.reference_id || (rawId && !isNaN(rawId) ? 'INC-' + String(rawId).padStart(5, '0') : (rawId ? 'INC-' + rawId : ''));
 
         return {
-            id: inc.id.toString(),
-            sub: inc.subject,
-            type: inc.type,
+            id: rawId,
+            refId: refId,
+            sub: inc.subject || inc.sub || 'Untitled Incident',
+            type: inc.type || 'General',
             date: inc.created_at,
             updated: inc.updated_at,
-            desc: inc.description,
-            status: inc.status.toLowerCase(),
+            desc: inc.description || inc.desc || 'No description provided.',
+            status: (inc.status || 'pending').toLowerCase(),
             photos: parsedPhotos
         };
     });
@@ -258,7 +306,9 @@
         if (incidents.length === 0) {
             container.innerHTML = `
                 <div style="padding: 48px; text-align: center; color: #64748b;">
-                    <div style="font-size: 40px; margin-bottom: 16px;">🔍</div>
+                    <div style="width: 56px; height: 56px; border-radius: 14px; background: #f1f5f9; color: #94a3b8; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+                        <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                    </div>
                     <h3 style="font-size: 18px; font-weight: 700; color: #1e293b; margin: 0;">No Incidents Found</h3>
                     <p style="margin-top: 8px;">You haven't reported any issues yet. Click "Report New Issue" to get started.</p>
                 </div>
@@ -270,15 +320,16 @@
             const card = document.createElement('div');
             card.className = 'incident-card';
             const statusClass = inc.status || 'pending';
+            const shortDesc = inc.desc.length > 80 ? inc.desc.substring(0, 80) + '...' : inc.desc;
             card.innerHTML = `
                 <div class="incident-info">
                     <span style="font-size: 11px; font-weight: 700; color: #3b82f6; text-transform: uppercase;">${inc.type}</span>
                     <h3>${inc.sub}</h3>
-                    <p>${inc.desc}</p>
+                    <p>${shortDesc}</p>
                     <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px; font-size: 12px; color: #94a3b8; font-weight: 600;">
-                        <span>Ref: ${inc.id.substring(0, 8)}</span>
+                        <span>Ref: ${inc.refId || inc.id}</span>
                         <span>•</span>
-                        <span>${inc.date ? new Date(inc.date).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'}) : 'Just Now'}</span>
+                        <span>${inc.date ? new Date(inc.date).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'}) : 'Recently'}</span>
                     </div>
                 </div>
                 <div class="incident-status">
@@ -329,13 +380,13 @@
         
         for (let i = 0; i < input.files.length; i++) {
             if (uploadedPhotosBase64.length >= MAX_PHOTOS) {
-                Swal.fire(`You can only upload a maximum of ${MAX_PHOTOS} photos.`);
+                Swal.fire({ icon: 'warning', text: `You can only upload a maximum of ${MAX_PHOTOS} photos.` });
                 break;
             }
             
             const file = input.files[i];
             if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-                Swal.fire(`File ${file.name} exceeds the ${MAX_SIZE_MB}MB limit.`);
+                Swal.fire({ icon: 'warning', text: `File ${file.name} exceeds the ${MAX_SIZE_MB}MB limit.` });
                 continue;
             }
             
@@ -385,12 +436,12 @@
         const type = document.getElementById('reportType').value;
         const desc = document.getElementById('reportDesc').value.trim();
 
-        if (!type) { Swal.fire('Please select a category.'); return; }
-        if (!subject) { Swal.fire('Please enter a subject.'); return; }
-        if (!desc) { Swal.fire('Please enter a description.'); return; }
+        if (!type) { Swal.fire({ icon: 'warning', text: 'Please select a category.' }); return; }
+        if (!subject) { Swal.fire({ icon: 'warning', text: 'Please enter a subject.' }); return; }
+        if (!desc) { Swal.fire({ icon: 'warning', text: 'Please enter a description.' }); return; }
 
         isSubmittingReport = true;
-        const submitBtn = document.querySelector('#formStep1 .btn-primary');
+        const submitBtn = document.getElementById('btnSubmitReport') || document.querySelector('#modalFooter .btn-primary');
         if (submitBtn) {
             submitBtn.disabled = true;
             submitBtn.textContent = 'Submitting...';
@@ -416,9 +467,12 @@
             if (result.success) {
                 document.getElementById('formStep1').style.display = 'none';
                 document.getElementById('formSuccess').style.display = 'block';
+                const refDisplay = result.reference_id || (result.id ? 'INC-' + String(result.id).padStart(5, '0') : 'INC-SUBMITTED');
+                const refEl = document.getElementById('successReferenceId');
+                if (refEl) refEl.textContent = refDisplay;
                 document.getElementById('modalFooter').innerHTML = '<button class="btn btn-primary" onclick="window.location.reload()" style="background: var(--res-primary); border-color: var(--res-primary); width: 100%; justify-content: center;">Done</button>';
             } else {
-                Swal.fire('Failed to submit report.');
+                Swal.fire({ icon: 'error', text: result.message || 'Failed to submit report.' });
                 if (submitBtn) {
                     submitBtn.disabled = false;
                     submitBtn.textContent = 'Submit Report';
@@ -428,7 +482,7 @@
             }
         } catch (error) {
             console.error(error);
-            Swal.fire('An error occurred.');
+            Swal.fire({ icon: 'error', text: 'An error occurred while submitting.' });
             if (submitBtn) {
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Submit Report';
@@ -446,7 +500,7 @@
         const inc = incidents.find(i => i.id === id.toString());
         if (!inc) return;
 
-        document.getElementById('detId').textContent = inc.id;
+        document.getElementById('detId').textContent = inc.refId || inc.id;
         document.getElementById('detSub').textContent = inc.sub;
         document.getElementById('detType').textContent = inc.type;
         document.getElementById('detDesc').textContent = inc.desc;

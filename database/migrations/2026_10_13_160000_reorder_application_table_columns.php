@@ -27,7 +27,7 @@ return new class extends Migration
         ],
         'admins' => ['user_id', 'created_at', 'updated_at'],
         'finance_officers' => ['user_id', 'created_at', 'updated_at'],
-        'guards' => ['user_id', 'created_at', 'updated_at'],
+        'guards' => ['user_id', 'schedule_days', 'shift_type', 'shift_start', 'shift_end', 'created_at', 'updated_at'],
         'residents' => ['user_id', 'payment_behavior', 'created_at', 'updated_at'],
         'buyers' => [
             'id', 'user_id', 'lot_id', 'civil_status', 'spouse_name', 'present_address', 'postal_address',
@@ -78,7 +78,7 @@ return new class extends Migration
         ],
         'visitors' => [
             'id', 'resident_id', 'guard_id', 'host_name', 'guard_name', 'visitor_name', 'visitor_address',
-            'pin', 'purpose', 'validity', 'arrival_time', 'status', 'plate_number', 'type',
+            'contact_number', 'pin', 'access_token', 'purpose', 'validity', 'arrival_time', 'status', 'plate_number', 'type',
             'created_at', 'updated_at', 'deleted_at',
         ],
         'announcements' => [
@@ -101,6 +101,24 @@ return new class extends Migration
             && ! Schema::hasColumn('financing_payment_histories', 'payment_method')) {
             Schema::table('financing_payment_histories', function (Blueprint $table) {
                 $table->string('payment_method')->nullable()->default('Office Payment');
+            });
+        }
+
+        if (Schema::hasTable('guards')
+            && ! Schema::hasColumn('guards', 'schedule_days')) {
+            Schema::table('guards', function (Blueprint $table) {
+                $table->json('schedule_days')->nullable();
+                $table->string('shift_type')->nullable()->default('day');
+                $table->time('shift_start')->nullable()->default('06:00:00');
+                $table->time('shift_end')->nullable()->default('18:00:00');
+            });
+        }
+
+        if (Schema::hasTable('visitors')
+            && ! Schema::hasColumn('visitors', 'contact_number')) {
+            Schema::table('visitors', function (Blueprint $table) {
+                $table->string('contact_number', 30)->nullable();
+                $table->string('access_token', 64)->nullable()->unique();
             });
         }
 

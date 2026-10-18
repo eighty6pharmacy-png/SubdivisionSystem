@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Resident Portal — Althesa</title>
+    <title>Buyer Portal — Althesa</title>
     <link rel="stylesheet" href="{{ asset('css/app.css') }}">
     <link rel="stylesheet" href="{{ asset('css/admin.css') }}">
     <script src="{{ asset('js/subdivision-store.js') }}"></script>
@@ -78,16 +78,15 @@
                 <div class="topbar-title">@yield('title', 'Welcome')</div>
             </div>
             <div class="topbar-actions" style="display: flex; align-items: center; gap: 16px;">
-                <!-- Notification Bell -->
-                <div style="position: relative; cursor: pointer; padding: 4px;" onclick="window.location.href='/resident/notifications'" title="View Notifications">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color: #64748b;"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                    <div style="position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; background: #ef4444; border: 2px solid #fff; border-radius: 50%;"></div>
-                </div>
-
+                @php
+                    $buyerUser = \Illuminate\Support\Facades\Auth::user()->buyerMasterList;
+                    $userLot = $buyerUser?->lot;
+                @endphp
                 <div id="resLotBadge" style="background: var(--res-primary-soft); color: var(--res-primary); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;">
-                    @php $userLot = \Illuminate\Support\Facades\Auth::user()->lots->first(); @endphp
                     @if($userLot)
                         Block {{ $userLot->block }} Lot {{ $userLot->lot_number }}
+                    @elseif($buyerUser && ($buyerUser->block_no || $buyerUser->lot_no))
+                        Block {{ $buyerUser->block_no ?? '—' }} Lot {{ $buyerUser->lot_no ?? '—' }}
                     @else
                         No Assigned Lot
                     @endif

@@ -114,7 +114,19 @@
                 </thead>
                 <tbody id="userTableBody">
                     @foreach($users as $user)
-                    <tr class="user-row" data-dbid="{{ $user['db_id'] }}" data-name="{{ strtolower($user['name']) }}" data-email="{{ strtolower($user['email']) }}" data-role="{{ $user['role'] }}" data-status="{{ $user['status'] }}" data-block="{{ $user['block'] ?? '' }}">
+                    <tr class="user-row" 
+                        data-dbid="{{ $user['db_id'] }}" 
+                        data-name="{{ strtolower($user['name']) }}" 
+                        data-email="{{ strtolower($user['email']) }}" 
+                        data-role="{{ $user['role'] }}" 
+                        data-status="{{ $user['status'] }}" 
+                        data-block="{{ $user['block'] ?? '' }}"
+                        data-schedule-days='@json($user['schedule_days'] ?? [])'
+                        data-shift-type="{{ $user['shift_type'] ?? 'day' }}"
+                        data-shift-start="{{ $user['shift_start'] ?? '06:00' }}"
+                        data-shift-end="{{ $user['shift_end'] ?? '18:00' }}"
+                        data-is-on-duty="{{ !empty($user['is_on_duty']) ? '1' : '0' }}"
+                        data-active-shift-label="{{ $user['active_shift_label'] ?? '' }}">
                         <td style="font-family: monospace; font-weight: 700; color: #64748b;">{{ $user['id'] }}</td>
                         <td>
                             <div style="display: flex; align-items: center; gap: 12px;">
@@ -129,7 +141,22 @@
                         </td>
                         <td>
                             <div style="display: flex; flex-direction: column; gap: 4px;">
-                                <span style="font-weight: 700; font-size: 12px; color: #0f172a;">{{ $user['role'] }}</span>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-weight: 700; font-size: 12px; color: #0f172a;">{{ $user['role'] }}</span>
+                                    @if($user['role'] === 'Security Guard')
+                                        @if(!empty($user['is_on_duty']))
+                                            <span style="font-size: 10px; font-weight: 700; background: #ecfdf5; color: #047857; padding: 2px 8px; border-radius: 9999px; border: 1px solid #a7f3d0; display: inline-flex; align-items: center; gap: 5px;">
+                                                <span style="width: 6px; height: 6px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
+                                                On Duty
+                                            </span>
+                                        @else
+                                            <span style="font-size: 10px; font-weight: 600; background: #f8fafc; color: #64748b; padding: 2px 8px; border-radius: 9999px; border: 1px solid #e2e8f0; display: inline-flex; align-items: center; gap: 5px;">
+                                                <span style="width: 6px; height: 6px; border-radius: 50%; background: #94a3b8; display: inline-block;"></span>
+                                                Off Duty
+                                            </span>
+                                        @endif
+                                    @endif
+                                </div>
                                 <span style="font-size: 11px; color: var(--bill-primary);">{{ $user['meta'] }}</span>
                             </div>
                         </td>
@@ -143,7 +170,7 @@
                         </td>
                         <td>
                             <div style="display: flex; gap: 8px;">
-                                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openViewModal('{{ $user['id'] }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ addslashes($user['contact_number'] ?? 'N/A') }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}', '{{ date('M d, Y', strtotime($user['joined'])) }}', '{{ $user['status'] }}')">View</button>
+                                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openViewModal('{{ $user['id'] }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ addslashes($user['contact_number'] ?? 'N/A') }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}', '{{ date('M d, Y', strtotime($user['joined'])) }}', '{{ $user['status'] }}', '{{ $user['db_id'] }}')">View</button>
                                 @if($user['status'] === 'Active')
                                     <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openEditModal('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ addslashes($user['first_name'] ?? '') }}', '{{ addslashes($user['middle_name'] ?? '') }}', '{{ addslashes($user['last_name'] ?? '') }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ $user['contact_number'] ?? '' }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}')">Edit</button>
                                     <button class="btn btn-outline archive-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="archiveUser('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ $user['role'] }}', this)">Archive</button>
@@ -163,8 +190,8 @@
 </div>
 
 <!-- Add User Modal -->
-<div id="addUserModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2000; background: rgba(15,23,42,0.6); backdrop-filter: blur(8px);">
-    <div class="bill-modal-content" style="max-width: 500px; width: 90%; padding: 32px; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
+<div id="addUserModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2000; background: rgba(15,23,42,0.6); backdrop-filter: blur(8px); padding: 20px; overflow-y: auto;">
+    <div class="bill-modal-content" style="max-width: 520px; width: 90%; max-height: 88vh; overflow-y: auto; padding: 28px; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
         <div class="modal-header" style="padding: 0; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center;">
             <div>
                 <h2 style="font-size: 24px; font-weight: 800; color: #0f172a;">Register System User</h2>
@@ -228,6 +255,66 @@
                     <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Employee/Badge ID</label>
                     <input type="text" id="staffId" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px;" placeholder="e.g. S-101">
                 </div>
+                <div id="guardScheduleFields" style="display: none; background: #f8fafc; padding: 18px; border-radius: 14px; border: 1px solid #e2e8f0;">
+                    <div style="margin-bottom: 14px;">
+                        <label style="font-size: 11px; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px;">Guard Duty Schedule</label>
+                        <p style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">Select working days and customize the shift hours for each day.</p>
+                    </div>
+
+                    <!-- Working Days Selection -->
+                    <div style="margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <label style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Duty Days</label>
+                            <div style="display: flex; gap: 6px;">
+                                <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; border-radius: 6px;" onclick="setGuardDays('add', 'weekday')">Mon - Fri</button>
+                                <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; border-radius: 6px;" onclick="setGuardDays('add', 'all')">Mon - Sun</button>
+                                <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; border-radius: 6px; color: #64748b;" onclick="setGuardDays('add', 'none')">Clear</button>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;">
+                            @foreach(['Monday' => 'Mon', 'Tuesday' => 'Tue', 'Wednesday' => 'Wed', 'Thursday' => 'Thu', 'Friday' => 'Fri', 'Saturday' => 'Sat', 'Sunday' => 'Sun'] as $day => $abbr)
+                            <label style="display: flex; flex-direction: column; align-items: center; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 4px; cursor: pointer; user-select: none; transition: all 0.15s ease;" class="guard-day-pill" id="lbl_add_day_{{ $day }}">
+                                <input type="checkbox" id="add_day_{{ $day }}" value="{{ $day }}" style="margin-bottom: 4px; cursor: pointer;" onchange="toggleGuardDayStyle(this, 'lbl_add_day_{{ $day }}', 'add', '{{ $day }}')">
+                                <span style="font-size: 11px; font-weight: 700; color: #1e293b;">{{ $abbr }}</span>
+                            </label>
+                            @endforeach
+                        </div>
+                    </div>
+
+                    <!-- Per-Day Shift Selection -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+                            <label style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Shift Time per Selected Day</label>
+                            <div style="display: flex; gap: 6px;">
+                                <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 6px;" onclick="applyPresetToSelectedDays('add', 'day')">Set All Day</button>
+                                <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 6px;" onclick="applyPresetToSelectedDays('add', 'night')">Set All Night</button>
+                            </div>
+                        </div>
+                        <div id="add_no_days_msg" style="display: none; font-size: 12px; color: #64748b; background: #fff; border: 1px dashed #cbd5e1; border-radius: 10px; padding: 12px; text-align: center;">
+                            Select one or more duty days above to configure shift hours.
+                        </div>
+                        <div id="addGuardDayShiftsList" style="display: flex; flex-direction: column; gap: 8px;">
+                            @foreach(['Monday' => 'Mon', 'Tuesday' => 'Tue', 'Wednesday' => 'Wed', 'Thursday' => 'Thu', 'Friday' => 'Fri', 'Saturday' => 'Sat', 'Sunday' => 'Sun'] as $day => $abbr)
+                            <div id="add_day_shift_row_{{ $day }}" style="display: none; align-items: center; justify-content: space-between; gap: 8px; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 8px 10px; flex-wrap: wrap;">
+                                <div style="min-width: 78px; font-size: 12px; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 6px;">
+                                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #3b82f6; display: inline-block;"></span>
+                                    {{ $day }}
+                                </div>
+                                <select id="add_shift_type_{{ $day }}" class="filter-select" style="flex: 1; min-width: 135px; padding: 6px 8px; font-size: 11px; border-radius: 8px;" onchange="handleDayShiftTypeChange('add', '{{ $day }}')">
+                                    <option value="day">Day Shift (6AM - 6PM)</option>
+                                    <option value="night">Night Shift (6PM - 6AM)</option>
+                                    <option value="custom">Custom Hours</option>
+                                </select>
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <input type="time" id="add_shift_start_{{ $day }}" class="filter-select" style="width: 98px; padding: 6px; font-size: 11px; border-radius: 8px;" value="06:00" onchange="handleDayTimeInputChange('add', '{{ $day }}')">
+                                    <span style="font-size: 11px; color: #64748b; font-weight: 600;">to</span>
+                                    <input type="time" id="add_shift_end_{{ $day }}" class="filter-select" style="width: 98px; padding: 6px; font-size: 11px; border-radius: 8px;" value="18:00" onchange="handleDayTimeInputChange('add', '{{ $day }}')">
+                                </div>
+                            </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div style="background: #f0fdf4; padding: 16px; border-radius: 12px; border: 1px solid #bbf7d0; margin-top: 8px;">
@@ -244,8 +331,8 @@
 </div>
 
 <!-- Manage/Edit User Modal -->
-<div id="editUserModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2000; background: rgba(15,23,42,0.6); backdrop-filter: blur(8px);">
-    <div class="bill-modal-content" style="max-width: 500px; width: 90%; padding: 32px; border-radius: 24px;">
+<div id="editUserModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2000; background: rgba(15,23,42,0.6); backdrop-filter: blur(8px); padding: 20px; overflow-y: auto;">
+    <div class="bill-modal-content" style="max-width: 560px; width: 92%; max-height: 88vh; overflow-y: auto; padding: 28px; border-radius: 24px;">
         <div class="modal-header" style="padding: 0; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center;">
             <div>
                 <h2 style="font-size: 24px; font-weight: 800; color: #0f172a;">Edit Account</h2>
@@ -300,6 +387,67 @@
                 </div>
             </div>
 
+            <div id="editGuardScheduleFields" style="display: none; background: #f8fafc; padding: 18px; border-radius: 14px; border: 1px solid #e2e8f0;">
+                <div style="margin-bottom: 14px;">
+                    <label style="font-size: 11px; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px;">Guard Duty Schedule</label>
+                    <p style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">Select working days and customize the shift hours for each day.</p>
+                </div>
+
+                <!-- Working Days Selection -->
+                <div style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Duty Days</label>
+                        <div style="display: flex; gap: 6px;">
+                            <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; border-radius: 6px;" onclick="setGuardDays('edit', 'weekday')">Mon - Fri</button>
+                            <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; border-radius: 6px;" onclick="setGuardDays('edit', 'all')">Mon - Sun</button>
+                            <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; border-radius: 6px; color: #64748b;" onclick="setGuardDays('edit', 'none')">Clear</button>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;">
+                        @foreach(['Monday' => 'Mon', 'Tuesday' => 'Tue', 'Wednesday' => 'Wed', 'Thursday' => 'Thu', 'Friday' => 'Fri', 'Saturday' => 'Sat', 'Sunday' => 'Sun'] as $day => $abbr)
+                        <label style="display: flex; flex-direction: column; align-items: center; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 4px; cursor: pointer; user-select: none; transition: all 0.15s ease;" class="guard-day-pill" id="lbl_edit_day_{{ $day }}">
+                            <input type="checkbox" id="edit_day_{{ $day }}" value="{{ $day }}" style="margin-bottom: 4px; cursor: pointer;" onchange="toggleGuardDayStyle(this, 'lbl_edit_day_{{ $day }}', 'edit', '{{ $day }}')">
+                            <span style="font-size: 11px; font-weight: 700; color: #1e293b;">{{ $abbr }}</span>
+                        </label>
+                        @endforeach
+                    </div>
+                </div>
+
+                <!-- Per-Day Shift Selection -->
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+                        <label style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Shift Time per Selected Day</label>
+                        <div style="display: flex; gap: 6px;">
+                            <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 6px;" onclick="applyPresetToSelectedDays('edit', 'day')">Set All Day</button>
+                            <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 6px;" onclick="applyPresetToSelectedDays('edit', 'night')">Set All Night</button>
+                        </div>
+                    </div>
+                    <div id="edit_no_days_msg" style="display: none; font-size: 12px; color: #64748b; background: #fff; border: 1px dashed #cbd5e1; border-radius: 10px; padding: 12px; text-align: center;">
+                        Select one or more duty days above to configure shift hours.
+                    </div>
+                    <div id="editGuardDayShiftsList" style="display: flex; flex-direction: column; gap: 8px;">
+                        @foreach(['Monday' => 'Mon', 'Tuesday' => 'Tue', 'Wednesday' => 'Wed', 'Thursday' => 'Thu', 'Friday' => 'Fri', 'Saturday' => 'Sat', 'Sunday' => 'Sun'] as $day => $abbr)
+                        <div id="edit_day_shift_row_{{ $day }}" style="display: none; align-items: center; justify-content: space-between; gap: 8px; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 8px 10px; flex-wrap: wrap;">
+                            <div style="min-width: 78px; font-size: 12px; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 6px;">
+                                <span style="width: 7px; height: 7px; border-radius: 50%; background: #3b82f6; display: inline-block;"></span>
+                                {{ $day }}
+                            </div>
+                            <select id="edit_shift_type_{{ $day }}" class="filter-select" style="flex: 1; min-width: 135px; padding: 6px 8px; font-size: 11px; border-radius: 8px;" onchange="handleDayShiftTypeChange('edit', '{{ $day }}')">
+                                <option value="day">Day Shift (6AM - 6PM)</option>
+                                <option value="night">Night Shift (6PM - 6AM)</option>
+                                <option value="custom">Custom Hours</option>
+                            </select>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <input type="time" id="edit_shift_start_{{ $day }}" class="filter-select" style="width: 98px; padding: 6px; font-size: 11px; border-radius: 8px;" value="06:00" onchange="handleDayTimeInputChange('edit', '{{ $day }}')">
+                                <span style="font-size: 11px; color: #64748b; font-weight: 600;">to</span>
+                                <input type="time" id="edit_shift_end_{{ $day }}" class="filter-select" style="width: 98px; padding: 6px; font-size: 11px; border-radius: 8px;" value="18:00" onchange="handleDayTimeInputChange('edit', '{{ $day }}')">
+                            </div>
+                        </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+
             <div>
                 <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Update Password (Leave blank to keep current)</label>
                 <div style="display: flex; gap: 8px; margin-top: 6px;">
@@ -318,8 +466,8 @@
 </div>
 
 <!-- View User Modal -->
-<div id="viewUserModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2000; background: rgba(15,23,42,0.6); backdrop-filter: blur(8px);">
-    <div class="bill-modal-content" style="max-width: 450px; width: 90%; padding: 32px; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
+<div id="viewUserModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2000; background: rgba(15,23,42,0.6); backdrop-filter: blur(8px); padding: 20px; overflow-y: auto;">
+    <div class="bill-modal-content" style="max-width: 480px; width: 90%; max-height: 88vh; overflow-y: auto; padding: 28px; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
         <div class="modal-header" style="padding: 0; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start;">
             <div style="display: flex; gap: 16px; align-items: center;">
                 <div id="viewUserInitials" style="width: 56px; height: 56px; border-radius: 16px; background: #e0e7ff; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #4338ca; font-size: 20px;">
@@ -362,6 +510,11 @@
                     <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Property Details</div>
                     <div id="viewUserProperty" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">Block X, Lot Y</div>
                 </div>
+                <div id="viewUserGuardContainer" style="margin-bottom: 12px; display: none;">
+                    <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Guard Duty Schedule</div>
+                    <div id="viewUserGuardSchedule" style="font-size: 13px; font-weight: 700; color: #1e40af; margin-top: 4px;">Schedule</div>
+                    <div id="viewUserDutyStatus" style="font-size: 11px; margin-top: 4px;">Status</div>
+                </div>
                 <div>
                     <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Member Since</div>
                     <div id="viewUserJoined" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">Date</div>
@@ -373,8 +526,8 @@
 </div>
 
 <!-- Import Users Modal -->
-<div id="importUserModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2000; background: rgba(15,23,42,0.6); backdrop-filter: blur(8px);">
-    <div class="bill-modal-content" style="max-width: 500px; width: 90%; padding: 32px; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
+<div id="importUserModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2000; background: rgba(15,23,42,0.6); backdrop-filter: blur(8px); padding: 20px; overflow-y: auto;">
+    <div class="bill-modal-content" style="max-width: 520px; width: 90%; max-height: 88vh; overflow-y: auto; padding: 28px; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
         <div class="modal-header" style="padding: 0; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start;">
             <div>
                 <h2 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">Import Users from CSV</h2>
@@ -454,7 +607,210 @@
         document.getElementById('editUserPassword').value = pass;
     }
 
-    function openViewModal(id, name, email, role, contact, block, lot, joined, status) {
+    const GUARD_DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    function formatTime12Hour(time24) {
+        if (!time24) return '';
+        const parts = String(time24).split(':');
+        let h = parseInt(parts[0], 10);
+        const m = parts[1] || '00';
+        if (isNaN(h)) return time24;
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        if (h === 0) h = 12;
+        return `${String(h).padStart(2, '0')}:${m} ${ampm}`;
+    }
+
+    function handleDayShiftTypeChange(prefix, day) {
+        const selectEl = document.getElementById(`${prefix}_shift_type_${day}`);
+        const startEl = document.getElementById(`${prefix}_shift_start_${day}`);
+        const endEl = document.getElementById(`${prefix}_shift_end_${day}`);
+        if (!selectEl || !startEl || !endEl) return;
+
+        if (selectEl.value === 'day') {
+            startEl.value = '06:00';
+            endEl.value = '18:00';
+        } else if (selectEl.value === 'night') {
+            startEl.value = '18:00';
+            endEl.value = '06:00';
+        }
+    }
+
+    function handleDayTimeInputChange(prefix, day) {
+        const selectEl = document.getElementById(`${prefix}_shift_type_${day}`);
+        const startEl = document.getElementById(`${prefix}_shift_start_${day}`);
+        const endEl = document.getElementById(`${prefix}_shift_end_${day}`);
+        if (!selectEl || !startEl || !endEl) return;
+
+        const s = startEl.value.slice(0, 5);
+        const e = endEl.value.slice(0, 5);
+        if (s === '06:00' && e === '18:00') {
+            selectEl.value = 'day';
+        } else if (s === '18:00' && e === '06:00') {
+            selectEl.value = 'night';
+        } else {
+            selectEl.value = 'custom';
+        }
+    }
+
+    function applyPresetToSelectedDays(prefix, presetShift) {
+        GUARD_DAYS_OF_WEEK.forEach(d => {
+            const chk = document.getElementById(`${prefix}_day_${d}`);
+            if (chk && chk.checked) {
+                const selectEl = document.getElementById(`${prefix}_shift_type_${d}`);
+                if (selectEl) {
+                    selectEl.value = presetShift;
+                    handleDayShiftTypeChange(prefix, d);
+                }
+            }
+        });
+    }
+
+    function updateNoDaysMessage(prefix) {
+        const anyChecked = GUARD_DAYS_OF_WEEK.some(d => {
+            const chk = document.getElementById(`${prefix}_day_${d}`);
+            return chk && chk.checked;
+        });
+        const msgEl = document.getElementById(`${prefix}_no_days_msg`);
+        if (msgEl) {
+            msgEl.style.display = anyChecked ? 'none' : 'block';
+        }
+    }
+
+    function setGuardDays(prefix, mode) {
+        GUARD_DAYS_OF_WEEK.forEach(d => {
+            const chk = document.getElementById(`${prefix}_day_${d}`);
+            if (!chk) return;
+            if (mode === 'all') {
+                chk.checked = true;
+            } else if (mode === 'weekday') {
+                chk.checked = (d !== 'Sunday' && d !== 'Saturday');
+            } else if (mode === 'none') {
+                chk.checked = false;
+            }
+            toggleGuardDayStyle(chk, `lbl_${prefix}_day_${d}`, prefix, d);
+        });
+    }
+
+    function toggleGuardDayStyle(checkbox, labelId, prefix, day) {
+        const lbl = document.getElementById(labelId);
+        if (lbl) {
+            if (checkbox.checked) {
+                lbl.style.background = '#eff6ff';
+                lbl.style.borderColor = '#3b82f6';
+                lbl.style.color = '#1d4ed8';
+            } else {
+                lbl.style.background = '#fff';
+                lbl.style.borderColor = '#cbd5e1';
+                lbl.style.color = '#1e293b';
+            }
+        }
+
+        const resolvedPrefix = prefix || (checkbox.id.startsWith('edit_') ? 'edit' : 'add');
+        const resolvedDay = day || checkbox.value;
+        const shiftRow = document.getElementById(`${resolvedPrefix}_day_shift_row_${resolvedDay}`);
+        if (shiftRow) {
+            shiftRow.style.display = checkbox.checked ? 'flex' : 'none';
+        }
+        updateNoDaysMessage(resolvedPrefix);
+    }
+
+    function normalizeGuardScheduleData(raw, fallbackType = 'day', fallbackStart = '06:00', fallbackEnd = '18:00') {
+        const fbType = (fallbackType === 'night' || fallbackType === 'day') ? fallbackType : 'custom';
+        const fbStart = String(fallbackStart || (fbType === 'night' ? '18:00' : '06:00')).slice(0, 5);
+        const fbEnd = String(fallbackEnd || (fbType === 'night' ? '06:00' : '18:00')).slice(0, 5);
+
+        const result = {};
+        GUARD_DAYS_OF_WEEK.forEach(d => {
+            result[d] = { enabled: false, shift: fbType, start: fbStart, end: fbEnd };
+        });
+
+        if (Array.isArray(raw)) {
+            raw.forEach(d => {
+                if (result[d]) {
+                    result[d] = { enabled: true, shift: fbType, start: fbStart, end: fbEnd };
+                }
+            });
+        } else if (typeof raw === 'object' && raw !== null) {
+            Object.keys(raw).forEach(d => {
+                if (!result[d]) return;
+                const cfg = raw[d];
+                if (!cfg || cfg === 'off') {
+                    result[d].enabled = false;
+                    return;
+                }
+                if (typeof cfg === 'string') {
+                    if (cfg === 'day') {
+                        result[d] = { enabled: true, shift: 'day', start: '06:00', end: '18:00' };
+                    } else if (cfg === 'night') {
+                        result[d] = { enabled: true, shift: 'night', start: '18:00', end: '06:00' };
+                    } else if (cfg === '24_hours') {
+                        result[d] = { enabled: true, shift: 'custom', start: '00:00', end: '23:59' };
+                    }
+                } else if (typeof cfg === 'object') {
+                    if (cfg.off || cfg.shift === 'off') {
+                        result[d].enabled = false;
+                        return;
+                    }
+                    const sType = cfg.shift || 'day';
+                    const defStart = sType === 'night' ? '18:00' : (sType === '24_hours' ? '00:00' : '06:00');
+                    const defEnd = sType === 'night' ? '06:00' : (sType === '24_hours' ? '23:59' : '18:00');
+                    const sStart = cfg.start ? String(cfg.start).slice(0, 5) : defStart;
+                    const sEnd = cfg.end ? String(cfg.end).slice(0, 5) : defEnd;
+                    let uiShift = 'custom';
+                    if (sType === 'day' && sStart === '06:00' && sEnd === '18:00') {
+                        uiShift = 'day';
+                    } else if (sType === 'night' && sStart === '18:00' && sEnd === '06:00') {
+                        uiShift = 'night';
+                    }
+                    result[d] = { enabled: true, shift: uiShift, start: sStart, end: sEnd };
+                }
+            });
+        }
+
+        return result;
+    }
+
+    function buildGuardSchedulePayload(prefix) {
+        const scheduleDays = {};
+        let firstShiftType = 'day';
+        let firstShiftStart = '06:00:00';
+        let firstShiftEnd = '18:00:00';
+        let hasFirst = false;
+
+        GUARD_DAYS_OF_WEEK.forEach(d => {
+            const chk = document.getElementById(`${prefix}_day_${d}`);
+            if (chk && chk.checked) {
+                const sType = document.getElementById(`${prefix}_shift_type_${d}`)?.value || 'day';
+                const sStartRaw = document.getElementById(`${prefix}_shift_start_${d}`)?.value || (sType === 'night' ? '18:00' : '06:00');
+                const sEndRaw = document.getElementById(`${prefix}_shift_end_${d}`)?.value || (sType === 'night' ? '06:00' : '18:00');
+                const sStart = sStartRaw.length === 5 ? `${sStartRaw}:00` : sStartRaw;
+                const sEnd = sEndRaw.length === 5 ? `${sEndRaw}:00` : sEndRaw;
+
+                scheduleDays[d] = {
+                    shift: sType,
+                    start: sStart,
+                    end: sEnd
+                };
+
+                if (!hasFirst) {
+                    firstShiftType = sType;
+                    firstShiftStart = sStart;
+                    firstShiftEnd = sEnd;
+                    hasFirst = true;
+                }
+            }
+        });
+
+        return {
+            schedule_days: scheduleDays,
+            shift_type: firstShiftType,
+            shift_start: firstShiftStart,
+            shift_end: firstShiftEnd
+        };
+    }
+
+    function openViewModal(id, name, email, role, contact, block, lot, joined, status, dbid) {
         if (new URLSearchParams(window.location.search).get('view') !== id) {
             window.history.pushState(null, '', '?view=' + id);
         }
@@ -477,6 +833,60 @@
             propContainer.style.display = 'none';
         }
 
+        const guardContainer = document.getElementById('viewUserGuardContainer');
+        if (guardContainer) {
+            if (role === 'Security Guard') {
+                const row = document.querySelector(`.user-row[data-dbid="${dbid}"]`);
+                let scheduleHtml = '';
+                let onDuty = false;
+                if (row) {
+                    try {
+                        const raw = JSON.parse(row.dataset.scheduleDays || '[]');
+                        onDuty = row.dataset.isOnDuty === '1';
+                        const shiftType = row.dataset.shiftType || 'day';
+                        const shiftStart = row.dataset.shiftStart || '06:00';
+                        const shiftEnd = row.dataset.shiftEnd || '18:00';
+
+                        const normalized = normalizeGuardScheduleData(raw, shiftType, shiftStart, shiftEnd);
+                        const todayName = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: 'Asia/Manila' }).format(new Date());
+
+                        scheduleHtml = '<div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">';
+                        GUARD_DAYS_OF_WEEK.forEach(d => {
+                            const cfg = normalized[d];
+                            const isWorkDay = cfg && cfg.enabled;
+                            const isToday = d === todayName;
+                            const bg = isWorkDay ? '#eff6ff' : '#f8fafc';
+                            const border = isWorkDay ? '#bfdbfe' : '#e2e8f0';
+                            const todayStyle = isToday ? 'border: 2px solid #2563eb;' : `border: 1px solid ${border};`;
+                            const shiftBadgeLabel = cfg.shift === 'night' ? 'Night Shift' : (cfg.shift === 'day' ? 'Day Shift' : 'Custom Shift');
+                            const timeText = isWorkDay ? `${shiftBadgeLabel} (${formatTime12Hour(cfg.start)} - ${formatTime12Hour(cfg.end)})` : 'Off Duty';
+
+                            scheduleHtml += `
+                                <div style="background: ${bg}; ${todayStyle} border-radius: 8px; padding: 6px 10px; display: flex; justify-content: space-between; align-items: center;">
+                                    <div style="font-size: 12px; font-weight: 700; color: #1e293b;">
+                                        ${d} ${isToday ? '<span style="font-size: 10px; color: #2563eb; font-weight: 800; margin-left: 4px;">(Today)</span>' : ''}
+                                    </div>
+                                    <div style="font-size: 11px; font-weight: 700; color: ${isWorkDay ? '#1d4ed8' : '#94a3b8'};">
+                                        ${timeText}
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        scheduleHtml += '</div>';
+                    } catch(e) {
+                        scheduleHtml = '<div style="font-size: 12px; color: #64748b;">No schedule assigned</div>';
+                    }
+                }
+                document.getElementById('viewUserGuardSchedule').innerHTML = scheduleHtml;
+                document.getElementById('viewUserDutyStatus').innerHTML = onDuty 
+                    ? '<span style="display: inline-flex; align-items: center; gap: 5px; color: #047857; font-weight: 700; background: #ecfdf5; padding: 3px 10px; border-radius: 9999px; border: 1px solid #a7f3d0;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #10b981; display: inline-block;"></span> Active on Duty</span>' 
+                    : '<span style="display: inline-flex; align-items: center; gap: 5px; color: #64748b; font-weight: 600; background: #f8fafc; padding: 3px 10px; border-radius: 9999px; border: 1px solid #e2e8f0;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #94a3b8; display: inline-block;"></span> Currently Off Duty</span>';
+                guardContainer.style.display = 'block';
+            } else {
+                guardContainer.style.display = 'none';
+            }
+        }
+
         document.getElementById('viewUserModal').style.display = 'flex';
     }
 
@@ -492,6 +902,7 @@
         document.getElementById('editUserId').value = id;
         document.getElementById('editUserDbId').value = dbid;
         document.getElementById('editUserIdLabel').innerText = `Updating ${id} (${role})`;
+        document.getElementById('editUserModal').dataset.role = role;
 
         document.getElementById('editUserFirstName').value = firstName;
         document.getElementById('editUserMiddleName').value = middleName || '';
@@ -506,6 +917,46 @@
             bindGisDropdowns('editResBlock', 'editResLot', { currentBlock: block, currentLot: lot });
         } else {
             resFields.style.display = 'none';
+        }
+
+        const guardFields = document.getElementById('editGuardScheduleFields');
+        if (guardFields) {
+            if (role === 'Security Guard') {
+                guardFields.style.display = 'block';
+                const row = document.querySelector(`.user-row[data-dbid="${dbid}"]`);
+                let raw = [];
+                let shiftType = 'day';
+                let shiftStart = '06:00';
+                let shiftEnd = '18:00';
+                if (row) {
+                    try {
+                        raw = JSON.parse(row.dataset.scheduleDays || '[]');
+                        shiftType = row.dataset.shiftType || 'day';
+                        shiftStart = row.dataset.shiftStart || '06:00';
+                        shiftEnd = row.dataset.shiftEnd || '18:00';
+                    } catch(e) {
+                        raw = [];
+                    }
+                }
+                const normalized = normalizeGuardScheduleData(raw, shiftType, shiftStart, shiftEnd);
+                GUARD_DAYS_OF_WEEK.forEach(d => {
+                    const cfg = normalized[d];
+                    const chk = document.getElementById(`edit_day_${d}`);
+                    const sSelect = document.getElementById(`edit_shift_type_${d}`);
+                    const sStart = document.getElementById(`edit_shift_start_${d}`);
+                    const sEnd = document.getElementById(`edit_shift_end_${d}`);
+
+                    if (sSelect) sSelect.value = cfg.shift;
+                    if (sStart) sStart.value = cfg.start;
+                    if (sEnd) sEnd.value = cfg.end;
+                    if (chk) {
+                        chk.checked = cfg.enabled;
+                        toggleGuardDayStyle(chk, `lbl_edit_day_${d}`, 'edit', d);
+                    }
+                });
+            } else {
+                guardFields.style.display = 'none';
+            }
         }
         
         document.getElementById('editUserPassword').value = ''; // Clear password field
@@ -534,13 +985,18 @@
         const payload = { first_name: firstName, middle_name: middleName, last_name: lastName, email: validatedContact.email, contact_number: validatedContact.contact_number, password: newPass };
         
         const resFields = document.getElementById('editResidentFields');
-        if (resFields.style.display !== 'none') {
+        if (resFields && resFields.style.display !== 'none') {
             payload.block = document.getElementById('editResBlock').value;
             payload.lot = document.getElementById('editResLot').value;
             if (!payload.block || !payload.lot) {
                 Swal.fire('Block and Lot are mandatory for Resident accounts.');
                 return;
             }
+        }
+
+        const editRole = document.getElementById('editUserModal').dataset.role;
+        if (editRole === 'Security Guard') {
+            Object.assign(payload, buildGuardSchedulePayload('edit'));
         }
         
         try {
@@ -593,6 +1049,8 @@
         if (new URLSearchParams(window.location.search).get('action') !== 'add') {
             window.history.pushState(null, '', '?action=add');
         }
+        setGuardDays('add', 'weekday');
+        applyPresetToSelectedDays('add', 'day');
         document.getElementById('addUserModal').style.display = 'flex';
     }
 
@@ -630,13 +1088,24 @@
         const role = document.getElementById('newRole').value;
         const resFields = document.getElementById('residentFields');
         const staffFields = document.getElementById('staffFields');
+        const guardFields = document.getElementById('guardScheduleFields');
 
         if (role === 'Resident') {
             resFields.style.display = 'block';
             staffFields.style.display = 'none';
+            if (guardFields) guardFields.style.display = 'none';
+        } else if (role === 'Security Guard') {
+            resFields.style.display = 'none';
+            staffFields.style.display = 'none';
+            if (guardFields) {
+                guardFields.style.display = 'block';
+                setGuardDays('add', 'weekday');
+                applyPresetToSelectedDays('add', 'day');
+            }
         } else {
             resFields.style.display = 'none';
             staffFields.style.display = 'block';
+            if (guardFields) guardFields.style.display = 'none';
         }
     }
 
@@ -698,6 +1167,8 @@
                 Swal.fire('Block and Lot are mandatory for Resident accounts.');
                 return;
             }
+        } else if (role === 'Security Guard') {
+            Object.assign(payload, buildGuardSchedulePayload('add'));
         }
         
         // Generate a secure temporary password
@@ -875,6 +1346,29 @@
     /* Fix SweetAlert z-index being behind modals */
     .swal2-container {
         z-index: 99999 !important;
+    }
+
+    /* Modern clean scrollbar for scrollable modals */
+    .bill-modal-content {
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 transparent;
+    }
+    .bill-modal-content::-webkit-scrollbar {
+        width: 6px;
+    }
+    .bill-modal-content::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .bill-modal-content::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 9999px;
+    }
+    .bill-modal-content::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
+    .guard-day-pill:hover {
+        border-color: #93c5fd;
+        background: #f8fafc;
     }
 </style>
 

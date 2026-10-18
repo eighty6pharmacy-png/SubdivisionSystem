@@ -10,12 +10,16 @@ use Illuminate\Support\Str;
 
 class VisitorController extends Controller
 {
-    // For Admin / Guard viewing all visitors
+    // For Admin / Guard viewing all visitors, or Resident viewing their own
     public function index()
     {
+        if (!auth()->check()) {
+            return response()->json(['error' => 'Unauthenticated.'], 401);
+        }
+
         $query = Visitor::with('host.lots')->orderBy('updated_at', 'desc');
         
-        if (auth()->check() && auth()->user()->hasRole('Resident')) {
+        if (auth()->user()->hasRole('Resident')) {
             $query->where('resident_id', auth()->id());
         }
 
@@ -40,6 +44,8 @@ class VisitorController extends Controller
                 'db_id' => $vis->id,
                 'pin' => $vis->pin,
                 'visitor' => $vis->visitor_name,
+                'contact_number' => $vis->contact_number,
+                'access_token' => $vis->access_token,
                 'host' => $hostName,
                 'block' => $block,
                 'lot' => $lotNum,
@@ -64,6 +70,7 @@ class VisitorController extends Controller
     {
         $request->validate([
             'visitor_name' => 'required|string|max:255',
+            'contact_number' => 'nullable|string|max:30',
             'purpose' => 'required|string',
             'validity' => 'required|string',
             'type' => 'required|string',
@@ -74,12 +81,14 @@ class VisitorController extends Controller
 
         $data = [
             'resident_id' => $isWalkIn ? null : auth()->id(),
-            'host_name' => $isWalkIn ? null : auth()->user()?->name,
+            'host_name' => $isWalkIn ? ($request->input('host_name') ?: 'Main Gate Walk-in') : (auth()->user()?->name ?? 'Resident Host'),
             'visitor_name' => $request->visitor_name,
+            'contact_number' => $request->contact_number,
+            'access_token' => Str::random(32),
             'purpose' => $request->purpose,
             'validity' => $request->validity,
             'type' => $request->type,
-            'plate_number' => $request->plate_number,
+            'plate_number' => $request->input('plate_number') ?: 'N/A',
             'visitor_address' => $request->visitor_address,
             'status' => $isWalkIn ? 'Entered' : 'Pending',
             'arrival_time' => $isWalkIn ? \Carbon\Carbon::now()->setTimezone(config('app.timezone', 'Asia/Manila'))->format('h:i A') : null,
@@ -112,6 +121,10 @@ class VisitorController extends Controller
     // For Admin approving a code
     public function approve($id)
     {
+        if (!auth()->check() || !auth()->user()->hasRole('Admin')) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized. Only administrators can approve visitor requests.'], 403);
+        }
+
         $visitor = Visitor::whereKey($id)->with('host')->firstOrFail();
         
         if ($visitor->status !== 'Pending') {
@@ -119,18 +132,27 @@ class VisitorController extends Controller
         }
 
         $pin = (string)rand(100000, 999999);
+        $token = $visitor->access_token ?: Str::random(32);
+
         $visitor->update([
             'status' => 'Approved',
-            'pin' => $pin
+            'pin' => $pin,
+            'access_token' => $token,
         ]);
+
+        $passUrl = url('/v/' . $token);
 
         // Send SMS and Push Notification to Resident
         if ($visitor->host) {
             if ($visitor->host->contact_number) {
                 $hostName = $visitor->host->name;
                 $visName = $visitor->visitor_name;
-                $message = "Althesa Subd: Visitor request for {$visName} is Approved. PIN: {$pin}. Please share with them.";
-                \App\Helpers\SmsHelper::sendSms($visitor->host->contact_number, $message);
+                $message = "Althesa Subd: Visitor request for {$visName} is Approved. PIN: {$pin}. Pass & route link: {$passUrl}. Please forward to your visitor.";
+                try {
+                    \App\Helpers\SmsHelper::sendSms($visitor->host->contact_number, $message);
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('Failed sending host SMS: ' . $e->getMessage());
+                }
             }
 
             $visitor->host->notify(new \App\Notifications\WebAndPushNotification(
@@ -140,7 +162,84 @@ class VisitorController extends Controller
             ));
         }
 
+        // Send SMS directly to Visitor if contact_number was provided
+        if (!empty($visitor->contact_number)) {
+            $visName = $visitor->visitor_name;
+            $hostName = $visitor->host ? $visitor->host->name : ($visitor->host_name ?: 'Resident Host');
+            $visitorMessage = "Althesa Subd: Hello {$visName}, your visitor pass from {$hostName} is Approved! Gate PIN: {$pin}. Show this PIN to the guard upon arrival. View your pass & route map: {$passUrl}";
+
+            try {
+                \App\Helpers\SmsHelper::sendSms($visitor->contact_number, $visitorMessage);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Failed sending visitor SMS: ' . $e->getMessage());
+            }
+        }
+
         return response()->json(['success' => true]);
+    }
+
+    // Direct Access Route for Visitors (from SMS Link - no PIN input required)
+    public function showDirectPass(string $token)
+    {
+        $visitor = Visitor::where('access_token', $token)->with('host.lots')->first();
+
+        if (!$visitor) {
+            return response()->view('visitor.pass', [
+                'notFound' => true,
+                'visitor' => null,
+                'token' => $token,
+                'destination' => 'Unknown',
+                'endNode' => null,
+                'hostName' => 'Unknown',
+            ], 404);
+        }
+
+        $dest = 'Unknown';
+        $endNode = null;
+        if ($visitor->host && $visitor->host->lots->count() > 0) {
+            $lot = $visitor->host->lots->first();
+            $dest = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
+            $endNode = 'B' . $lot->block . ' L' . $lot->lot_number;
+        }
+
+        return view('visitor.pass', [
+            'notFound' => false,
+            'visitor' => $visitor,
+            'token' => $token,
+            'destination' => $dest,
+            'endNode' => $endNode,
+            'hostName' => $visitor->host?->name ?? ($visitor->host_name ?: 'Subdivision Resident'),
+        ]);
+    }
+
+    // Polling Endpoint to check if Guard has validated the PIN
+    public function checkDirectPassStatus(string $token)
+    {
+        $visitor = Visitor::where('access_token', $token)->with('host.lots')->first();
+
+        if (!$visitor) {
+            return response()->json(['success' => false, 'message' => 'Visitor pass not found.'], 404);
+        }
+
+        $dest = 'Unknown';
+        $endNode = null;
+        if ($visitor->host && $visitor->host->lots->count() > 0) {
+            $lot = $visitor->host->lots->first();
+            $dest = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
+            $endNode = 'B' . $lot->block . ' L' . $lot->lot_number;
+        }
+
+        return response()->json([
+            'success' => true,
+            'status' => $visitor->status,
+            'visitor_name' => $visitor->visitor_name,
+            'destination' => $dest,
+            'endNode' => $endNode,
+            'pin' => $visitor->pin,
+            'validity' => $visitor->validity,
+            'host_name' => $visitor->host?->name ?? ($visitor->host_name ?: 'Subdivision Resident'),
+            'arrival_time' => $visitor->arrival_time,
+        ]);
     }
     
     // For Guard / Routing page validating PIN
@@ -177,9 +276,21 @@ class VisitorController extends Controller
             }
             
             $dest = 'Unknown';
-            if ($visitor->host && $visitor->host->lots->count() > 0) {
-                $lot = $visitor->host->lots->first();
-                $dest = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
+            $block = 'N/A';
+            $lotNum = 'N/A';
+            $hostName = 'Unknown';
+
+            if ($visitor->host) {
+                $hostName = $visitor->host->name;
+                if ($visitor->host->lots->count() > 0) {
+                    $lot = $visitor->host->lots->first();
+                    $block = (string)$lot->block;
+                    $lotNum = (string)$lot->lot_number;
+                    $dest = 'Block ' . $block . ', Lot ' . $lotNum;
+                }
+            } elseif ($visitor->host_name) {
+                $hostName = $visitor->host_name;
+                $dest = $visitor->host_name;
             }
 
             return response()->json([
@@ -188,8 +299,14 @@ class VisitorController extends Controller
                 'visitor_id' => $visitor->id,
                 'db_id' => $visitor->id,
                 'visitor_name' => $visitor->visitor_name,
+                'host_name' => $hostName,
+                'block' => $block,
+                'lot' => $lotNum,
                 'destination' => $dest,
                 'status' => $visitor->status,
+                'arrival_time' => $visitor->arrival_time,
+                'plate_number' => $visitor->plate_number,
+                'purpose' => $visitor->purpose,
             ]);
         }
 
@@ -215,14 +332,22 @@ class VisitorController extends Controller
                 // Ignore parsing errors, assume valid if unparseable
             }
 
+            $existingVis = \App\Models\Visitor::where('pin', $appointment->pin)->first();
+
             return response()->json([
                 'success' => true,
                 'is_appointment' => true,
-                'visitor_id' => $appointment->id,
-                'db_id' => $appointment->id,
+                'visitor_id' => $existingVis?->id ?? $appointment->id,
+                'db_id' => $existingVis?->id ?? $appointment->id,
+                'appointment_id' => $appointment->id,
                 'visitor_name' => $appointment->client_name,
+                'host_name' => 'Management Office',
+                'block' => 'N/A',
+                'lot' => 'N/A',
                 'destination' => 'Management Office',
                 'status' => $appointment->status === 'Completed' ? 'Entered' : 'Approved',
+                'arrival_time' => $existingVis?->arrival_time,
+                'plate_number' => $existingVis?->plate_number ?? 'N/A',
                 'appointment_type' => $appointment->type,
                 'appointment_time' => $appointment->time,
             ]);
@@ -234,39 +359,59 @@ class VisitorController extends Controller
     // For Guard marking visitor as Entered
     public function markEntered(Request $request, $id)
     {
+        if (!auth()->check() || !auth()->user()->hasAnyRole(['Admin', 'Security Guard'])) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized. Only guards or administrators can record visitor entry.'], 403);
+        }
+
         $visitor = Visitor::where('id', $id)->firstOrFail();
-        $updateData = [
-            'status' => 'Entered',
-            'arrival_time' => \Carbon\Carbon::now()->setTimezone(config('app.timezone', 'Asia/Manila'))->format('h:i A')
-        ];
+        $isFirstEntry = ($visitor->status !== 'Entered');
+        $updateData = [];
+
+        if ($isFirstEntry) {
+            $updateData['status'] = 'Entered';
+            $updateData['arrival_time'] = \Carbon\Carbon::now()->setTimezone(config('app.timezone', 'Asia/Manila'))->format('h:i A');
+        }
         
-        if ($request->has('plate_number') && $request->plate_number !== 'N/A') {
+        if ($request->filled('plate_number') && $request->plate_number !== 'N/A') {
             $updateData['plate_number'] = $request->plate_number;
         }
 
-        if (auth()->check()) {
+        if (auth()->check() && empty($visitor->guard_id)) {
             $updateData['guard_id'] = auth()->user()->id;
             $updateData['guard_name'] = auth()->user()->name;
         }
 
-        $visitor->update($updateData);
-
-        // Notify Admins that visitor entered
-        $admins = User::role('Admin')->get();
-        foreach ($admins as $admin) {
-            $admin->notify(new \App\Notifications\WebAndPushNotification(
-                'Visitor Entered',
-                "Visitor {$visitor->visitor_name} has entered the gate.",
-                'visitor'
-            ));
+        if (!empty($updateData)) {
+            $visitor->update($updateData);
         }
 
-        return response()->json(['success' => true]);
+        // Notify Admins only on first entry
+        if ($isFirstEntry) {
+            $admins = User::role('Admin')->get();
+            foreach ($admins as $admin) {
+                $admin->notify(new \App\Notifications\WebAndPushNotification(
+                    'Visitor Entered',
+                    "Visitor {$visitor->visitor_name} has entered the gate.",
+                    'visitor'
+                ));
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'status' => $visitor->status,
+            'arrival_time' => $visitor->arrival_time,
+            'plate_number' => $visitor->plate_number,
+        ]);
     }
 
     // For Admin rejecting a code
     public function reject($id)
     {
+        if (!auth()->check() || !auth()->user()->hasRole('Admin')) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized. Only administrators can reject visitor requests.'], 403);
+        }
+
         $visitor = Visitor::whereKey($id)->firstOrFail();
         
         if ($visitor->status !== 'Pending') {

@@ -49,68 +49,53 @@
         <nav class="sidebar-nav">
             <div class="nav-section-label">My Home</div>
             <a href="/resident/dashboard" class="nav-item {{ request()->is('resident/dashboard') ? 'active' : '' }}">
-                <span class="nav-icon">🏠</span>
-                <span>My Dashboard</span>
+                <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                <span class="nav-item-text">My Dashboard</span>
             </a>
             
-            <div class="nav-section-label">Utilities & Payments</div>
+            <div class="nav-section-label">Utilities &amp; Payments</div>
             <a href="/resident/electricity" class="nav-item {{ request()->is('resident/electricity') ? 'active' : '' }}">
-                <span class="nav-icon">⚡</span>
-                <span>Electricity Bill</span>
+                <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                <span class="nav-item-text">Electricity Bill</span>
             </a>
             <a href="/resident/water" class="nav-item {{ request()->is('resident/water') ? 'active' : '' }}">
-                <span class="nav-icon">💧</span>
-                <span>Water Bill</span>
+                <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3c-4 6-6 9-6 12a6 6 0 1012 0c0-3-2-6-6-12z"/></svg>
+                <span class="nav-item-text">Water Bill</span>
             </a>
 
-            <div class="nav-section-label">Security & Access</div>
+            <div class="nav-section-label">Security &amp; Access</div>
             <a href="/resident/visitors" class="nav-item {{ request()->is('resident/visitors') ? 'active' : '' }}">
-                <span class="nav-icon">🔑</span>
-                <span>Visitor PINs</span>
+                <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                <span class="nav-item-text">Visitor PINs</span>
             </a>
             <a href="/resident/map" class="nav-item {{ request()->is('resident/map') ? 'active' : '' }}">
-                <span class="nav-icon">🗺️</span>
-                <span>Interactive Map</span>
+                <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                <span class="nav-item-text">Interactive Map</span>
             </a>
             
             <div class="nav-section-label">Community</div>
             <a href="/resident/incidents" class="nav-item {{ request()->is('resident/incidents') ? 'active' : '' }}">
-                <span class="nav-icon">📋</span>
-                <span>Report Incident</span>
+                <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                <span class="nav-item-text">Report Incident</span>
             </a>
 
             <div class="nav-section-label">Account</div>
             <a href="/resident/profile" class="nav-item {{ request()->is('resident/profile') ? 'active' : '' }}">
-                <span class="nav-icon">👤</span>
-                <span>My Profile</span>
+                <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                <span class="nav-item-text">My Profile</span>
             </a>
         </nav>
         
         <div class="sidebar-footer">
-            <a href="javascript:void(0)" class="nav-item" onclick="openLogoutModal()">
-                <span class="nav-icon">🚪</span>
-                <span>Logout</span>
+            <a href="javascript:void(0)" class="nav-item nav-item--logout" onclick="openLogoutModal()">
+                <svg class="nav-icon-svg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                <span class="nav-item-text">Logout</span>
             </a>
+            <form id="resident-logout-form" action="/logout" method="POST" style="display: none;">
+                @csrf
+            </form>
         </div>
     </aside>
-
-    <!-- Custom Logout Modal -->
-    <div id="logoutModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 9999; background: rgba(15,23,42,0.6); backdrop-filter: blur(8px);">
-        <div class="bill-modal-content" style="max-width: 400px; text-align: center; padding: 40px 32px; border-radius: 28px;">
-            <div style="width: 64px; height: 64px; background: #fee2e2; color: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px;">
-                <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-            </div>
-            <h2 style="font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 12px;">Ending Session?</h2>
-            <p style="font-size: 14px; color: #64748b; line-height: 1.6; margin-bottom: 32px;">Are you sure you want to log out? Any unsaved changes in your profile or reports may be lost.</p>
-            <div style="display: flex; gap: 12px;">
-                <button class="btn btn-outline" style="flex: 1; justify-content: center; padding: 14px;" onclick="closeLogoutModal()">Cancel</button>
-                <a href="#" onclick="if(window.OneSignal){try{OneSignal.logout().finally(function(){document.getElementById('resident-logout-form').submit();});}catch(e){document.getElementById('resident-logout-form').submit();}}else{document.getElementById('resident-logout-form').submit();} return false;" class="btn btn-primary" style="flex: 1; justify-content: center; padding: 14px; background: #ef4444; border-color: #ef4444; text-decoration: none;">Yes, Log Out</a>
-                <form id="resident-logout-form" action="/logout" method="POST" style="display: none;">
-                    @csrf
-                </form>
-            </div>
-        </div>
-    </div>
 
     <!-- Main Content -->
     <div class="admin-main">

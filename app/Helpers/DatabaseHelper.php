@@ -214,11 +214,12 @@ if (!function_exists('getValidBillingCycles')) {
     function getValidBillingCycles($type) {
         if (!\Illuminate\Support\Facades\Schema::hasTable('utility_bills')) return [];
         $dates = \App\Models\UtilityBill::where('type', $type)
-            ->select('created_at')
-            ->orderBy('created_at', 'desc')
+            ->select('billing_period', 'created_at')
+            ->orderByRaw('COALESCE(billing_period, created_at) DESC')
             ->get()
             ->map(function ($bill) {
-                $dt = \Carbon\Carbon::parse($bill->created_at);
+                $raw = $bill->billing_period ?: $bill->created_at;
+                $dt = \Carbon\Carbon::parse($raw);
                 return [
                     'cycle' => $dt->format('Y-m'),
                     'label' => $dt->format('F Y'),
@@ -242,7 +243,7 @@ if (!function_exists('getElectricalBills')) {
                 }
                 
                 $query = \App\Models\User::role('Resident')->with(['lots', 'utilityBills' => function($q) {
-                    $q->where('type', 'electricity')->orderBy('created_at', 'desc')->with('payments');
+                    $q->where('type', 'electricity')->orderByRaw('COALESCE(billing_period, created_at) DESC')->with('payments');
                 }]);
                 
                 if ($userId) {
@@ -257,10 +258,11 @@ if (!function_exists('getElectricalBills')) {
                     if ($cycle) {
                         $dt = \Carbon\Carbon::createFromFormat('Y-m', $cycle);
                         $bill = $resident->utilityBills->first(function($b) use ($dt) {
-                            return $b->created_at->year == $dt->year && $b->created_at->month == $dt->month;
+                            $targetDate = $b->billing_period ? \Carbon\Carbon::parse($b->billing_period) : $b->created_at;
+                            return $targetDate && $targetDate->year == $dt->year && $targetDate->month == $dt->month;
                         });
                     } else {
-                        $bill = $resident->utilityBills->first();
+                        $bill = $resident->utilityBills->sortByDesc(fn($b) => $b->billing_period ? \Carbon\Carbon::parse($b->billing_period)->timestamp : $b->created_at->timestamp)->first();
                     }
                     
                     $allPayments = collect();
@@ -269,7 +271,7 @@ if (!function_exists('getElectricalBills')) {
                             foreach ($ub->payments as $p) {
                                 $allPayments->push([
                                     'month' => \Carbon\Carbon::parse($p->payment_date)->format('M Y'),
-                                    'amount' => $p->amount_paid,
+                                    'amount' => (float) $p->amount_paid,
                                     'status' => 'Paid',
                                     'date' => \Carbon\Carbon::parse($p->payment_date)->format('M d, Y h:i A'),
                                     'trn' => $p->trn,
@@ -288,17 +290,20 @@ if (!function_exists('getElectricalBills')) {
                     return [
                         'id' => $bill ? $bill->id : 'NEW-' . $resident->id,
                         'db_id' => $bill ? $bill->id : null,
+                        'resident_id' => $resident->id,
                         'lot' => $lot ? 'B' . $lot->block . ' L' . $lot->lot_number : 'N/A',
                         'block' => $lot ? $lot->block : 'N/A',
                         'lot_number' => $lot ? $lot->lot_number : null,
                         'resident' => $resident->name,
                         'provider_managed' => $lot ? $lot->provider_managed : false,
-                        'amount' => $bill ? ($bill->amount + $bill->previous_balance + (($bill->is_at_risk && $bill->status !== 'Paid') ? (($bill->amount + $bill->previous_balance) * 0.05) : 0)) : 0,
+                        'amount' => $bill ? ($bill->amount + $bill->previous_balance + (($bill->is_at_risk && strtolower($bill->status) !== 'paid') ? (($bill->amount + $bill->previous_balance) * 0.05) : 0)) : 0,
                         'usage' => ($bill ? $bill->usage_value : 0) . ' kWh',
                         'prev_reading' => $bill ? $bill->previous_reading : 0,
                         'prev_reading_date' => ($bill && $bill->previous_reading_date) ? \Carbon\Carbon::parse($bill->previous_reading_date)->format('M d, Y') : ($previousBill ? \Carbon\Carbon::parse($previousBill->created_at)->format('M d, Y') : 'N/A'),
+                        'prev_reading_date_raw' => ($bill && $bill->previous_reading_date) ? \Carbon\Carbon::parse($bill->previous_reading_date)->format('Y-m-d') : null,
                         'curr_reading' => $bill ? $bill->current_reading : 0,
                         'curr_reading_date' => ($bill && $bill->current_reading_date) ? \Carbon\Carbon::parse($bill->current_reading_date)->format('M d, Y') : (($bill && $bill->created_at) ? \Carbon\Carbon::parse($bill->created_at)->format('M d, Y') : 'N/A'),
+                        'curr_reading_date_raw' => ($bill && $bill->current_reading_date) ? \Carbon\Carbon::parse($bill->current_reading_date)->format('Y-m-d') : null,
                         'previous_balance' => $bill ? (float)$bill->previous_balance : 0,
                         'total_paid' => $bill ? (float)$bill->payments->sum('amount_paid') : 0,
                         'usage_kwh' => $bill ? $bill->usage_value : 0,
@@ -307,11 +312,11 @@ if (!function_exists('getElectricalBills')) {
                         'status' => $bill ? $bill->status : 'unpaid',
                         'due' => ($bill && $bill->due_date) ? \Carbon\Carbon::parse($bill->due_date)->format('Y-m-d') : 'N/A',
                         'issued_date' => ($bill && $bill->created_at) ? \Carbon\Carbon::parse($bill->created_at)->format('Y-m-d') : 'N/A',
-                        'paid_date' => ($bill && $bill->status == 'paid') ? $bill->updated_at->format('Y-m-d') : null,
+                        'paid_date' => ($bill && strtolower($bill->status) === 'paid') ? $bill->updated_at->format('Y-m-d') : null,
                         'method' => ($bill && $bill->payments->count() > 0) ? ($bill->payments->sortByDesc('created_at')->first()->method ?? 'Office') : null,
                         'usage_history' => ($lot && $includeHistory) ? getLotMonthlyChartData($lot->id, 'electricity') : [],
                         'amount_history' => ($lot && $includeHistory) ? getLotMonthlyAmountChartData($lot->id, 'electricity') : [],
-                        'at_risk' => $bill ? ($bill->is_at_risk && $bill->status !== 'Paid') : false,
+                        'at_risk' => $bill ? ($bill->is_at_risk && strtolower($bill->status) !== 'paid') : false,
                         'payment_history' => $payments,
                         'payment_behavior' => $resident->payment_behavior,
                         'audit_log' => [['action' => 'Statement Generated', 'date' => \Carbon\Carbon::now()->format('Y-m-d h:i A'), 'user' => 'System']],
@@ -333,7 +338,7 @@ if (!function_exists('getWaterBills')) {
                 }
 
                 $query = \App\Models\User::role('Resident')->with(['lots', 'utilityBills' => function($q) {
-                    $q->where('type', 'water')->orderBy('created_at', 'desc')->with('payments');
+                    $q->where('type', 'water')->orderByRaw('COALESCE(billing_period, created_at) DESC')->with('payments');
                 }]);
                 
                 if ($userId) {
@@ -348,10 +353,11 @@ if (!function_exists('getWaterBills')) {
                     if ($cycle) {
                         $dt = \Carbon\Carbon::createFromFormat('Y-m', $cycle);
                         $bill = $resident->utilityBills->first(function($b) use ($dt) {
-                            return $b->created_at->year == $dt->year && $b->created_at->month == $dt->month;
+                            $targetDate = $b->billing_period ? \Carbon\Carbon::parse($b->billing_period) : $b->created_at;
+                            return $targetDate && $targetDate->year == $dt->year && $targetDate->month == $dt->month;
                         });
                     } else {
-                        $bill = $resident->utilityBills->first();
+                        $bill = $resident->utilityBills->sortByDesc(fn($b) => $b->billing_period ? \Carbon\Carbon::parse($b->billing_period)->timestamp : $b->created_at->timestamp)->first();
                     }
                     
                     $allPayments = collect();
@@ -360,7 +366,7 @@ if (!function_exists('getWaterBills')) {
                             foreach ($ub->payments as $p) {
                                 $allPayments->push([
                                     'month' => \Carbon\Carbon::parse($p->payment_date)->format('M Y'),
-                                    'amount' => $p->amount_paid,
+                                    'amount' => (float) $p->amount_paid,
                                     'status' => 'Paid',
                                     'date' => \Carbon\Carbon::parse($p->payment_date)->format('M d, Y h:i A'),
                                     'trn' => $p->trn,
@@ -388,16 +394,19 @@ if (!function_exists('getWaterBills')) {
                     return [
                         'id' => $bill ? $bill->id : 'NEW-' . $resident->id,
                         'db_id' => $bill ? $bill->id : null,
+                        'resident_id' => $resident->id,
                         'lot' => $lot ? 'B' . $lot->block . ' L' . $lot->lot_number : 'N/A',
                         'block' => $lot ? $lot->block : 'N/A',
                         'resident' => $resident->name,
-                        'amount' => $bill ? ($bill->amount + $bill->previous_balance + ($bill->is_at_risk ? (($bill->amount + $bill->previous_balance) * 0.05) : 0)) : 0,
+                        'amount' => $bill ? ($bill->amount + $bill->previous_balance + (($bill->is_at_risk && strtolower($bill->status) !== 'paid') ? (($bill->amount + $bill->previous_balance) * 0.05) : 0)) : 0,
                         'usage' => ($bill ? $bill->usage_value : 0) . ' m³',
                         'usage_m3' => $bill ? $bill->usage_value : 0,
                         'prev_reading' => $bill ? $bill->previous_reading : 0,
                         'prev_reading_date' => ($bill && $bill->previous_reading_date) ? \Carbon\Carbon::parse($bill->previous_reading_date)->format('M d, Y') : ($previousBill ? \Carbon\Carbon::parse($previousBill->created_at)->format('M d, Y') : 'N/A'),
+                        'prev_reading_date_raw' => ($bill && $bill->previous_reading_date) ? \Carbon\Carbon::parse($bill->previous_reading_date)->format('Y-m-d') : null,
                         'curr_reading' => $bill ? $bill->current_reading : 0,
                         'curr_reading_date' => ($bill && $bill->current_reading_date) ? \Carbon\Carbon::parse($bill->current_reading_date)->format('M d, Y') : (($bill && $bill->created_at) ? \Carbon\Carbon::parse($bill->created_at)->format('M d, Y') : 'N/A'),
+                        'curr_reading_date_raw' => ($bill && $bill->current_reading_date) ? \Carbon\Carbon::parse($bill->current_reading_date)->format('Y-m-d') : null,
                         'previous_balance' => $bill ? (float)$bill->previous_balance : 0,
                         'total_paid' => $bill ? (float)$bill->payments->sum('amount_paid') : 0,
                         'usage_cbm' => $bill ? $bill->usage_value : 0,
@@ -408,11 +417,11 @@ if (!function_exists('getWaterBills')) {
                         'status' => $bill ? $bill->status : 'unpaid',
                         'due' => ($bill && $bill->due_date) ? \Carbon\Carbon::parse($bill->due_date)->format('Y-m-d') : 'N/A',
                         'issued_date' => ($bill && $bill->created_at) ? \Carbon\Carbon::parse($bill->created_at)->format('Y-m-d') : 'N/A',
-                        'paid_date' => ($bill && $bill->status == 'paid') ? $bill->updated_at->format('Y-m-d') : null,
+                        'paid_date' => ($bill && strtolower($bill->status) === 'paid') ? $bill->updated_at->format('Y-m-d') : null,
                         'method' => ($bill && $bill->payments->count() > 0) ? ($bill->payments->sortByDesc('created_at')->first()->method ?? 'Office') : null,
                         'usage_history' => ($lot && $includeHistory) ? getLotMonthlyChartData($lot->id, 'water') : [],
                         'amount_history' => ($lot && $includeHistory) ? getLotMonthlyAmountChartData($lot->id, 'water') : [],
-                        'at_risk' => $bill ? ($bill->is_at_risk && $bill->status !== 'Paid') : false,
+                        'at_risk' => $bill ? ($bill->is_at_risk && strtolower($bill->status) !== 'paid') : false,
                         'payment_history' => $payments,
                         'payment_behavior' => $resident->payment_behavior,
                         'audit_log' => [['action' => 'Statement Generated', 'date' => \Carbon\Carbon::now()->format('Y-m-d h:i A'), 'user' => 'System']],
@@ -510,7 +519,7 @@ if (!function_exists('getDownpaymentFees')) {
     function getDownpaymentFees() {
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('downpayments') && \App\Models\Downpayment::count() > 0) {
-                return \App\Models\Downpayment::with(['reservation.lot', 'reservation.buyerMasterList.financingRecord'])->get()->map(function ($dp) {
+                return \App\Models\Downpayment::with(['reservation.lot', 'reservation.buyerMasterList.financingRecord'])->get()->map(function (\App\Models\Downpayment $dp) {
                     $res = $dp->reservation;
                     $bml = $res?->buyerMasterList;
                     $histories = \Illuminate\Support\Facades\DB::table('downpayment_histories')->where('downpayment_id', $dp->id)->orderBy('created_at', 'asc')->get();
@@ -959,3 +968,110 @@ if (!function_exists('getAppointments')) {
         return [];
     }
 }
+
+if (!function_exists('getOnDutyGuardEmergencyContact')) {
+    /**
+     * Resolves the emergency contact number for the resident emergency call button.
+     * Prioritizes the active Security Guard currently on scheduled duty, falling back
+     * to guards scheduled today, any active guard, or the subdivision administrator.
+     *
+     * @return array{phone: ?string, name: string, is_guard: bool, role_label: string, guard_id: ?int, shift: ?string}
+     */
+    function getOnDutyGuardEmergencyContact(?\Carbon\Carbon $time = null): array {
+        try {
+            $time = $time ? $time->copy()->setTimezone('Asia/Manila') : now('Asia/Manila');
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
+                // 1. Fetch active Security Guards with contact numbers
+                $guards = \App\Models\User::role('Security Guard')
+                    ->where('status', '!=', 'Archived')
+                    ->whereNotNull('contact_number')
+                    ->where('contact_number', '!=', '')
+                    ->with('guardAccount')
+                    ->get();
+
+                // 2. Check if any guard is currently on duty right now
+                foreach ($guards as $guard) {
+                    if ($guard->guardAccount) {
+                        $activeShift = $guard->guardAccount->getActiveDutyShift($time);
+                        if ($activeShift) {
+                            $shiftType = $activeShift['shift'] ?? 'day';
+                            $shiftLabel = ucfirst($shiftType) . ' Shift';
+
+                            return [
+                                'phone' => $guard->contact_number,
+                                'name' => $guard->name,
+                                'is_guard' => true,
+                                'role_label' => "Security Guard on Duty ({$shiftLabel})",
+                                'guard_id' => $guard->id,
+                                'shift' => $shiftType,
+                            ];
+                        }
+                    }
+                }
+
+                // 3. Fallback: Any guard scheduled today
+                $today = $time->format('l');
+                foreach ($guards as $guard) {
+                    if ($guard->guardAccount && $guard->guardAccount->getShiftForDay($today)) {
+                        $shiftConfig = $guard->guardAccount->getShiftForDay($today);
+                        $shiftType = $shiftConfig['shift'] ?? ($guard->guardAccount->shift_type ?? 'day');
+                        $shiftLabel = ucfirst($shiftType) . ' Shift';
+
+                        return [
+                            'phone' => $guard->contact_number,
+                            'name' => $guard->name,
+                            'is_guard' => true,
+                            'role_label' => "Security Guard (Scheduled Today - {$shiftLabel})",
+                            'guard_id' => $guard->id,
+                            'shift' => $shiftType,
+                        ];
+                    }
+                }
+
+                // 4. Fallback: Any active Security Guard
+                if ($guards->isNotEmpty()) {
+                    $fallback = $guards->first();
+                    return [
+                        'phone' => $fallback->contact_number,
+                        'name' => $fallback->name,
+                        'is_guard' => true,
+                        'role_label' => 'Security Guard (Main Gate)',
+                        'guard_id' => $fallback->id,
+                        'shift' => $fallback->guardAccount?->shift_type ?? 'day',
+                    ];
+                }
+
+                // 5. Fallback: Subdivision Admin
+                $admin = \App\Models\User::role('Admin')
+                    ->where('status', '!=', 'Archived')
+                    ->whereNotNull('contact_number')
+                    ->where('contact_number', '!=', '')
+                    ->first();
+
+                if ($admin) {
+                    return [
+                        'phone' => $admin->contact_number,
+                        'name' => $admin->name,
+                        'is_guard' => false,
+                        'role_label' => 'Subdivision Admin Hotline',
+                        'guard_id' => null,
+                        'shift' => null,
+                    ];
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed resolving on-duty guard emergency contact: ' . $e->getMessage());
+        }
+
+        return [
+            'phone' => null,
+            'name' => 'Security Station',
+            'is_guard' => false,
+            'role_label' => 'Emergency Hotline',
+            'guard_id' => null,
+            'shift' => null,
+        ];
+    }
+}
+

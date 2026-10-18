@@ -261,14 +261,59 @@ Route::prefix('resident')->middleware(['auth', 'web', 'role:Resident', 'sync_pay
 
     Route::post('/api/billing/pay', function (\Illuminate\Http\Request $request) {
         $billId = $request->input('bill_id');
-        $bill = \App\Models\UtilityBill::whereKey($billId)->where('status', '!=', 'paid')->first();
+        $bill = \App\Models\UtilityBill::whereKey($billId)
+            ->where('resident_id', \Illuminate\Support\Facades\Auth::id())
+            ->where('status', '!=', 'paid')
+            ->first();
 
         if (!$bill) {
-            return response()->json(['success' => false, 'message' => 'Bill not found or already paid.'], 404);
+            return response()->json(['success' => false, 'message' => 'Bill not found, unauthorized, or already paid.'], 404);
         }
 
-        if ($bill->paymongo_checkout_url) {
-            return response()->json(['success' => true, 'checkout_url' => $bill->paymongo_checkout_url]);
+        if ($bill->paymongo_checkout_id) {
+            try {
+                $sessionCheck = \Illuminate\Support\Facades\Http::withHeaders([
+                    'accept' => 'application/json',
+                    'authorization' => 'Basic ' . base64_encode(config('services.paymongo.secret_key') . ':')
+                ])->get('https://api.paymongo.com/v1/checkout_sessions/' . $bill->paymongo_checkout_id);
+
+                if ($sessionCheck->successful()) {
+                    $sessionData = $sessionCheck->json();
+                    $sessionStatus = $sessionData['data']['attributes']['status'] ?? '';
+
+                    if ($sessionStatus === 'paid') {
+                        $sessionAttributes = $sessionData['data']['attributes'] ?? [];
+                        $paidPayment = \App\Services\PaymentRecorder::paidPayment($sessionAttributes['payments'] ?? []);
+                        if ($paidPayment) {
+                            $method = \App\Services\PaymentRecorder::methodFromSource($paidPayment['attributes']['source']['type'] ?? '', 'GCash');
+                            $trn = \App\Services\PaymentRecorder::onlineTrn($paidPayment['attributes']['payment_intent_id'] ?? null, (string) $bill->id);
+                            $exactAmount = isset($paidPayment['attributes']['amount']) ? ($paidPayment['attributes']['amount'] / 100) : ($bill->amount + $bill->previous_balance);
+                            $paidAt = isset($paidPayment['attributes']['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paidPayment['attributes']['paid_at'], config('app.timezone')) : now();
+
+                            app(\App\Services\PaymentRecorder::class)->recordUtilityPayment(
+                                $bill,
+                                (float) $exactAmount,
+                                $method,
+                                \App\Services\PaymentRecorder::paymongoPaymentId($paidPayment, $sessionAttributes),
+                                $trn,
+                                $paidAt
+                            );
+                        }
+                        return response()->json(['success' => false, 'message' => 'Bill has already been paid.'], 400);
+                    }
+
+                    if ($sessionStatus === 'active' && !empty($bill->paymongo_checkout_url)) {
+                        return response()->json(['success' => true, 'checkout_url' => $bill->paymongo_checkout_url]);
+                    }
+                }
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning('PayMongo session check error: ' . $e->getMessage());
+            }
+
+            $bill->update([
+                'paymongo_checkout_id' => null,
+                'paymongo_checkout_url' => null,
+            ]);
         }
 
         $lineItems = [];
@@ -320,8 +365,9 @@ Route::prefix('resident')->middleware(['auth', 'web', 'role:Resident', 'sync_pay
                             'line_items' => $lineItems,
                             'payment_method_types' => ['gcash', 'paymaya', 'card', 'grab_pay', 'qrph'],
                             'success_url' => request()->getSchemeAndHttpHost() . '/resident/' . $bill->type . '?payment=success',
+                            'cancel_url' => request()->getSchemeAndHttpHost() . '/resident/' . $bill->type . '?payment=cancelled',
                             'description' => 'Subdivision ' . ucfirst($bill->type) . ' Bill',
-                            'reference_number' => $bill->id
+                            'reference_number' => (string) $bill->id
                         ]
                     ]
                 ]);
@@ -416,7 +462,8 @@ Route::post('/api/webhooks/paymongo', function (\Illuminate\Http\Request $reques
                 \Illuminate\Support\Facades\Log::info('Webhook marked FIN ' . $fin->id . ' as paid.');
             }
         } else {
-            $bill = \App\Models\UtilityBill::find($billId);
+            $billKey = str_starts_with((string) $billId, 'BILL-') ? substr($billId, 5) : $billId;
+            $bill = \App\Models\UtilityBill::find($billKey);
             if ($bill && $bill->status !== \App\Enums\BillStatus::Paid->value) {
                 if ($paidPayment || ($paymentData['status'] ?? '') === 'paid') {
                     $amountPaid = isset($paidPayment['attributes']['amount']) ? ($paidPayment['attributes']['amount'] / 100) : (isset($paymentData['amount']) ? ($paymentData['amount'] / 100) : ($bill->amount + $bill->previous_balance));
@@ -425,9 +472,9 @@ Route::post('/api/webhooks/paymongo', function (\Illuminate\Http\Request $reques
                     $recorder->recordUtilityPayment(
                         $bill,
                         (float) $amountPaid,
-                        \App\Services\PaymentRecorder::methodFromSource($sourceType, 'PayMongo'),
+                        \App\Services\PaymentRecorder::methodFromSource($sourceType, 'GCash'),
                         $paymongoPaymentId,
-                        \App\Services\PaymentRecorder::onlineTrn($paymentIntentId, $bill->id),
+                        \App\Services\PaymentRecorder::onlineTrn($paymentIntentId, (string) $bill->id),
                         $paidAt
                     );
                     \Illuminate\Support\Facades\Log::info('Webhook marked bill ' . $bill->id . ' as paid.');
@@ -440,7 +487,7 @@ Route::post('/api/webhooks/paymongo', function (\Illuminate\Http\Request $reques
 });
 
 // Guard Security Portal Routes
-Route::prefix('guard')->middleware(['auth', 'web', 'role:Security Guard'])->group(function () {
+Route::prefix('guard')->middleware(['auth', 'role:Security Guard|Admin'])->group(function () {
     Route::get('/dashboard', function () {
         return view('guard.dashboard');
     });
@@ -452,8 +499,8 @@ Route::prefix('guard')->middleware(['auth', 'web', 'role:Security Guard'])->grou
 
 // API Routes for Visitors
 Route::post('/api/validate-pin', [\App\Http\Controllers\VisitorController::class, 'validatePin']);
-Route::get('/api/visitors', [\App\Http\Controllers\VisitorController::class, 'index']);
 Route::middleware(['auth'])->group(function () {
+    Route::get('/api/visitors', [\App\Http\Controllers\VisitorController::class, 'index']);
     Route::post('/api/visitors', [\App\Http\Controllers\VisitorController::class, 'store']);
     Route::put('/api/visitors/{id}/approve', [\App\Http\Controllers\VisitorController::class, 'approve']);
     Route::put('/api/visitors/{id}/reject', [\App\Http\Controllers\VisitorController::class, 'reject']);
@@ -546,7 +593,8 @@ Route::post('/api/appointments', function (\Illuminate\Http\Request $request) {
         }
     }
 
-    $alreadyTaken = \App\Models\Appointment::whereDate('date', $dateYmd)
+    $alreadyTaken = \App\Models\Appointment::query()
+        ->whereDate('date', $dateYmd)
         ->where('time', $request->input('time'))
         ->where('status', '!=', \App\Enums\AppointmentStatus::Cancelled->value)
         ->exists();
@@ -628,21 +676,26 @@ Route::put('/api/appointments/{id}/status', function (\Illuminate\Http\Request $
             'report' => $request->input('report', $apt->report)
         ]);
         
+        $createdVisitorId = null;
         if ($request->input('status') === 'Completed' && $oldStatus !== 'Completed') {
-            \App\Models\Visitor::create([
+            $vis = \App\Models\Visitor::create([
                 'resident_id' => null,
                 'visitor_name' => $apt->client_name,
                 'pin' => $apt->pin,
                 'purpose' => 'Appointment: ' . $apt->type,
                 'validity' => \Carbon\Carbon::parse($apt->date)->format('Y-m-d') . ' ' . $apt->time,
-                'arrival_time' => now(),
+                'arrival_time' => \Carbon\Carbon::now()->setTimezone(config('app.timezone', 'Asia/Manila'))->format('h:i A'),
                 'status' => 'Entered',
-                'plate_number' => 'N/A',
+                'plate_number' => $request->input('plate_number', 'N/A'),
                 'type' => 'Appointment',
                 'visitor_address' => 'N/A',
                 'guard_id' => auth()->user()?->guardAccount ? auth()->id() : null,
                 'guard_name' => auth()->check() ? auth()->user()->name : 'Guard',
             ]);
+            $createdVisitorId = $vis->id;
+        } elseif ($request->input('status') === 'Completed') {
+            $existingVis = \App\Models\Visitor::where('pin', $apt->pin)->first();
+            $createdVisitorId = $existingVis?->id;
         }
 
         if ($request->input('status') === 'Scheduled' && $oldStatus !== 'Scheduled' && !empty($apt->email)) {
@@ -682,7 +735,7 @@ Route::put('/api/appointments/{id}/status', function (\Illuminate\Http\Request $
             sendAppointmentCancellationEmail($apt, $request->input('reason', 'Schedule conflict / fully booked.'));
         }
     }
-    return response()->json(['success' => true]);
+    return response()->json(['success' => true, 'visitor_id' => $createdVisitorId]);
 });
 
 // GIS API Route
@@ -832,9 +885,25 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
     // User Management System
     Route::get('/users', function () {
-        $users = \App\Models\User::with(['lots', 'roles', 'buyerMasterList.lot'])->get()->map(function (\App\Models\User $u) {
+        $users = \App\Models\User::with(['lots', 'roles', 'buyerMasterList.lot', 'guardAccount'])->get()->map(function (\App\Models\User $u) {
             $role = $u->roles->first()->name ?? 'Resident';
             $lot = $u->lots->first() ?? $u->buyerMasterList?->lot;
+            $guard = $u->guardAccount;
+            $scheduleDays = $guard ? ($guard->schedule_days ?? []) : [];
+            $shiftType = $guard->shift_type ?? 'day';
+            $shiftStart = $guard->shift_start ?? '06:00:00';
+            $shiftEnd = $guard->shift_end ?? '18:00:00';
+            $activeDutyShift = $guard ? $guard->getActiveDutyShift() : null;
+            $isOnDuty = $activeDutyShift !== null;
+            $activeShiftLabel = $activeDutyShift ? ucfirst($activeDutyShift['shift']) . ' Shift' : null;
+
+            $meta = '';
+            if ($lot) {
+                $meta = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
+            } elseif ($role === 'Security Guard') {
+                $meta = $guard ? $guard->formatted_schedule : 'No Schedule Set';
+            }
+
             return [
                 'id' => 'USR-' . $u->id,
                 'db_id' => $u->id,
@@ -849,7 +918,13 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                 'contact_number' => $u->contact_number,
                 'block' => $lot ? $lot->block : '',
                 'lot' => $lot ? $lot->lot_number : '',
-                'meta' => $lot ? 'Block ' . $lot->block . ', Lot ' . $lot->lot_number : ''
+                'meta' => $meta,
+                'schedule_days' => $scheduleDays,
+                'shift_type' => $shiftType,
+                'shift_start' => $shiftStart ? substr($shiftStart, 0, 5) : '06:00',
+                'shift_end' => $shiftEnd ? substr($shiftEnd, 0, 5) : '18:00',
+                'is_on_duty' => $isOnDuty,
+                'active_shift_label' => $activeShiftLabel,
             ];
         })->toArray();
         return view('admin.users.index', ['users' => $users]);
@@ -909,6 +984,22 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             ]);
             $user->lots()->attach($lot->id);
             $lot->update(['status' => 'Occupied']);
+        }
+
+        if (($validated['role'] ?? '') === 'Security Guard') {
+            $days = $request->input('schedule_days');
+            if (is_string($days)) {
+                $days = json_decode($days, true);
+            }
+            $user->guardAccount()->updateOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'schedule_days' => is_array($days) ? $days : [],
+                    'shift_type' => $request->input('shift_type', 'day'),
+                    'shift_start' => $request->input('shift_start', '06:00:00'),
+                    'shift_end' => $request->input('shift_end', '18:00:00'),
+                ]
+            );
         }
 
         try {
@@ -999,6 +1090,23 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                         'lot_number' => (string) $request->input('lot'),
                     ]);
                     $user->lots()->sync([$lot->id]);
+                }
+            }
+            if ($roleName === 'Security Guard') {
+                $days = $request->input('schedule_days');
+                if (is_string($days)) {
+                    $days = json_decode($days, true);
+                }
+                if ($days !== null || $request->has('shift_type')) {
+                    $user->guardAccount()->updateOrCreate(
+                        ['user_id' => $user->id],
+                        [
+                            'schedule_days' => is_array($days) ? $days : ($user->guardAccount?->schedule_days ?? []),
+                            'shift_type' => $request->input('shift_type', $user->guardAccount?->shift_type ?? 'day'),
+                            'shift_start' => $request->input('shift_start', $user->guardAccount?->shift_start ?? '06:00:00'),
+                            'shift_end' => $request->input('shift_end', $user->guardAccount?->shift_end ?? '18:00:00'),
+                        ]
+                    );
                 }
             }
             return response()->json(['success' => true]);
@@ -1417,71 +1525,102 @@ Route::prefix('buyer')->middleware(['auth', 'role:Buyer', 'sync_paymongo'])->gro
 
 // Resident Portal Routes
 Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo'])->group(function () {
-    Route::get('/dashboard', function () {
+    $buildEmptyBill = function(string $type, $user) {
+        $lot = $user ? $user->lots()->first() : null;
+        $unit = $type === 'electricity' ? 'kWh' : 'm³';
+        $emptyHistory = array_map(function($i) {
+            return [
+                'label' => date('M Y', strtotime("-$i months")),
+                'value' => 0
+            ];
+        }, range(11, 0));
+
+        return [
+            'id' => 'N/A',
+            'db_id' => null,
+            'resident_id' => $user?->id,
+            'lot' => $lot ? 'B' . $lot->block . ' L' . $lot->lot_number : 'N/A',
+            'block' => $lot ? $lot->block : 'N/A',
+            'resident' => $user?->name ?? 'Resident',
+            'period' => 'N/A',
+            'provider_managed' => $lot ? $lot->provider_managed : false,
+            'amount' => 0,
+            'usage' => '0 ' . $unit,
+            'usage_' . ($type === 'electricity' ? 'kwh' : 'cubic') => 0,
+            'usage_cbm' => 0,
+            'base_amount' => 0,
+            'previous_balance' => 0,
+            'total_paid' => 0,
+            'status' => 'no-bill',
+            'due' => 'N/A',
+            'paid_date' => null,
+            'method' => null,
+            'usage_history' => $emptyHistory,
+            'amount_history' => $emptyHistory,
+            'at_risk' => false,
+            'payment_history' => [],
+            'payment_behavior' => 'On-Time',
+            'audit_log' => [],
+            'rate' => 0,
+            'prev' => 0,
+            'curr' => 0,
+            'prev_reading' => 0,
+            'curr_reading' => 0,
+            'prev_reading_date' => 'N/A',
+            'curr_reading_date' => 'N/A',
+        ];
+    };
+
+    Route::get('/dashboard', function () use ($buildEmptyBill) {
         $user = \Illuminate\Support\Facades\Auth::user();
         $elecBills = getElectricalBills(request('cycle'), true, $user->id);
         $waterBills = getWaterBills(request('cycle'), true, $user->id);
-        $elecBill = collect($elecBills)->firstWhere('resident', $user->name ?? 'Jepuso') ?? [
-            'id' => 'N/A',
-            'db_id' => null,
-            'lot' => 'N/A',
-            'block' => 'N/A',
-            'resident' => $user->name ?? 'Resident',
-            'amount' => 0,
-            'usage' => '0 kWh',
-            'usage_kwh' => 0,
-            'base_amount' => 0,
-            'status' => 'no-bill',
-            'due' => 'N/A',
-            'paid_date' => null,
-            'method' => null,
-            'usage_history' => array_fill(0, 12, 0),
-            'amount_history' => array_fill(0, 12, 0),
-            'at_risk' => false,
-            'payment_history' => [],
-            'payment_behavior' => 'On-Time',
-            'audit_log' => [],
-            'kwh' => 0,
-            'rate' => 0,
-            'prev' => 0,
-            'curr' => 0,
-        ];
-        $waterBill = collect($waterBills)->firstWhere('resident', $user->name ?? 'Jepuso') ?? [
-            'id' => 'N/A',
-            'db_id' => null,
-            'lot' => 'N/A',
-            'block' => 'N/A',
-            'resident' => $user->name ?? 'Resident',
-            'amount' => 0,
-            'usage' => '0 m³',
-            'usage_cubic' => 0,
-            'base_amount' => 0,
-            'status' => 'no-bill',
-            'due' => 'N/A',
-            'paid_date' => null,
-            'method' => null,
-            'usage_history' => array_fill(0, 12, 0),
-            'amount_history' => array_fill(0, 12, 0),
-            'at_risk' => false,
-            'payment_history' => [],
-            'payment_behavior' => 'On-Time',
-            'audit_log' => [],
-            'cubic' => 0,
-            'rate' => 0,
-            'prev' => 0,
-            'curr' => 0,
-        ];
+
+        $elecBill = collect($elecBills)->first(function($b) use ($user) {
+            return (isset($b['resident_id']) && $b['resident_id'] === $user->id) || ($b['resident'] ?? '') === $user->name;
+        }) ?? $buildEmptyBill('electricity', $user);
+
+        $waterBill = collect($waterBills)->first(function($b) use ($user) {
+            return (isset($b['resident_id']) && $b['resident_id'] === $user->id) || ($b['resident'] ?? '') === $user->name;
+        }) ?? $buildEmptyBill('water', $user);
+
+        $activeIncidentsCount = \App\Models\Incident::where('resident_id', $user->id)
+            ->whereIn('status', ['pending', 'progress', 'Open / Pending', 'In Progress'])
+            ->count();
 
         $announcements = \App\Models\Announcement::orderBy('created_at', 'desc')->take(10)->get();
 
         return view('resident.dashboard', [
             'elecBill' => $elecBill,
             'waterBill' => $waterBill,
+            'activeIncidentsCount' => $activeIncidentsCount,
             'announcements' => $announcements
         ]);
     });
     Route::get('/profile', function () {
         return view('resident.profile');
+    });
+    Route::put('/profile/password', function (\Illuminate\Http\Request $request) {
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'current_password' => ['required', 'current_password'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first()
+            ], 422);
+        }
+
+        \Illuminate\Support\Facades\Auth::user()->update([
+            'password' => \Illuminate\Support\Facades\Hash::make($request->password)
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password updated successfully.'
+        ]);
     });
     Route::get('/map', function () {
         return view('resident.map');
@@ -1503,88 +1642,44 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
         $query = \App\Models\UtilityBill::where('resident_id', $user->id)
             ->where('type', $type)
             ->orderBy('created_at', 'desc');
-            
-        if ($latestBill && $latestBill->status !== 'paid') {
-            $query->where('id', '!=', $latestBill->id);
-        }
-
+        // Allow residents access to all their statements (both paid and unpaid)
         $bills = $query->get();
         return view('resident.history', compact('bills', 'type'));
     });
 
     Route::get('/bills/history/{type}/pdf/{id}', function ($type, $id) {
-        $bill = \App\Models\UtilityBill::with(['user', 'lot'])->findOrFail($id);
-        if ($bill->resident_id !== \Illuminate\Support\Facades\Auth::id()) abort(403);
+        $bill = \App\Models\UtilityBill::with(['user', 'lot', 'payments'])->findOrFail($id);
+        $user = \Illuminate\Support\Facades\Auth::user();
+        $userLotIds = $user->lots()->pluck('lots.id');
+        $isOwner = ($bill->resident_id === $user->id) || ($userLotIds->contains($bill->lot_id));
+        if (!$isOwner) abort(403);
         
         $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'portrait');
         $pdf->loadView('resident.bill_pdf', compact('bill'));
         return $pdf->stream('Statement_of_Account_'.$type.'_'.\Carbon\Carbon::parse($bill->created_at)->format('Y_m').'.pdf');
     });
 
-    Route::get('/electricity', function () {
+    Route::get('/electricity', function () use ($buildEmptyBill) {
         $user = \Illuminate\Support\Facades\Auth::user();
-        $elecBills = getElectricalBills(request('cycle'));
+        $elecBills = getElectricalBills(request('cycle'), true, $user->id);
         $lot = $user->lots()->first();
         $providerManaged = $lot ? $lot->provider_managed : false;
 
-        $elecBill = collect($elecBills)->firstWhere('resident', $user->name) ?? [
-            'id' => 'N/A',
-            'db_id' => null,
-            'lot' => $lot ? 'B' . $lot->block . ' L' . $lot->lot_number : 'N/A',
-            'block' => $lot ? $lot->block : 'N/A',
-            'resident' => $user->name,
-            'period' => 'N/A',
-            'provider_managed' => $providerManaged,
-            'amount' => 0,
-            'usage' => '0 kWh',
-            'usage_kwh' => 0,
-            'base_amount' => 0,
-            'status' => 'no-bill',
-            'due' => 'N/A',
-            'paid_date' => null,
-            'method' => null,
-            'usage_history' => array_fill(0, 12, 0),
-            'amount_history' => array_fill(0, 12, 0),
-            'at_risk' => false,
-            'payment_history' => [],
-            'payment_behavior' => 'On-Time',
-            'audit_log' => [],
-            'kwh' => 0,
-            'rate' => 0,
-            'prev' => 0,
-            'curr' => 0,
-        ];
+        $elecBill = collect($elecBills)->first(function($b) use ($user) {
+            return (isset($b['resident_id']) && $b['resident_id'] === $user->id) || ($b['resident'] ?? '') === $user->name;
+        }) ?? $buildEmptyBill('electricity', $user);
+
         return view('resident.electricity', ['elecBill' => $elecBill]);
     });
-    Route::get('/water', function () {
+    Route::get('/water', function () use ($buildEmptyBill) {
         $user = \Illuminate\Support\Facades\Auth::user();
-        $waterBills = getWaterBills(request('cycle'));
-        $waterBill = collect($waterBills)->firstWhere('resident', $user->name) ?? [
-            'id' => 'N/A',
-            'db_id' => null,
-            'lot' => 'N/A',
-            'block' => 'N/A',
-            'resident' => $user->name,
-            'period' => 'N/A',
-            'amount' => 0,
-            'usage' => '0 m³',
-            'usage_cubic' => 0,
-            'base_amount' => 0,
-            'status' => 'no-bill',
-            'due' => 'N/A',
-            'paid_date' => null,
-            'method' => null,
-            'usage_history' => array_fill(0, 12, 0),
-            'amount_history' => array_fill(0, 12, 0),
-            'at_risk' => false,
-            'payment_history' => [],
-            'payment_behavior' => 'On-Time',
-            'audit_log' => [],
-            'cubic' => 0,
-            'rate' => 0,
-            'prev' => 0,
-            'curr' => 0,
-        ];
+        $waterBills = getWaterBills(request('cycle'), true, $user->id);
+
+        $waterBill = collect($waterBills)->first(function($b) use ($user) {
+            return (isset($b['resident_id']) && $b['resident_id'] === $user->id) || ($b['resident'] ?? '') === $user->name;
+        }) ?? $buildEmptyBill('water', $user);
+
         return view('resident.water', ['waterBill' => $waterBill]);
     });
     Route::get('/incidents', function () {
@@ -1592,20 +1687,35 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
         $reports = \App\Models\Incident::where('resident_id', $user->id)
             ->orderBy('created_at', 'desc')
             ->get();
+        $dutyContact = getOnDutyGuardEmergencyContact();
         $admin = \App\Models\User::role('Admin')->whereNotNull('contact_number')->first();
-        $adminPhone = $admin?->contact_number ?? null;
-        return view('resident.incidents', ['incidents' => $reports, 'adminPhone' => $adminPhone]);
+        $adminPhone = $dutyContact['phone'] ?: ($admin?->contact_number ?? null);
+
+        return view('resident.incidents', [
+            'incidents' => $reports,
+            'adminPhone' => $adminPhone,
+            'dutyContact' => $dutyContact,
+        ]);
     });
     Route::post('/incidents', function (\Illuminate\Http\Request $request) {
+        $validated = $request->validate([
+            'subject' => 'required|string|max:255',
+            'type' => 'required|string|max:100',
+            'description' => 'required|string',
+            'photos' => 'nullable|array',
+        ]);
+
         $photos = $request->input('photos');
         $imageUrls = [];
 
         if (is_array($photos) && count($photos) > 0) {
             foreach ($photos as $photo) {
+                if (count($imageUrls) >= 3) break;
                 if (preg_match('/^data:image\/(\w+);base64,/', $photo, $type)) {
                     $photoData = substr($photo, strpos($photo, ',') + 1);
                     $type = strtolower($type[1]);
-                    if (in_array($type, ['jpg', 'jpeg', 'gif', 'png'])) {
+                    if (in_array($type, ['jpg', 'jpeg', 'gif', 'png', 'webp'])) {
+                        $photoData = str_replace(' ', '+', $photoData);
                         $photoDecoded = base64_decode($photoData);
                         if ($photoDecoded !== false) {
                             $filename = 'incidents/' . \Illuminate\Support\Str::random(10) . '.' . $type;
@@ -1618,9 +1728,9 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
         }
 
         $inc = \App\Models\Incident::create([
-            'subject' => $request->input('subject'),
-            'type' => $request->input('type'),
-            'description' => $request->input('description'),
+            'subject' => $validated['subject'],
+            'type' => $validated['type'],
+            'description' => $validated['description'],
             'status' => 'pending',
             'resident_id' => \Illuminate\Support\Facades\Auth::id(),
             'reporter_name' => \Illuminate\Support\Facades\Auth::user()?->name,
@@ -1636,7 +1746,11 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             ));
         }
 
-        return response()->json(['success' => true]);
+        return response()->json([
+            'success' => true,
+            'id' => $inc->id,
+            'reference_id' => 'INC-' . $inc->id,
+        ]);
     });
 
     Route::put('/incidents/{id}/status', function (\Illuminate\Http\Request $request, $id) {
@@ -1647,11 +1761,17 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             return response()->json(['success' => false, 'message' => 'Invalid incident status. Allowed: ' . implode(', ', \App\Enums\IncidentStatus::values()) . '.'], 422);
         }
 
-        $inc = \App\Models\Incident::whereKey($id)->first();
+        $user = \Illuminate\Support\Facades\Auth::user();
+        $query = \App\Models\Incident::whereKey($id);
+        if (!$user->hasAnyRole(['Admin', 'Security Guard'])) {
+            $query->where('resident_id', $user->id);
+        }
+        $inc = $query->first();
         if ($inc) {
             $inc->update(['status' => $request->input('status')]);
+            return response()->json(['success' => true]);
         }
-        return response()->json(['success' => true]);
+        return response()->json(['success' => false, 'message' => 'Incident not found or unauthorized.'], 404);
     });
     Route::get('/notifications', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
@@ -1675,79 +1795,13 @@ Route::get('/routing-guide', function () {
     return view('visitor.routing');
 });
 
+// Direct Visitor Pass Route (from SMS Link - no manual PIN input required)
+Route::get('/v/{token}', [\App\Http\Controllers\VisitorController::class, 'showDirectPass'])->name('visitor.direct-pass');
+Route::get('/api/v/{token}/status', [\App\Http\Controllers\VisitorController::class, 'checkDirectPassStatus'])->name('visitor.direct-pass.status');
+
 // Finance Officer Portal Routes
 Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(function () {
     Route::get('/dashboard', function () {
-        $cycle = request('cycle');
-        $residents = \App\Models\User::role('Resident')->with([
-            'lots',
-            'utilityBills' => function ($q) {
-                $q->orderBy('created_at', 'desc');
-            }
-        ])->get();
-
-        $houses = [];
-        foreach ($residents as $res) {
-            $lot = $res->lots->first();
-            if (!$lot)
-                continue;
-
-            $elecBills = $res->utilityBills->where('type', 'electricity');
-            $waterBills = $res->utilityBills->where('type', 'water');
-
-            if ($cycle) {
-                $dt = \Carbon\Carbon::createFromFormat('Y-m', $cycle);
-                $elec_bill = $elecBills->filter(function ($b) use ($dt) {
-                    $c = \Carbon\Carbon::parse($b->created_at);
-                    return $c->year == $dt->year && $c->month == $dt->month;
-                })->first();
-                $water_bill = $waterBills->filter(function ($b) use ($dt) {
-                    $c = \Carbon\Carbon::parse($b->created_at);
-                    return $c->year == $dt->year && $c->month == $dt->month;
-                })->first();
-            } else {
-                $elec_bill = $elecBills->first();
-                $water_bill = $waterBills->first();
-            }
-
-            $prev_elec = 0;
-            $curr_elec = null;
-            if ($elec_bill) {
-                $prev_elec = $elec_bill->previous_reading;
-                $curr_elec = $elec_bill->current_reading;
-            } else {
-                $latest_elec = $elecBills->first();
-                if ($latest_elec) {
-                    $prev_elec = $latest_elec->current_reading;
-                }
-            }
-
-            $prev_water = 0;
-            $curr_water = null;
-            if ($water_bill) {
-                $prev_water = $water_bill->previous_reading;
-                $curr_water = $water_bill->current_reading;
-            } else {
-                $latest_water = $waterBills->first();
-                if ($latest_water) {
-                    $prev_water = $latest_water->current_reading;
-                }
-            }
-
-            $houses[] = [
-                'block' => $lot->block,
-                'lot' => $lot->lot_number,
-                'elec_status' => $elec_bill ? ($elec_bill->status == 'paid' ? 'Paid' : ($elec_bill->amount > 0 || $elec_bill->usage_value > 0 ? 'Billed' : 'Pending')) : 'Pending',
-                'water_status' => $water_bill ? ($water_bill->status == 'paid' ? 'Paid' : ($water_bill->amount > 0 || $water_bill->usage_value > 0 ? 'Billed' : 'Pending')) : 'Pending',
-                'prev_elec' => $prev_elec,
-                'curr_elec' => $curr_elec,
-                'prev_water' => $prev_water,
-                'curr_water' => $curr_water,
-                'resident' => $res->name,
-                'provider_managed' => $lot->provider_managed
-            ];
-        }
-
         $elecCycles = getValidBillingCycles('electricity');
         $waterCycles = getValidBillingCycles('water');
         $validCycles = collect(array_merge($elecCycles, $waterCycles))
@@ -1755,86 +1809,245 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             ->sortByDesc('cycle')
             ->values()
             ->toArray();
-        return view('finance.dashboard', ['houses' => $houses, 'validCycles' => $validCycles]);
+
+        $cycle = request('cycle');
+        if (!$cycle && !empty($validCycles)) {
+            $cycle = $validCycles[0]['cycle'];
+        }
+
+        $dt = $cycle ? \Carbon\Carbon::createFromFormat('Y-m', $cycle)->startOfMonth() : now()->startOfMonth();
+
+        $lots = \App\Models\Lot::has('users')->with([
+            'users',
+            'utilityBills' => function ($q) {
+                $q->orderByRaw('COALESCE(billing_period, created_at) DESC');
+            }
+        ])->orderBy('block')->orderBy('lot_number')->get();
+
+        $houses = [];
+        foreach ($lots as $lot) {
+            $user = $lot->users->first();
+            $elecBills = $lot->utilityBills->where('type', 'electricity');
+            $waterBills = $lot->utilityBills->where('type', 'water');
+
+            $elec_bill = $elecBills->filter(function ($b) use ($dt) {
+                $c = \Carbon\Carbon::parse($b->billing_period ?: $b->created_at);
+                return $c->year == $dt->year && $c->month == $dt->month;
+            })->first();
+
+            $water_bill = $waterBills->filter(function ($b) use ($dt) {
+                $c = \Carbon\Carbon::parse($b->billing_period ?: $b->created_at);
+                return $c->year == $dt->year && $c->month == $dt->month;
+            })->first();
+
+            // Electricity Baseline & Readings
+            $prev_elec = 0;
+            $curr_elec = null;
+            $is_baseline_elec = false;
+            if ($elec_bill) {
+                $prev_elec = $elec_bill->previous_reading ?? 0;
+                $curr_elec = ($elec_bill->current_reading_date !== null || $elec_bill->usage_value > 0 || $elec_bill->amount > 0) ? $elec_bill->current_reading : null;
+                $priorElecBill = $elecBills->filter(function ($b) use ($dt) {
+                    $c = \Carbon\Carbon::parse($b->billing_period ?: $b->created_at);
+                    return $c->lt($dt);
+                })->first();
+                if (!$priorElecBill || $prev_elec == 0) {
+                    $is_baseline_elec = true;
+                }
+            } else {
+                $latest_elec = $elecBills->first();
+                if ($latest_elec) {
+                    $prev_elec = $latest_elec->current_reading ?? $latest_elec->previous_reading ?? 0;
+                } else {
+                    $is_baseline_elec = true;
+                }
+            }
+
+            // Water Baseline & Readings
+            $prev_water = 0;
+            $curr_water = null;
+            $is_baseline_water = false;
+            if ($water_bill) {
+                $prev_water = $water_bill->previous_reading ?? 0;
+                $curr_water = ($water_bill->current_reading_date !== null || $water_bill->usage_value > 0 || $water_bill->amount > 0) ? $water_bill->current_reading : null;
+                $priorWaterBill = $waterBills->filter(function ($b) use ($dt) {
+                    $c = \Carbon\Carbon::parse($b->billing_period ?: $b->created_at);
+                    return $c->lt($dt);
+                })->first();
+                if (!$priorWaterBill || $prev_water == 0) {
+                    $is_baseline_water = true;
+                }
+            } else {
+                $latest_water = $waterBills->first();
+                if ($latest_water) {
+                    $prev_water = $latest_water->current_reading ?? $latest_water->previous_reading ?? 0;
+                } else {
+                    $is_baseline_water = true;
+                }
+            }
+
+            // Status resolution
+            $elec_status = 'Pending';
+            if ($elec_bill) {
+                if ($elec_bill->status === 'paid') {
+                    $elec_status = 'Paid';
+                } elseif ($elec_bill->current_reading_date !== null || $elec_bill->usage_value > 0 || $elec_bill->amount > 0) {
+                    $elec_status = 'Billed';
+                }
+            }
+
+            $water_status = 'Pending';
+            if ($water_bill) {
+                if ($water_bill->status === 'paid') {
+                    $water_status = 'Paid';
+                } elseif ($water_bill->current_reading_date !== null || $water_bill->usage_value > 0 || $water_bill->amount > 0) {
+                    $water_status = 'Billed';
+                }
+            }
+
+            $houses[] = [
+                'block' => $lot->block,
+                'lot' => $lot->lot_number,
+                'elec_status' => $elec_status,
+                'water_status' => $water_status,
+                'prev_elec' => $prev_elec,
+                'curr_elec' => $curr_elec,
+                'is_baseline_elec' => $is_baseline_elec,
+                'prev_water' => $prev_water,
+                'curr_water' => $curr_water,
+                'is_baseline_water' => $is_baseline_water,
+                'prev_balance_elec' => (float)($elec_bill?->previous_balance ?? 0),
+                'prev_balance_water' => (float)($water_bill?->previous_balance ?? 0),
+                'resident' => $user?->name ?? 'Occupied',
+                'provider_managed' => (bool)$lot->provider_managed
+            ];
+        }
+
+        return view('finance.dashboard', [
+            'houses' => $houses,
+            'validCycles' => $validCycles,
+            'currentCycle' => $cycle
+        ]);
     });
 
     Route::post('/api/billing/reading', function (\Illuminate\Http\Request $request) {
         $type = $request->input('type');
+        if (!in_array($type, ['electricity', 'water'])) {
+            return response()->json(['success' => false, 'message' => 'Invalid utility type.'], 422);
+        }
+
         $lotStr = $request->input('lot');
         $blockStr = $request->input('block');
-        $prevReading = (int) $request->input('previous_reading', 0);
-        $currReading = (int) $request->input('current_reading', 0);
-        $usage = $request->input('usage');
-        if ($usage === null) {
-            $usage = max(0, $currReading - $prevReading);
-        } else {
-            $usage = (int) $usage;
+
+        $lot = \App\Models\Lot::where('block', $blockStr)->where('lot_number', $lotStr)->first();
+        if (!$lot) {
+            return response()->json(['success' => false, 'message' => 'Lot not found.'], 404);
         }
-        $rate = $request->input('rate');
+
+        if ($type === 'electricity' && $lot->provider_managed) {
+            return response()->json(['success' => false, 'message' => 'Electricity for this lot is directly managed by CASURECO and cannot be billed.'], 422);
+        }
 
         $cycle = $request->input('cycle');
         if (empty($cycle)) {
             $cycle = date('Y-m');
         }
-        $dt = \Carbon\Carbon::createFromFormat('Y-m', $cycle);
+        $dt = \Carbon\Carbon::createFromFormat('Y-m', $cycle)->startOfMonth();
 
-        if (!$rate) {
-            $settingKey = $type === 'electricity' ? 'elec_rate' : 'water_rate';
-            $setting = \App\Models\Setting::find($settingKey);
-            $rate = $setting ? (float) $setting->value : ($type === 'electricity' ? 10 : 15);
+        $bill = \App\Models\UtilityBill::where('lot_id', $lot->id)
+            ->where('type', $type)
+            ->where(function ($q) use ($dt) {
+                $q->whereDate('billing_period', $dt->toDateString())
+                  ->orWhere(function ($sub) use ($dt) {
+                      $sub->whereNull('billing_period')
+                          ->whereYear('created_at', $dt->year)
+                          ->whereMonth('created_at', $dt->month);
+                  });
+            })->first();
+
+        if (!$bill) {
+            return response()->json(['success' => false, 'message' => "Cannot input reading: Admin has not generated a billing cycle for {$dt->format('F Y')}."], 403);
         }
 
+        if ($bill->status === \App\Enums\BillStatus::Paid->value) {
+            return response()->json(['success' => false, 'message' => 'This bill has already been marked as Paid. Readings cannot be modified.'], 422);
+        }
+
+        $prevReading = (int) $request->input('previous_reading', $bill->previous_reading ?? 0);
+        $currReading = (int) $request->input('current_reading', 0);
+
+        if ($currReading < $prevReading) {
+            return response()->json([
+                'success' => false,
+                'message' => "Current reading ({$currReading}) cannot be lower than previous reading ({$prevReading})."
+            ], 422);
+        }
+
+        $usage = $currReading - $prevReading;
+
+        // Rates & Min Tier Calculation
         if ($type === 'water') {
-            $minWaterM3Setting = \App\Models\Setting::find('water_min_m3');
-            $minWaterM3 = $minWaterM3Setting ? (float) $minWaterM3Setting->value : 10;
+            $minWaterM3 = (float) (\App\Models\Setting::find('water_min_m3')?->value ?? 10);
+            $minWaterRate = (float) (\App\Models\Setting::find('water_min_rate')?->value ?? 250);
+            $rate = (float) (\App\Models\Setting::find('water_rate')?->value ?? 15);
 
-            $minWaterRateSetting = \App\Models\Setting::find('water_min_rate');
-            $minWaterRate = $minWaterRateSetting ? (float) $minWaterRateSetting->value : 250;
-
-            if ($usage <= $minWaterM3 && $usage > 0) {
+            if ($usage <= $minWaterM3) {
                 $amount = $minWaterRate;
-            } elseif ($usage > $minWaterM3) {
-                $amount = $minWaterRate + (($usage - $minWaterM3) * $rate);
             } else {
-                $amount = 0; // If usage is 0, they can either pay 0 or min rate. Given lack of feedback on 0 usage, let's keep 0 as 0. Wait, standard utility usually charges minimum if 0. I will charge minimum if usage is 0. 
-                // Ah, the user didn't respond to the question. Let's just charge the minimum for 0.
-                $amount = $minWaterRate;
+                $amount = $minWaterRate + (($usage - $minWaterM3) * $rate);
             }
         } else {
+            $rate = (float) (\App\Models\Setting::find('elec_rate')?->value ?? 10);
             $amount = $usage * $rate;
         }
 
-        $lot = \App\Models\Lot::where('block', $blockStr)->where('lot_number', $lotStr)->first();
-        if ($lot) {
-            $user = $lot->users->first();
-            $bill = \App\Models\UtilityBill::where('lot_id', $lot->id)->where('type', $type)
-                ->whereYear('created_at', $dt->year)
-                ->whereMonth('created_at', $dt->month)->first();
+        // Update Bill preserving Admin Due Date
+        $updateData = [
+            'previous_reading' => $prevReading,
+            'current_reading' => $currReading,
+            'current_reading_date' => now()->toDateString(),
+            'usage_value' => $usage,
+            'amount' => $amount,
+        ];
 
-            if ($bill) {
-                $bill->update([
-                    'previous_reading' => $prevReading,
-                    'current_reading' => $currReading,
-                    'usage_value' => $usage,
-                    'amount' => $amount,
-                    'due_date' => $dt->copy()->addDays(30)
-                ]);
-            } else {
-                return response()->json(['success' => false, 'message' => 'Cannot input reading: Admin has not generated a billing cycle for this month.'], 403);
-            }
-            if ($user) {
-                updateResidentBehavior($user);
-
-                if (!empty($user->contact_number) && $amount > 0) {
-                    $dueDateStr = \Carbon\Carbon::parse($bill->due_date)->format('M d, Y');
-                    $amtStr = number_format($amount, 2);
-                    $msg = "Althesa Subd: Your {$type} bill for {$dt->format('M Y')} is P{$amtStr}. Due on {$dueDateStr}. Please settle on time to avoid penalties.";
-                    \App\Helpers\SmsHelper::sendSms($user->contact_number, $msg);
-                }
-            }
-            return response()->json(['success' => true]);
+        if (!$bill->due_date) {
+            $updateData['due_date'] = $dt->copy()->addDays(30)->toDateString();
         }
-        return response()->json(['success' => false, 'message' => 'Lot not found'], 404);
+
+        $bill->update($updateData);
+
+        $user = $lot->users->first();
+        if ($user) {
+            updateResidentBehavior($user);
+
+            if (!empty($user->contact_number)) {
+                $dueDateStr = $bill->due_date ? \Carbon\Carbon::parse($bill->due_date)->format('M d, Y') : $dt->copy()->addDays(30)->format('M d, Y');
+                $amtStr = number_format($amount, 2);
+                $totalDue = $amount + (float)$bill->previous_balance;
+                $totalStr = number_format($totalDue, 2);
+
+                $msg = "Althesa Subd: Your {$type} bill for {$dt->format('M Y')} is P{$amtStr}";
+                if ((float)$bill->previous_balance > 0) {
+                    $msg .= " (Total due with arrears: P{$totalStr})";
+                }
+                $msg .= ". Due on {$dueDateStr}. Please settle on time to avoid penalties.";
+
+                \App\Helpers\SmsHelper::sendSms($user->contact_number, $msg);
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'bill' => [
+                'previous_reading' => $prevReading,
+                'current_reading' => $currReading,
+                'usage' => $usage,
+                'amount' => $amount,
+                'previous_balance' => (float)$bill->previous_balance,
+                'total_due' => $amount + (float)$bill->previous_balance,
+                'due_date' => $bill->due_date ? \Carbon\Carbon::parse($bill->due_date)->format('M d, Y') : null
+            ]
+        ]);
     });
 });
 
@@ -1842,57 +2055,129 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
    PHASE 4 ROUTES
    ========================================================================= */
 
-// Resident Incident Reporting
-Route::post('/resident/incidents', function (\Illuminate\Http\Request $request) {
-    $validated = $request->validate([
-        'subject' => 'required|string',
-        'type' => 'required|string',
-        'description' => 'required|string',
-        'photos' => 'nullable|array',
-    ]);
+Route::get('/admin/api/billing/export-soa', [App\Http\Controllers\ExportController::class, 'exportSOA'])->name('admin.billing.export-soa');
 
-    $imagePaths = [];
-    if (!empty($validated['photos']) && is_array($validated['photos'])) {
-        foreach ($validated['photos'] as $base64Image) {
-            if (count($imagePaths) >= 3)
-                break; // Limit to 3 on backend too
-            if (preg_match('/^data:image\/(\w+);base64,/', $base64Image, $type)) {
-                $base64Image = substr($base64Image, strpos($base64Image, ',') + 1);
-                $type = strtolower($type[1]);
-                if (in_array($type, ['jpg', 'jpeg', 'gif', 'png', 'webp'])) {
-                    $base64Image = str_replace(' ', '+', $base64Image);
-                    $imageName = 'incident_' . time() . '_' . \Illuminate\Support\Str::random(10) . '.' . $type;
-                    \Illuminate\Support\Facades\Storage::disk('public')->put('incidents/' . $imageName, base64_decode($base64Image));
-                    $imagePaths[] = '/storage/incidents/' . $imageName;
-                }
-            }
-        }
+Route::get('/admin/api/billing/cycle-status', function (\Illuminate\Http\Request $request) {
+    $type = $request->input('type', 'electricity');
+    if (!in_array($type, ['electricity', 'water'])) {
+        return response()->json(['success' => false, 'message' => 'Invalid utility type.'], 422);
     }
 
-    $finalImageUrl = count($imagePaths) > 0 ? json_encode($imagePaths) : null;
+    $tz = config('app.timezone', 'Asia/Manila');
 
-    \App\Models\Incident::create([
-        'subject' => $validated['subject'],
-        'type' => $validated['type'],
-        'description' => $validated['description'],
-        'resident_id' => \Illuminate\Support\Facades\Auth::id(),
-        'reporter_name' => \Illuminate\Support\Facades\Auth::user()?->name,
-        'status' => 'pending',
-        'image_url' => $finalImageUrl
+    $latestBill = \App\Models\UtilityBill::where('type', $type)
+        ->orderByRaw('COALESCE(billing_period, created_at) DESC')
+        ->first();
+
+    $lotsQuery = \App\Models\Lot::has('users')->with('users');
+    if ($type === 'electricity') {
+        $lotsQuery->where('provider_managed', false);
+    }
+    $eligibleLots = $lotsQuery->get();
+    $totalEligibleLots = $eligibleLots->count();
+    $eligibleLotIds = $eligibleLots->pluck('id')->all();
+
+    $settings = [
+        'rate' => (float)(\App\Models\Setting::find($type === 'electricity' ? 'elec_rate' : 'water_rate')?->value ?? ($type === 'electricity' ? 10 : 30)),
+        'penalty' => (float)(\App\Models\Setting::find($type . '_penalty')?->value ?? 5),
+        'water_min_m3' => (float)(\App\Models\Setting::find('water_min_m3')?->value ?? 10),
+        'water_min_rate' => (float)(\App\Models\Setting::find('water_min_rate')?->value ?? 250),
+    ];
+
+    if (!$latestBill) {
+        $now = now($tz);
+        $suggestedPrev = $now->copy()->subMonth()->format('Y-m-d');
+        $suggestedCurr = $now->format('Y-m-d');
+        $suggestedDue = $now->copy()->addDays(15)->format('Y-m-d');
+        return response()->json([
+            'success' => true,
+            'has_active_cycle' => false,
+            'active_cycle' => null,
+            'next_cycle' => [
+                'label' => $now->format('F Y'),
+                'period' => $now->startOfMonth()->toDateString(),
+                'suggested_prev_date' => $suggestedPrev,
+                'suggested_curr_date' => $suggestedCurr,
+                'suggested_due_date' => $suggestedDue,
+                'already_generated' => false,
+            ],
+            'settings' => $settings,
+        ]);
+    }
+
+    $activePeriodRaw = $latestBill->billing_period ?: $latestBill->created_at;
+    $activePeriod = \Carbon\Carbon::parse($activePeriodRaw, $tz)->startOfMonth();
+
+    $activeBills = \App\Models\UtilityBill::where('type', $type)
+        ->where(function ($q) use ($activePeriod) {
+            $q->whereDate('billing_period', $activePeriod->toDateString())
+              ->orWhere(function ($sub) use ($activePeriod) {
+                  $sub->whereNull('billing_period')
+                      ->whereYear('created_at', $activePeriod->year)
+                      ->whereMonth('created_at', $activePeriod->month);
+              });
+        })->get();
+
+    $billedLotIds = $activeBills->pluck('lot_id')->all();
+    $missingLotIds = array_diff($eligibleLotIds, $billedLotIds);
+    $missingLotsCount = count($missingLotIds);
+
+    $unrecordedReadingsCount = $activeBills->where('status', '!=', 'paid')->filter(function ($b) {
+        return $b->current_reading === null || $b->current_reading == 0;
+    })->count();
+
+    $lastCurrDate = $latestBill->current_reading_date 
+        ? \Carbon\Carbon::parse($latestBill->current_reading_date, $tz) 
+        : $activePeriod->copy()->endOfMonth();
+
+    $nextPrevDate = $lastCurrDate->format('Y-m-d');
+    $nextCurrDate = $lastCurrDate->copy()->addMonth()->format('Y-m-d');
+    $nextDueDate = \Carbon\Carbon::parse($nextCurrDate, $tz)->addDays(15)->format('Y-m-d');
+    $nextBillingPeriod = \Carbon\Carbon::parse($nextCurrDate, $tz)->startOfMonth()->toDateString();
+    $nextCycleLabel = \Carbon\Carbon::parse($nextBillingPeriod, $tz)->format('F Y');
+
+    $nextCycleExists = \App\Models\UtilityBill::where('type', $type)
+        ->whereDate('billing_period', $nextBillingPeriod)
+        ->exists();
+
+    return response()->json([
+        'success' => true,
+        'has_active_cycle' => true,
+        'active_cycle' => [
+            'label' => $activePeriod->format('F Y'),
+            'period' => $activePeriod->toDateString(),
+            'total_lots' => $totalEligibleLots,
+            'billed_lots' => count($billedLotIds),
+            'missing_lots_count' => $missingLotsCount,
+            'unrecorded_readings_count' => $unrecordedReadingsCount,
+            'prev_reading_date' => $latestBill->previous_reading_date ? \Carbon\Carbon::parse($latestBill->previous_reading_date)->format('Y-m-d') : null,
+            'curr_reading_date' => $latestBill->current_reading_date ? \Carbon\Carbon::parse($latestBill->current_reading_date)->format('Y-m-d') : null,
+            'due_date' => $latestBill->due_date ? \Carbon\Carbon::parse($latestBill->due_date)->format('Y-m-d') : null,
+        ],
+        'next_cycle' => [
+            'label' => $nextCycleLabel,
+            'period' => $nextBillingPeriod,
+            'suggested_prev_date' => $nextPrevDate,
+            'suggested_curr_date' => $nextCurrDate,
+            'suggested_due_date' => $nextDueDate,
+            'already_generated' => $nextCycleExists,
+        ],
+        'settings' => $settings,
     ]);
-
-    return response()->json(['success' => true]);
 });
-
-Route::get('/admin/api/billing/export-soa', [App\Http\Controllers\ExportController::class, 'exportSOA'])->name('admin.billing.export-soa');
 
 Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $request) {
     $type = $request->input('type'); // 'electricity' or 'water'
+    if (!in_array($type, ['electricity', 'water'])) {
+        return response()->json(['success' => false, 'message' => 'Invalid utility type.'], 422);
+    }
+
     $rate = $request->input('rate');
     $penalty = $request->input('penalty', 5);
     $prevDate = $request->input('prev_date');
     $currDate = $request->input('curr_date');
     $dueDate = $request->input('due_date');
+    $mode = $request->input('mode', 'new_cycle'); // 'new_cycle' or 'sync_missing'
 
     $waterMinM3 = $request->input('water_min_m3');
     $waterMinRate = $request->input('water_min_rate');
@@ -1910,24 +2195,6 @@ Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $r
         return response()->json(['success' => false, 'message' => 'One or more dates are invalid.'], 422);
     }
 
-    $minCurr = now($tz)->startOfMonth();
-    $lastBillForType = \App\Models\UtilityBill::where('type', $type)
-        ->whereNotNull('current_reading_date')
-        ->orderByDesc('current_reading_date')
-        ->first();
-    if ($lastBillForType && $lastBillForType->current_reading_date) {
-        $nextAllowed = \Carbon\Carbon::parse($lastBillForType->current_reading_date, $tz)->addMonth()->startOfMonth();
-        if ($nextAllowed->gt($minCurr)) {
-            $minCurr = $nextAllowed;
-        }
-    }
-
-    if ($curr->lt($minCurr)) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Current reading date cannot be in a past billing month. Earliest allowed: '.$minCurr->format('M j, Y').'.',
-        ], 422);
-    }
     if ($prev->gte($curr)) {
         return response()->json(['success' => false, 'message' => 'Previous reading date must be before the current reading date.'], 422);
     }
@@ -1935,93 +2202,271 @@ Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $r
         return response()->json(['success' => false, 'message' => 'Due date must be on or after the current reading date.'], 422);
     }
 
-    if ($rate !== null) {
-        $settingKey = $type === 'electricity' ? 'elec_rate' : 'water_rate';
-        \App\Models\Setting::updateOrCreate(['key' => $settingKey], ['value' => $rate]);
+    $latestBillForType = \App\Models\UtilityBill::where('type', $type)
+        ->orderByRaw('COALESCE(billing_period, created_at) DESC')
+        ->first();
+
+    $billingPeriod = $curr->copy()->startOfMonth()->toDateString();
+    $cycleLabel = \Carbon\Carbon::parse($billingPeriod, $tz)->format('F Y');
+
+    if ($latestBillForType) {
+        $latestPeriodRaw = $latestBillForType->billing_period ?: $latestBillForType->created_at;
+        $activePeriod = \Carbon\Carbon::parse($latestPeriodRaw, $tz)->startOfMonth();
+
+        if ($mode !== 'sync_missing' && $curr->lt($activePeriod)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Current reading date cannot be in a past billing month. Earliest allowed: ' . $activePeriod->format('M j, Y') . '.',
+            ], 422);
+        }
     }
-    if ($penalty !== null) {
-        \App\Models\Setting::updateOrCreate(['key' => $type . '_penalty'], ['value' => $penalty]);
+
+    $lock = \Illuminate\Support\Facades\Cache::lock("billing_gen_{$type}", 15);
+    if (!$lock->get()) {
+        return response()->json(['success' => false, 'message' => 'A cycle generation is already in progress. Please wait a moment.'], 429);
+    }
+
+    try {
+        if ($rate !== null && is_numeric($rate)) {
+            $settingKey = $type === 'electricity' ? 'elec_rate' : 'water_rate';
+            \App\Models\Setting::updateOrCreate(['key' => $settingKey], ['value' => (float)$rate]);
+        }
+        if ($penalty !== null && is_numeric($penalty)) {
+            \App\Models\Setting::updateOrCreate(['key' => $type . '_penalty'], ['value' => (float)$penalty]);
+        }
+        if ($type === 'water') {
+            if ($waterMinM3 !== null && is_numeric($waterMinM3)) {
+                \App\Models\Setting::updateOrCreate(['key' => 'water_min_m3'], ['value' => (float)$waterMinM3]);
+            }
+            if ($waterMinRate !== null && is_numeric($waterMinRate)) {
+                \App\Models\Setting::updateOrCreate(['key' => 'water_min_rate'], ['value' => (float)$waterMinRate]);
+            }
+        }
+
+        $lots = \App\Models\Lot::has('users')->with('users')->get();
+        $generatedCount = 0;
+        $alreadyExistingCount = 0;
+        $skippedCasureco = 0;
+
+        \Illuminate\Support\Facades\DB::transaction(function () use (
+            $lots, $type, $billingPeriod, $prevDate, $currDate, $dueDate, $penalty, $tz,
+            &$generatedCount, &$alreadyExistingCount, &$skippedCasureco
+        ) {
+            foreach ($lots as $lot) {
+                if ($type === 'electricity' && $lot->provider_managed) {
+                    $skippedCasureco++;
+                    continue;
+                }
+
+                $existingBill = \App\Models\UtilityBill::where('lot_id', $lot->id)
+                    ->where('type', $type)
+                    ->whereDate('billing_period', $billingPeriod)
+                    ->exists();
+
+                if ($existingBill) {
+                    $alreadyExistingCount++;
+                    continue;
+                }
+
+                $user = $lot->users->first();
+
+                $lastBill = \App\Models\UtilityBill::where('lot_id', $lot->id)
+                    ->where('type', $type)
+                    ->whereDate('billing_period', '<', $billingPeriod)
+                    ->orderByRaw('COALESCE(billing_period, created_at) DESC')
+                    ->first();
+
+                // Safe previous reading carryover (protect meter baseline)
+                $prevReading = 0;
+                if ($lastBill) {
+                    if ($lastBill->current_reading !== null && $lastBill->current_reading > 0) {
+                        $prevReading = $lastBill->current_reading;
+                    } elseif ($lastBill->previous_reading > 0) {
+                        $prevReading = $lastBill->previous_reading;
+                    }
+                }
+
+                // Overdue-aware carried balance
+                $carriedBalance = 0;
+                if ($lastBill && $lastBill->status !== 'paid') {
+                    $totalDueBeforePenalty = (float)$lastBill->amount + (float)$lastBill->previous_balance;
+                    $penaltyAmt = 0;
+                    $isOverdue = $lastBill->due_date && \Carbon\Carbon::parse($lastBill->due_date, $tz)->endOfDay()->isPast();
+                    if ($isOverdue || $lastBill->is_at_risk) {
+                        $penaltyRatePercent = (float)($penalty ?? (\App\Models\Setting::where('key', $type . '_penalty')->value('value') ?: 5));
+                        $penaltyAmt = $totalDueBeforePenalty * ($penaltyRatePercent / 100);
+                    }
+                    $totalPaid = (float)\App\Models\Payment::where('utility_bill_id', $lastBill->id)->sum('amount_paid');
+                    $carriedBalance = max(0, ($totalDueBeforePenalty + $penaltyAmt) - $totalPaid);
+                }
+
+                try {
+                    $bill = \App\Models\UtilityBill::create([
+                        'type' => $type,
+                        'resident_id' => $user?->resident ? $user->id : null,
+                        'billed_to_name' => $user?->name,
+                        'lot_id' => $lot->id,
+                        'previous_reading' => $prevReading,
+                        'previous_reading_date' => $prevDate,
+                        'current_reading_date' => $currDate,
+                        'current_reading' => 0,
+                        'usage_value' => 0,
+                        'amount' => 0,
+                        'previous_balance' => $carriedBalance,
+                        'due_date' => $dueDate,
+                        'status' => \App\Enums\BillStatus::Unpaid->value,
+                        'is_at_risk' => false,
+                        'billing_period' => $billingPeriod,
+                    ]);
+                    if ($currDate) {
+                        $bill->created_at = \Carbon\Carbon::parse($currDate, $tz)->startOfDay();
+                        $bill->save();
+                    }
+                    $generatedCount++;
+                } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+                    $alreadyExistingCount++;
+                }
+            }
+        });
+
+        if ($generatedCount === 0) {
+            if ($skippedCasureco > 0 && $alreadyExistingCount === 0) {
+                return response()->json(['success' => false, 'message' => 'No bills generated. All assigned lots are managed by CASURECO.']);
+            }
+            if ($alreadyExistingCount > 0) {
+                return response()->json([
+                    'success' => true,
+                    'already_exists' => true,
+                    'message' => "The billing cycle for {$cycleLabel} is already active with all eligible lots generated. No duplicates created.",
+                    'generated_count' => 0
+                ]);
+            }
+            return response()->json(['success' => false, 'message' => 'No eligible residents are currently assigned to lots for this utility.']);
+        }
+
+        $isSync = $alreadyExistingCount > 0;
+        $successMsg = $isSync
+            ? "Successfully synced {$generatedCount} newly assigned lot(s) for {$cycleLabel}."
+            : "Successfully generated {$generatedCount} bills for the new {$cycleLabel} cycle.";
+
+        return response()->json([
+            'success' => true,
+            'message' => $successMsg,
+            'generated_count' => $generatedCount,
+            'cycle' => \Carbon\Carbon::parse($billingPeriod)->format('Y-m')
+        ]);
+    } finally {
+        optional($lock)->release();
+    }
+});
+
+Route::post('/admin/api/billing/adjust-cycle', function (\Illuminate\Http\Request $request) {
+    $type = $request->input('type'); // 'electricity' or 'water'
+    $rate = $request->input('rate');
+    $penalty = $request->input('penalty');
+    $prevDate = $request->input('prev_date');
+    $currDate = $request->input('curr_date');
+    $dueDate = $request->input('due_date');
+    $cycle = $request->input('cycle');
+
+    $waterMinM3 = $request->input('water_min_m3');
+    $waterMinRate = $request->input('water_min_rate');
+
+    if (!$type || !in_array($type, ['electricity', 'water'])) {
+        return response()->json(['success' => false, 'message' => 'Invalid utility type.'], 422);
+    }
+
+    if (!$prevDate || !$currDate || !$dueDate) {
+        return response()->json(['success' => false, 'message' => 'Please provide previous reading, current reading, and due dates.'], 422);
+    }
+
+    $tz = config('app.timezone', 'Asia/Manila');
+    try {
+        $prev = \Carbon\Carbon::parse($prevDate, $tz)->startOfDay();
+        $curr = \Carbon\Carbon::parse($currDate, $tz)->startOfDay();
+        $due = \Carbon\Carbon::parse($dueDate, $tz)->startOfDay();
+    } catch (\Exception $e) {
+        return response()->json(['success' => false, 'message' => 'One or more dates are invalid.'], 422);
+    }
+
+    if ($prev->gte($curr)) {
+        return response()->json(['success' => false, 'message' => 'Previous reading date must be before the current reading date.'], 422);
+    }
+    if ($due->lt($curr)) {
+        return response()->json(['success' => false, 'message' => 'Due date must be on or after the current reading date.'], 422);
+    }
+
+    // 1. Update Global Settings
+    if ($rate !== null && is_numeric($rate)) {
+        $settingKey = $type === 'electricity' ? 'elec_rate' : 'water_rate';
+        \App\Models\Setting::updateOrCreate(['key' => $settingKey], ['value' => (float)$rate]);
+    }
+    if ($penalty !== null && is_numeric($penalty)) {
+        \App\Models\Setting::updateOrCreate(['key' => $type . '_penalty'], ['value' => (float)$penalty]);
     }
     if ($type === 'water') {
-        if ($waterMinM3 !== null) {
-            \App\Models\Setting::updateOrCreate(['key' => 'water_min_m3'], ['value' => $waterMinM3]);
+        if ($waterMinM3 !== null && is_numeric($waterMinM3)) {
+            \App\Models\Setting::updateOrCreate(['key' => 'water_min_m3'], ['value' => (float)$waterMinM3]);
         }
-        if ($waterMinRate !== null) {
-            \App\Models\Setting::updateOrCreate(['key' => 'water_min_rate'], ['value' => $waterMinRate]);
+        if ($waterMinRate !== null && is_numeric($waterMinRate)) {
+            \App\Models\Setting::updateOrCreate(['key' => 'water_min_rate'], ['value' => (float)$waterMinRate]);
         }
     }
 
-    $lots = \App\Models\Lot::has('users')->with('users')->get();
-    $generatedCount = 0;
-    $skippedCasureco = 0;
-    foreach ($lots as $lot) {
-        if ($type === 'electricity' && $lot->provider_managed) {
-            $skippedCasureco++;
-            continue; // Skip CASURECO disconnected lots for electricity
-        }
-
-        $user = $lot->users->first();
-
-        $lastBill = \App\Models\UtilityBill::where('lot_id', $lot->id)
-            ->where('type', $type)
-            ->orderBy('created_at', 'desc')
-            ->first();
-
-        $prevReading = $lastBill && $lastBill->current_reading !== null ? $lastBill->current_reading : 0;
-
-        $carriedBalance = 0;
-        if ($lastBill && $lastBill->status !== 'paid') {
-            $totalDueBeforePenalty = $lastBill->amount + $lastBill->previous_balance;
-            $penalty = $totalDueBeforePenalty * 0.05;
-            $totalDueAfterPenalty = $totalDueBeforePenalty + $penalty;
-            $totalPaid = \App\Models\Payment::where('utility_bill_id', $lastBill->id)->sum('amount_paid');
-            $carriedBalance = max(0, $totalDueAfterPenalty - $totalPaid);
-        }
-
-        $billingPeriod = ($currDate ? \Carbon\Carbon::parse($currDate) : now())->startOfMonth()->toDateString();
-        $existingBill = \App\Models\UtilityBill::where('lot_id', $lot->id)
-            ->where('type', $type)
-            ->whereDate('billing_period', $billingPeriod)
-            ->exists();
-
-        if ($existingBill) {
-            continue; // Skip to prevent duplicate cycle for this exact month
-        }
-
+    // 2. Locate bills for the target active cycle
+    $billsQuery = \App\Models\UtilityBill::where('type', $type);
+    if ($cycle) {
         try {
-            $bill = \App\Models\UtilityBill::create([
-                'type' => $type,
-                'resident_id' => $user?->resident ? $user->id : null,
-                'billed_to_name' => $user?->name,
-                'lot_id' => $lot->id,
-                'previous_reading' => $prevReading,
-                'previous_reading_date' => $prevDate,
-                'current_reading_date' => $currDate,
-                'current_reading' => 0,
-                'usage_value' => 0,
-                'amount' => 0,
-                'previous_balance' => $carriedBalance,
-                'due_date' => $dueDate,
-                'status' => \App\Enums\BillStatus::Unpaid->value,
-                'is_at_risk' => false,
-                'billing_period' => $billingPeriod,
-            ]);
-        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
-            continue; // Generated concurrently for this lot, type and month
+            $dt = \Carbon\Carbon::createFromFormat('Y-m', $cycle);
+            $billsQuery->where(function ($q) use ($dt) {
+                $q->whereYear('created_at', $dt->year)->whereMonth('created_at', $dt->month)
+                  ->orWhere(function ($sub) use ($dt) {
+                      $sub->whereNotNull('billing_period')
+                          ->whereYear('billing_period', $dt->year)
+                          ->whereMonth('billing_period', $dt->month);
+                  });
+            });
+        } catch (\Exception $e) {
+            // fallback
         }
-        $generatedCount++;
-
-        if ($currDate) {
-            $bill->created_at = \Carbon\Carbon::parse($currDate)->startOfDay();
-            $bill->save();
+    } else {
+        $latest = \App\Models\UtilityBill::where('type', $type)->orderByDesc('created_at')->first();
+        if ($latest) {
+            $billsQuery->whereYear('created_at', $latest->created_at->year)
+                       ->whereMonth('created_at', $latest->created_at->month);
         }
     }
 
-    if ($generatedCount === 0 && $skippedCasureco > 0) {
-        return response()->json(['success' => false, 'message' => 'No bills generated. All assigned lots are managed by CASURECO.']);
+    $bills = $billsQuery->get();
+    $updatedCount = 0;
+
+    $effRate = (float)($rate ?? ($type === 'electricity' ? \App\Models\Setting::find('elec_rate')?->value ?? 10 : \App\Models\Setting::find('water_rate')?->value ?? 30));
+    $effMinM3 = (float)($waterMinM3 ?? \App\Models\Setting::find('water_min_m3')?->value ?? 10);
+    $effMinRate = (float)($waterMinRate ?? \App\Models\Setting::find('water_min_rate')?->value ?? 250);
+
+    foreach ($bills as $bill) {
+        $bill->previous_reading_date = $prevDate;
+        $bill->current_reading_date = $currDate;
+        $bill->due_date = $dueDate;
+
+        // Recalculate amount if unpaid
+        if ($bill->status !== 'paid') {
+            if ($type === 'electricity') {
+                $bill->amount = $bill->usage_value * $effRate;
+            } else {
+                $usage = $bill->usage_value;
+                $bill->amount = $usage <= $effMinM3 ? $effMinRate : $effMinRate + (($usage - $effMinM3) * $effRate);
+            }
+        }
+
+        $bill->save();
+        $updatedCount++;
     }
 
-    return response()->json(['success' => true]);
+    return response()->json([
+        'success' => true,
+        'message' => ucfirst($type) . " cycle parameters and {$updatedCount} bills updated successfully."
+    ]);
 });
 
 Route::post('/admin/api/billing/disconnect', function (\Illuminate\Http\Request $request) {
@@ -2087,7 +2532,7 @@ Route::post('/admin/api/billing/pay', function (\Illuminate\Http\Request $reques
 
         return response()->json(['success' => true]);
     }
-    return response()->json(['success' => false], 404);
+    return response()->json(['success' => false, 'message' => 'Bill not found.'], 404);
 });
 
 /* =========================================================================

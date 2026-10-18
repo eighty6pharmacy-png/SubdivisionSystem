@@ -14,7 +14,7 @@
     <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 24px; align-items: start;">
         
         <!-- Visitor Request Form -->
-        <div class="analytic-card" style="padding: 24px; position: sticky; top: 24px;">
+        <div class="analytic-card" style="padding: 24px; position: sticky; top: 24px; border-radius: 20px; background: #fff; border: 1px solid var(--bill-border);">
             <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 20px;">Request Visitor Access</h3>
             <form id="generatePinForm" onsubmit="generateNewPin(event)" style="display: flex; flex-direction: column; gap: 16px;">
                 <div>
@@ -22,29 +22,41 @@
                     <input type="text" id="visName" class="filter-select" required style="width: 100%; margin-top: 4px;" placeholder="e.g. Grab Delivery, John Doe">
                 </div>
                 <div>
+                    <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Visitor Mobile Number (Optional)</label>
+                    <input type="tel" id="visContact" class="filter-select" style="width: 100%; margin-top: 4px;" placeholder="e.g. 09123456789">
+                    <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">* If provided, the PIN and direct map link will be texted to this number upon approval.</div>
+                </div>
+                <div>
                     <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Purpose of Visit</label>
                     <input type="text" id="visPurpose" class="filter-select" required style="width: 100%; margin-top: 4px;" placeholder="e.g. Food Delivery, Family Visit">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Vehicle Plate / Details (Optional)</label>
+                    <input type="text" id="visPlate" class="filter-select" style="width: 100%; margin-top: 4px;" placeholder="e.g. ABC 1234 or Motorcycle">
                 </div>
                 <div>
                     <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Expected Visit Date</label>
                     <input type="date" id="visDate" class="filter-select" required style="width: 100%; margin-top: 4px;" value="{{ date('Y-m-d') }}">
                     <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">* Requires Admin Approval. Code will be generated upon approval.</div>
                 </div>
-                <button type="submit" id="submitRequestBtn" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-weight: 700; margin-top: 8px;">
-                    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M12 4v16m8-8H4"/></svg>
+                <button type="submit" id="submitRequestBtn" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-weight: 700; margin-top: 8px; border-radius: 12px;">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M12 4v16m8-8H4"/></svg>
                     <span>Submit Access Request</span>
                 </button>
             </form>
 
             <div id="pinResultArea" style="display: none; margin-top: 24px; padding: 20px; background: #fffbeb; border-radius: 16px; border: 1px dashed #f59e0b; text-align: center; position: relative;">
-                <p style="font-size: 12px; font-weight: 700; color: #b45309; text-transform: uppercase; margin: 0 0 8px 0;">Request Status</p>
-                <div style="font-size: 14px; font-weight: 700; color: #92400e;">⏳ Awaiting Admin Approval</div>
-                <p style="font-size: 12px; color: #78350f; margin: 8px 0 0 0;">Once Admin approves your request, your 6-digit verification PIN will be generated and dispatched here & to the security guard.</p>
+                <p style="font-size: 12px; font-weight: 700; color: #b45309; text-transform: uppercase; margin: 0 0 8px 0; letter-spacing: 0.05em;">Request Status</p>
+                <div style="font-size: 14px; font-weight: 700; color: #92400e; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    Awaiting Admin Approval
+                </div>
+                <p style="font-size: 12px; color: #78350f; margin: 8px 0 0 0; line-height: 1.5;">Once Admin approves your request, your 6-digit verification PIN will be generated and dispatched here &amp; to the security guard.</p>
             </div>
         </div>
 
         <!-- History Ledger -->
-        <div class="analytic-card" style="padding: 0; overflow: hidden;">
+        <div class="analytic-card" style="padding: 0; overflow: hidden; border-radius: 20px; background: #fff; border: 1px solid var(--bill-border);">
             <div style="padding: 24px 24px 16px 24px; border-bottom: 1px solid var(--bill-border);">
                 <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0;">My Visitor Log</h3>
             </div>
@@ -81,54 +93,96 @@
                 if (!tbody) return;
                 tbody.innerHTML = '';
                 
-                // Filter to only show logged in user's visitors if needed, but since api returns all, let's filter by host matching logged in user or we just adjust the API to only return auth()->user()->visitors if resident.
-                // Wait, the API returns all. The Resident should only see their own.
-                // In VisitorController index, I didn't filter by resident. Let's fix that in controller or filter here.
-                // I will filter here for now, or just show all for demo if hostName matches auth user.
+                if (!visitors || visitors.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="4" style="padding: 48px 24px; text-align: center; color: #94a3b8;">
+                                <div style="width: 48px; height: 48px; border-radius: 12px; background: #f1f5f9; color: #94a3b8; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
+                                    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                                </div>
+                                <div style="font-weight: 600; color: #1e293b;">No visitor requests found</div>
+                                <div style="font-size: 13px; margin-top: 4px;">Submit a request on the left to pre-register your visitors.</div>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
                 
                 visitors.forEach(pin => {
                     const tr = document.createElement('tr');
                     let statusBadge = '';
                     let codeDisplay = '';
 
-            if(pin.status === 'Pending' || pin.status === 'Awaiting Admin Approval') {
-                tr.style.background = '#fffbeb';
-                codeDisplay = `<span style="font-family: monospace; font-size: 13px; font-weight: 700; color: #b45309;">Pending Approval</span>`;
-                statusBadge = `<span class="badge" style="background:#fef3c7; color:#b45309; padding: 4px 12px; border-radius: 20px; font-weight:700;">Awaiting Admin Approval</span>`;
-            } else if(pin.status === 'Approved') {
-                codeDisplay = `
-                    <div style="display: flex; align-items: center; gap: 8px; font-family: monospace; font-size: 16px; font-weight: 800; color: #059669;">
-                        ${pin.pin || 'Approved'}
-                        ${pin.pin ? `<button onclick="copyToClipboard('${pin.pin}')" style="background: none; border: none; cursor: pointer; color: #94a3b8; padding: 2px;" title="Copy PIN"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg></button>` : ''}
-                    </div>`;
-                statusBadge = `<span class="badge badge-success" style="padding: 4px 12px; border-radius: 20px;">Approved & Sent to Guard</span>`;
-            } else if(pin.status === 'Entered') {
-                codeDisplay = `<span style="font-family: monospace; font-size: 14px; font-weight: 700; color: #166534;">${pin.pin || 'USED'}</span>`;
-                statusBadge = `<span class="badge badge-success" style="padding: 4px 12px; border-radius: 20px; background:#dcfce7; color:#166534;">Entered Gate</span>`;
+                    if(pin.status === 'Pending' || pin.status === 'Awaiting Admin Approval') {
+                        tr.style.background = '#fffbeb';
+                        codeDisplay = `<span style="font-family: monospace; font-size: 13px; font-weight: 700; color: #b45309;">Pending Approval</span>`;
+                        statusBadge = `<span class="badge" style="background:#fef3c7; color:#b45309; padding: 4px 12px; border-radius: 20px; font-weight:700;">Awaiting Approval</span>`;
+                    } else if(pin.status === 'Approved') {
+                        codeDisplay = `
+                            <div style="display: flex; align-items: center; gap: 8px; font-family: monospace; font-size: 16px; font-weight: 800; color: #059669;">
+                                ${pin.pin || 'Approved'}
+                                ${pin.pin ? `<button onclick="copyToClipboard('${pin.pin}')" style="background: none; border: none; cursor: pointer; color: #94a3b8; padding: 2px;" title="Copy PIN"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg></button>` : ''}
+                            </div>`;
+                        statusBadge = `<span class="badge badge-success" style="padding: 4px 12px; border-radius: 20px;">Approved &amp; Sent to Guard</span>`;
+                    } else if(pin.status === 'Entered') {
+                        codeDisplay = `<span style="font-family: monospace; font-size: 14px; font-weight: 700; color: #166534;">${pin.pin || 'USED'}</span>`;
+                        statusBadge = `<span class="badge badge-success" style="padding: 4px 12px; border-radius: 20px; background:#dcfce7; color:#166534;">Entered Gate</span>`;
+                    } else {
+                        codeDisplay = `<span style="font-family: monospace; font-size: 13px; color: #94a3b8;">${pin.pin || 'EXPIRED'}</span>`;
+                        statusBadge = `<span class="badge" style="background:#f1f5f9; color:#64748b; border: 1px solid #e2e8f0; padding: 4px 12px; border-radius: 20px;">Expired</span>`;
+                    }
+
+                    const plateInfo = pin.plate_number ? `<div style="font-size: 11px; color: #64748b; font-family: monospace; margin-top: 2px;">Plate: ${pin.plate_number}</div>` : '';
+                    const contactInfo = pin.contact_number ? `<div style="font-size: 11px; color: #0284c7; font-weight: 600; margin-top: 2px;">📞 ${pin.contact_number}</div>` : '';
+                    const passFullUrl = pin.access_token ? `${window.location.origin}/v/${pin.access_token}` : '';
+                    const directPassLink = (pin.status === 'Approved' || pin.status === 'Entered') && pin.access_token ? `
+                        <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px;">
+                            <button type="button" onclick="copyPassLink('${passFullUrl}')" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 6px; padding: 3px 8px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; width: fit-content;" title="Copy direct link to send to visitor">
+                                📋 Copy Link
+                            </button>
+                            <a href="/v/${pin.access_token}" target="_blank" style="font-size: 11px; color: #0284c7; text-decoration: none; font-weight: 700;">Open Pass ↗</a>
+                        </div>
+                    ` : '';
+
+                    tr.innerHTML = `
+                        <td>
+                            ${codeDisplay}
+                            ${directPassLink}
+                        </td>
+                        <td>
+                            <div style="font-weight: 700; color: #0f172a;">${pin.visitor || pin.visitor_name}</div>
+                            <div style="font-size: 12px; color: #64748b;">${pin.purpose}</div>
+                            ${contactInfo}
+                            ${plateInfo}
+                        </td>
+                        <td style="font-size: 13px; color: #64748b; font-weight: 600;">${pin.validity}</td>
+                        <td>${statusBadge}</td>
+                    `;
+
+                    tbody.appendChild(tr);
+                });
+            }).catch(err => console.error(err));
+    }
+
+    function copyPassLink(url) {
+        if (!url) return;
+        navigator.clipboard.writeText(url).then(() => {
+            if (window.pushSystemNotification) {
+                window.pushSystemNotification("Link Copied", "Pass link copied! Forward it to your visitor on Messenger, WhatsApp, or SMS.", "Just now", false);
             } else {
-                codeDisplay = `<span style="font-family: monospace; font-size: 13px; color: #94a3b8;">${pin.pin || 'EXPIRED'}</span>`;
-                statusBadge = `<span class="badge" style="background:#f1f5f9; color:#64748b; border: 1px solid #e2e8f0; padding: 4px 12px; border-radius: 20px;">Expired</span>`;
+                Swal.fire({ icon: 'success', title: 'Pass Link Copied!', text: 'You can now paste and send this link to your visitor via Messenger, WhatsApp, or SMS.', timer: 2000, showConfirmButton: false });
             }
-
-            tr.innerHTML = `
-                <td>${codeDisplay}</td>
-                <td>
-                    <div style="font-weight: 700; color: #0f172a;">${pin.visitor}</div>
-                    <div style="font-size: 12px; color: #64748b;">${pin.purpose}</div>
-                </td>
-                <td style="font-size: 13px; color: #64748b; font-weight: 600;">${pin.validity}</td>
-                <td>${statusBadge}</td>
-            `;
-
-            tbody.appendChild(tr);
+        }).catch(() => {
+            prompt('Copy this visitor pass link:', url);
         });
-        }).catch(err => console.error(err));
     }
 
     function copyToClipboard(text) {
         navigator.clipboard.writeText(text).then(() => {
             if (window.pushSystemNotification) {
                 window.pushSystemNotification("PIN Copied", "PIN code " + text + " copied to clipboard.", "Just now", false);
+            } else {
+                Swal.fire({ icon: 'success', text: `PIN code ${text} copied to clipboard!`, timer: 1500, showConfirmButton: false });
             }
         });
     }
@@ -143,24 +197,29 @@
             submitBtn.disabled = true;
             submitBtn.style.opacity = '0.7';
             submitBtn.style.cursor = 'not-allowed';
-            submitBtn.innerHTML = '⏳ Submitting...';
+            submitBtn.innerHTML = 'Submitting...';
         }
         
-        const name = document.getElementById('visName').value;
-        const purpose = document.getElementById('visPurpose').value;
+        const name = document.getElementById('visName').value.trim();
+        const contactNumber = document.getElementById('visContact')?.value?.trim() || null;
+        const purpose = document.getElementById('visPurpose').value.trim();
+        const plate = document.getElementById('visPlate')?.value?.trim() || null;
         const visitDateStr = document.getElementById('visDate').value;
         
-        const visitDate = new Date(visitDateStr);
-        const formattedDate = visitDate.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
-        
-        const reqId = 'VIS-' + Math.floor(3000 + Math.random() * 1000);
+        let formattedDate = visitDateStr;
+        if (visitDateStr && visitDateStr.includes('-')) {
+            const parts = visitDateStr.split('-');
+            const dateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            formattedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+        }
 
         const payload = {
             visitor_name: name,
+            contact_number: contactNumber,
             purpose: purpose,
             validity: formattedDate,
             type: 'Pre-registered',
-            plate_number: null
+            plate_number: plate
         };
 
         fetch('/api/visitors', {
@@ -183,15 +242,21 @@
                 renderResidentVisitors();
 
                 document.getElementById('visName').value = '';
+                if (document.getElementById('visContact')) document.getElementById('visContact').value = '';
                 document.getElementById('visPurpose').value = '';
+                if (document.getElementById('visPlate')) document.getElementById('visPlate').value = '';
                 
                 if (window.pushSystemNotification) {
                     window.pushSystemNotification("Request Submitted", `Visitor request for ${name} sent to Admin for approval.`, "Just now", true);
                 }
 
-                Swal.fire(`✓ VISITOR ACCESS REQUEST SUBMITTED!\n\nYour request for ${name} has been routed to Subdivision Admin for approval.\nOnce approved, your 6-digit verification code will be generated and forwarded to the security guard.`);
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Visitor Request Submitted',
+                    text: `Your request for ${name} has been routed to Subdivision Admin for approval. Once approved, your 6-digit verification code will be generated and dispatched to the gate guard.`
+                });
             } else {
-                Swal.fire('Failed to submit request.');
+                Swal.fire({ icon: 'error', text: data.message || 'Failed to submit request.' });
             }
         }).catch(err => {
             if (submitBtn) {
@@ -201,11 +266,10 @@
                 submitBtn.innerHTML = originalBtnHtml;
             }
             console.error(err);
-            Swal.fire('An error occurred while submitting.');
+            Swal.fire({ icon: 'error', text: 'An error occurred while submitting.' });
         });
     }
 </script>
-
 
 <link rel="stylesheet" href="{{ asset('css/views/resident-visitors.css') }}">
 @endsection

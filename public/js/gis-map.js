@@ -409,6 +409,18 @@ async function initGISMap(mapElementId, options = {}) {
         }
     }
 
+    map.clearRouting = function() {
+        if (houseLayer) houseLayer.resetStyle();
+        if (currentRouteLine) { map.removeLayer(currentRouteLine); currentRouteLine = null; }
+        if (currentAltRouteLine) { map.removeLayer(currentAltRouteLine); currentAltRouteLine = null; }
+        if (currentMarkers && currentMarkers.length) {
+            currentMarkers.forEach(m => map.removeLayer(m));
+            currentMarkers = [];
+        }
+        routeStartHouse = null;
+        routeEndHouse = null;
+    };
+
     return map;
 }
 

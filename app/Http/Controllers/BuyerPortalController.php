@@ -98,6 +98,15 @@ class BuyerPortalController extends Controller
         $dp = Downpayment::find($request->input('dp_id'));
         if (!$dp) return response()->json(['success' => false, 'message' => 'Downpayment not found.'], 404);
 
+        $buyer = Auth::user()->buyerMasterList;
+        if (!$buyer || !$buyer->reservations()->where('id', $dp->reservation_id)->exists()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
+        }
+
+        if ($dp->balance <= 0 || $dp->status === 'Fully Paid') {
+            return response()->json(['success' => false, 'message' => 'Downpayment is already fully paid.'], 422);
+        }
+
         $principal = min((float) $dp->monthly_amortization, (float) $dp->balance);
         $penalty = $dp->latePenaltyAmount($principal);
 
@@ -176,6 +185,7 @@ class BuyerPortalController extends Controller
                     'line_items' => $lineItems,
                     'payment_method_types' => ['gcash', 'paymaya', 'card', 'grab_pay', 'qrph'],
                     'success_url' => request()->getSchemeAndHttpHost() . '/buyer/payments?payment=success',
+                    'cancel_url' => request()->getSchemeAndHttpHost() . '/buyer/payments?cancelled=true',
                     'description' => $description,
                     'reference_number' => $reference
                 ]
@@ -215,6 +225,7 @@ class BuyerPortalController extends Controller
         }
 
         $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'portrait');
         $pdf->loadView('buyer.receipt_pdf', compact('hist', 'buyer', 'dp'));
         return $pdf->stream('Receipt_DP_' . $hist->id . '.pdf');
     }

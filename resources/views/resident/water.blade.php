@@ -11,9 +11,16 @@
             <h1 style="font-size: 28px; font-weight: 800; color: #0f172a; margin: 0;">Water Billing</h1>
             <p style="color: #64748b; margin-top: 8px;">Monitor your water consumption and settle outstanding balances.</p>
         </div>
-        <div>
-            <a href="/resident/bills/history/water" class="btn btn-outline-primary" style="border-radius: 12px; font-weight: 600; padding: 10px 20px;">
-                <i class="fas fa-history me-2"></i>View History
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            @if(!empty($waterBill['db_id']))
+                <a href="/resident/bills/history/water/pdf/{{ $waterBill['db_id'] }}" target="_blank" class="btn btn-outline" style="border-radius: 12px; font-weight: 600; padding: 10px 18px; display: inline-flex; align-items: center; gap: 8px;">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    Print Statement
+                </a>
+            @endif
+            <a href="/resident/bills/history/water" class="btn btn-outline" style="border-radius: 12px; font-weight: 600; padding: 10px 20px; display: inline-flex; align-items: center; gap: 8px;">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                View History
             </a>
         </div>
     </div>
@@ -31,7 +38,10 @@
         </div>
         <div style="display: flex; flex-direction: column; gap: 12px; align-items: flex-end;">
             @if($waterBill['status'] === 'unpaid' || $waterBill['status'] === 'overdue')
-                <button onclick="payBill('{{ $waterBill['db_id'] }}')" id="payBtn" class="btn btn-primary" style="padding: 14px 28px; font-weight: 700; background: #0057B8; cursor: pointer;">📱 Pay via GCash</button>
+                <button onclick="payBill('{{ $waterBill['db_id'] }}')" id="payBtn" class="btn btn-primary" style="padding: 14px 24px; font-weight: 700; background: #0057B8; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+                    Pay Online (GCash, Maya, Card)
+                </button>
             @elseif($waterBill['status'] === 'paid')
                 <div style="background: #f0fdf4; padding: 12px 24px; border-radius: 12px; border: 1px solid #bbf7d0; text-align: center;">
                     <div style="font-size: 11px; color: #065f46; font-weight: 700;">BILL SETTLED</div>
@@ -52,74 +62,79 @@
         
         @if(empty($waterBill['db_id']))
             <div style="text-align: center; padding: 40px; background: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1;">
-                <div style="font-size: 32px; margin-bottom: 12px;">🚰</div>
-                <h3 style="font-size: 18px; color: #0f172a; margin-bottom: 8px;">No Billing History</h3>
-                <p style="color: #64748b; font-size: 14px;">Your account has no water bills generated yet.</p>
+                <div style="width: 48px; height: 48px; border-radius: 12px; background: #e0f2fe; color: #0284c7; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
+                    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>
+                </div>
+                <h3 style="font-size: 18px; color: #0f172a; margin-bottom: 8px;">No Current Statement</h3>
+                <p style="color: #64748b; font-size: 14px;">No outstanding water bill is due for this billing cycle.</p>
             </div>
         @else
-        
-        @php
-            $minM3 = $waterBill['min_m3'] ?? 10;
-            $minRate = $waterBill['min_rate'] ?? 250;
-            $excessRate = $waterBill['excess_rate'] ?? 25;
-            $usageM3 = (float)($waterBill['usage_cbm'] ?? 0);
+            @php
+                $minM3 = $waterBill['min_m3'] ?? 10;
+                $minRate = $waterBill['min_rate'] ?? 250;
+                $excessRate = $waterBill['excess_rate'] ?? 25;
+                $usageM3 = (float)($waterBill['usage_cbm'] ?? 0);
+                
+                $minCharge = $minRate;
+                $excessCharge = $usageM3 > $minM3 ? ($usageM3 - $minM3) * $excessRate : 0;
+                
+                $baseTotal = $waterBill['base_amount'] + ($waterBill['previous_balance'] ?? 0);
+                $prevBal = (float)($waterBill['previous_balance'] ?? 0);
+                $arrearsPenalty = $baseTotal * 0.05;
+            @endphp
             
-            $minCharge = $minRate;
-            $excessCharge = $usageM3 > $minM3 ? ($usageM3 - $minM3) * $excessRate : 0;
-            
-            $baseTotal = $waterBill['base_amount'] + ($waterBill['previous_balance'] ?? 0);
-            $prevBal = (float)($waterBill['previous_balance'] ?? 0);
-            $arrearsPenalty = $baseTotal * 0.05;
-        @endphp
-        
-        <div style="display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; padding-bottom: 8px;">
-            <div style="flex: 1; min-width: 105px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Prev Reading</div>
-                <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $waterBill['prev_reading'] }}</div>
-                <div style="font-size: 9px; color: #94a3b8; margin-top: 2px;">{{ $waterBill['prev_reading_date'] }}</div>
+            <div style="display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; padding-bottom: 8px;">
+                <div style="flex: 1; min-width: 105px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Prev Reading</div>
+                    <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $waterBill['prev_reading'] }}</div>
+                    <div style="font-size: 9px; color: #94a3b8; margin-top: 2px;">{{ $waterBill['prev_reading_date'] }}</div>
+                </div>
+                <div style="flex: 1; min-width: 105px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Curr Reading</div>
+                    <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $waterBill['curr_reading'] }}</div>
+                    <div style="font-size: 9px; color: #94a3b8; margin-top: 2px;">{{ $waterBill['curr_reading_date'] }}</div>
+                </div>
+                <div style="flex: 1; min-width: 105px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Consum.</div>
+                    <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $waterBill['usage'] }}</div>
+                </div>
+                <div style="flex: 1; min-width: 110px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Min (First {{ $minM3 }}m³)</div>
+                    <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($minCharge, 2) }}</div>
+                </div>
+                <div style="flex: 1; min-width: 105px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Excess Cons.</div>
+                    <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($excessCharge, 2) }}</div>
+                </div>
+                <div style="flex: 1; min-width: 120px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Amt Before Due</div>
+                    <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($baseTotal, 2) }}</div>
+                </div>
+                <div style="flex: 1; min-width: 120px; background: #fef2f2; padding: 10px 8px; border-radius: 8px; border: 1px solid #fecaca;">
+                    <div style="font-size: 9px; color: #991b1b; font-weight: 700; text-transform: uppercase;">Amt After Due</div>
+                    @php $afterAmt = $baseTotal + $arrearsPenalty; @endphp
+                    <div style="font-size: 15px; font-weight: 800; color: #ef4444; margin-top: 4px;">₱{{ number_format($afterAmt, 2) }}</div>
+                </div>
+                <div style="flex: 1; min-width: 105px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Prev Balance</div>
+                    <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($prevBal, 2) }}</div>
+                </div>
+                <div style="flex: 1; min-width: 105px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Penalty (5%)</div>
+                    <div style="font-size: 15px; font-weight: 800; color: #f59e0b; margin-top: 4px;">₱{{ number_format($arrearsPenalty, 2) }}</div>
+                </div>
             </div>
-            <div style="flex: 1; min-width: 105px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Curr Reading</div>
-                <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $waterBill['curr_reading'] }}</div>
-                <div style="font-size: 9px; color: #94a3b8; margin-top: 2px;">{{ $waterBill['curr_reading_date'] }}</div>
-            </div>
-            <div style="flex: 1; min-width: 105px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Consum.</div>
-                <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $waterBill['usage'] }}</div>
-            </div>
-            <div style="flex: 1; min-width: 110px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Min (First {{ $minM3 }}m³)</div>
-                <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($minCharge, 2) }}</div>
-            </div>
-            <div style="flex: 1; min-width: 105px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Excess Cons.</div>
-                <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($excessCharge, 2) }}</div>
-            </div>
-            <div style="flex: 1; min-width: 120px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Amt Before Due</div>
-                <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($baseTotal, 2) }}</div>
-            </div>
-            <div style="flex: 1; min-width: 120px; background: #fef2f2; padding: 10px 8px; border-radius: 8px; border: 1px solid #fecaca;">
-                <div style="font-size: 9px; color: #991b1b; font-weight: 700; text-transform: uppercase;">Amt After Due</div>
-                @php $afterAmt = $baseTotal + $arrearsPenalty; @endphp
-                <div style="font-size: 15px; font-weight: 800; color: #ef4444; margin-top: 4px;">₱{{ number_format($afterAmt, 2) }}</div>
-            </div>
-            <div style="flex: 1; min-width: 105px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Prev Balance</div>
-                <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($prevBal, 2) }}</div>
-            </div>
-            <div style="flex: 1; min-width: 105px; background: #f8fafc; padding: 10px 8px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                <div style="font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase;">Penalty (5%)</div>
-                <div style="font-size: 15px; font-weight: 800; color: #f59e0b; margin-top: 4px;">₱{{ number_format($arrearsPenalty, 2) }}</div>
-            </div>
-        </div>
+        @endif
     </div>
 
     <!-- Consumption Chart -->
     <div class="analytic-card" style="padding: 24px; margin-bottom: 24px; border-radius: 24px; border: 1px solid var(--bill-border); background: #ffffff;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
             <div>
-                <h3 style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">💧 Water Consumption Trend</h3>
+                <h3 style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+                    <svg width="20" height="20" fill="none" stroke="#0284c7" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>
+                    Water Consumption Trend
+                </h3>
                 <p style="font-size: 13px; color: #64748b;">Track your monthly usage in m³.</p>
             </div>
             <select id="waterTimeRange" onchange="updateWaterChartRange(this.value)" style="padding: 6px 12px; font-size: 12px; border-radius: 12px; border: 1px solid #cbd5e1; background: #fff; color: #475569; font-weight: 600; cursor: pointer;">
@@ -142,7 +157,7 @@
     </div>
 
     <!-- Payment History -->
-    <div class="analytic-card" style="padding: 0; overflow: hidden;">
+    <div class="analytic-card" style="padding: 0; overflow: hidden; margin-bottom: 24px;">
         <div style="padding: 20px 24px; border-bottom: 1px solid var(--bill-border);">
             <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0;">Payment Ledger</h3>
         </div>
@@ -150,7 +165,7 @@
             <table class="bill-table">
                 <thead><tr><th>Reference</th><th>Method</th><th>Date & Time</th><th>Period</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
                 <tbody>
-                    @foreach($waterBill['payment_history'] as $h)
+                    @forelse($waterBill['payment_history'] ?? [] as $h)
                     <tr>
                         <td style="font-family: monospace; font-size: 11px;">{{ $h['trn'] }}</td>
                         <td style="font-size: 13px; color: #475569;">{{ $h['method'] ?? 'N/A' }}</td>
@@ -160,25 +175,60 @@
                         <td><span class="badge {{ $h['status'] === 'Paid' ? 'badge-success' : 'badge-danger' }}">{{ $h['status'] }}</span></td>
                         <td>
                             @if($h['status'] === 'Paid')
-                            <button onclick="downloadHistoryItem('{{ $h['trn'] }}', 'Water', '{{ $h['month'] }}', '{{ $h['amount'] }}', '{{ $h['date'] }}')" style="background: none; border: none; cursor: pointer; color: #3b82f6;" title="Download Receipt">
+                            <a href="/resident/bills/history/water" style="background: none; border: none; cursor: pointer; color: #3b82f6; display: inline-flex; align-items: center;" title="View Statement">
                                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                            </button>
+                            </a>
                             @endif
                         </td>
                     </tr>
-                    @endforeach
+                    @empty
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 32px; color: #94a3b8;">No payment records found.</td>
+                    </tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>
     </div>
-    @endif
 </div>
 
 <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('payment') === 'success') {
+            Swal.fire({
+                icon: 'success',
+                title: 'Payment Successful',
+                text: 'Your water bill payment has been confirmed and recorded.',
+                confirmButtonColor: '#0057B8'
+            }).then(() => {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            });
+        } else if (urlParams.get('payment') === 'cancelled') {
+            Swal.fire({
+                icon: 'info',
+                title: 'Payment Cancelled',
+                text: 'Your payment session was cancelled. Your outstanding bill remains unchanged.',
+                confirmButtonColor: '#64748b'
+            }).then(() => {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            });
+        }
+    });
+
     async function payBill(billId) {
         const btn = document.getElementById('payBtn');
+        if (!billId || billId === 'null' || billId === 'N/A') {
+            Swal.fire({
+                icon: 'info',
+                title: 'No Pending Bill',
+                text: 'There is no pending water bill to pay at this moment.'
+            });
+            return;
+        }
+
         btn.disabled = true;
-        btn.innerHTML = 'Securely connecting...';
+        btn.innerHTML = 'Connecting securely...';
 
         try {
             const res = await fetch('/resident/api/billing/pay', {
@@ -198,9 +248,13 @@
             }
         } catch(e) {
             console.error(e);
-            Swal.fire('⚠️ Unable to initiate secure payment. ' + e.message);
+            Swal.fire({
+                icon: 'error',
+                title: 'Unable to Proceed',
+                text: e.message || 'Unable to initiate secure payment.'
+            });
             btn.disabled = false;
-            btn.innerHTML = '📱 Pay via GCash';
+            btn.innerHTML = '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg> Pay Online (GCash, Maya, Card)';
         }
     }
 
@@ -208,12 +262,20 @@
     let amountChart = null;
     let currentWaterRange = 6;
     
-    const rawWaterHistory = {!! json_encode($waterBill['usage_history']) !!};
-    const rawAmountHistory = {!! json_encode($waterBill['amount_history']) !!};
+    const rawWaterHistory = {!! json_encode($waterBill['usage_history'] ?? []) !!};
+    const rawAmountHistory = {!! json_encode($waterBill['amount_history'] ?? []) !!};
 
-    const fullMonthLabels = rawWaterHistory.map(item => item.label);
-    const fullWaterHistory = rawWaterHistory.map(item => item.value);
-    const fullAmountHistory = rawAmountHistory.map(item => item.value);
+    const fullMonthLabels = (Array.isArray(rawWaterHistory) && rawWaterHistory.length > 0 && typeof rawWaterHistory[0] === 'object')
+        ? rawWaterHistory.map(item => item?.label || '')
+        : {!! json_encode(array_map(fn($i) => date('M Y', strtotime("-$i months")), range(11, 0))) !!};
+
+    const fullWaterHistory = Array.isArray(rawWaterHistory)
+        ? rawWaterHistory.map(item => typeof item === 'object' ? (item?.value || 0) : (Number(item) || 0))
+        : [];
+
+    const fullAmountHistory = Array.isArray(rawAmountHistory)
+        ? rawAmountHistory.map(item => typeof item === 'object' ? (item?.value || 0) : (Number(item) || 0))
+        : [];
 
     function updateWaterChartRange(monthsCount) {
         currentWaterRange = parseInt(monthsCount);

@@ -133,6 +133,7 @@
 
     .status-pending { background: #fef3c7; color: #92400e; }
     .status-billed { background: #d1fae5; color: #065f46; }
+    .status-paid { background: #dbeafe; color: #1e40af; }
 
     .house-metrics {
         display: flex;

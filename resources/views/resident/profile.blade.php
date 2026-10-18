@@ -35,57 +35,85 @@
     <!-- Security -->
     <div class="analytic-card" style="padding: 32px; margin-bottom: 24px;">
         <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 24px;">Security & Password</h3>
-        <form style="display: flex; flex-direction: column; gap: 20px;">
+        <form id="passwordUpdateForm" onsubmit="updateResidentPassword(event)" style="display: flex; flex-direction: column; gap: 20px;">
             <div>
-                <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">New Password</label>
-                <input type="password" id="pwNew" class="filter-select" style="width: 100%; margin-top: 8px;" placeholder="••••••••">
+                <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Current Password</label>
+                <input type="password" id="pwCurrent" class="filter-select" style="width: 100%; margin-top: 8px;" placeholder="••••••••" required>
+            </div>
+            <div>
+                <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">New Password (min. 8 characters)</label>
+                <input type="password" id="pwNew" class="filter-select" style="width: 100%; margin-top: 8px;" placeholder="••••••••" minlength="8" required>
             </div>
             <div>
                 <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Confirm New Password</label>
-                <input type="password" id="pwConfirm" class="filter-select" style="width: 100%; margin-top: 8px;" placeholder="••••••••">
+                <input type="password" id="pwConfirm" class="filter-select" style="width: 100%; margin-top: 8px;" placeholder="••••••••" minlength="8" required>
             </div>
-            <div id="pwError" style="font-size: 12px; font-weight: 600; color: #ef4444; display: none;">Passwords do not match.</div>
+            <div id="pwError" style="font-size: 12px; font-weight: 600; color: #ef4444; display: none;"></div>
             <div style="display: flex; align-items: center; justify-content: flex-end; gap: 16px;">
-                <span id="pwStatus" style="font-size: 13px; font-weight: 600; color: #10b981; display: none;">✓ Security Updated</span>
-                <button type="button" class="btn btn-outline" style="padding: 10px 20px;" onclick="updatePasswordMock()">
+                <button type="submit" id="btnUpdatePw" class="btn btn-primary" style="padding: 10px 24px; font-weight: 700; background: var(--res-primary); border-color: var(--res-primary);">
                     Update Password
                 </button>
             </div>
         </form>
     </div>
-
-    <!-- No Deactivate Option - Residents cannot delete their own accounts -->
 </div>
 
 <script>
-
-
-    function updatePasswordMock() {
-        const p1 = document.getElementById('pwNew').value;
-        const p2 = document.getElementById('pwConfirm').value;
+    async function updateResidentPassword(e) {
+        e.preventDefault();
+        const currentPw = document.getElementById('pwCurrent').value;
+        const newPw = document.getElementById('pwNew').value;
+        const confirmPw = document.getElementById('pwConfirm').value;
         const err = document.getElementById('pwError');
-        const stat = document.getElementById('pwStatus');
+        const btn = document.getElementById('btnUpdatePw');
 
         err.style.display = 'none';
-        stat.style.display = 'none';
+        err.textContent = '';
 
-        if(p1 === '') return;
-
-        if (p1 !== p2) {
+        if (newPw !== confirmPw) {
+            err.textContent = 'New passwords do not match.';
             err.style.display = 'block';
             return;
         }
 
-        stat.style.display = 'block';
-        document.getElementById('pwNew').value = '';
-        document.getElementById('pwConfirm').value = '';
+        btn.disabled = true;
+        btn.textContent = 'Updating...';
 
-        setTimeout(() => stat.style.display = 'none', 3000);
-    }
+        try {
+            const res = await fetch('/resident/profile/password', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({
+                    current_password: currentPw,
+                    password: newPw,
+                    password_confirmation: confirmPw
+                })
+            });
 
-    function logoutSession() {
-        if (confirm("Log out of your resident portal session?")) {
-            window.location.href = '/login';
+            const data = await res.json();
+
+            if (res.ok && data.success) {
+                document.getElementById('passwordUpdateForm').reset();
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Password Updated',
+                    text: 'Your account password has been updated securely.',
+                    confirmButtonColor: '#059669'
+                });
+            } else {
+                err.textContent = data.message || 'Unable to update password. Please check your current password.';
+                err.style.display = 'block';
+            }
+        } catch(errObj) {
+            console.error(errObj);
+            err.textContent = 'A network error occurred. Please try again.';
+            err.style.display = 'block';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Update Password';
         }
     }
 </script>

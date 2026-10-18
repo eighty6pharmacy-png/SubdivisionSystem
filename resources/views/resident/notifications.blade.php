@@ -13,7 +13,7 @@
         </div>
     </div>
 
-    <div class="analytic-card" style="padding: 0; overflow: hidden;">
+    <div class="analytic-card" style="padding: 0; overflow: hidden; border-radius: 20px; background: #fff; border: 1px solid var(--bill-border);">
         <div style="background: #f8fafc; padding: 16px 24px; border-bottom: 1px solid var(--bill-border); display: flex; gap: 24px;">
             <button style="background: none; border: none; font-weight: 700; color: #0f172a; border-bottom: 2px solid #059669; padding-bottom: 8px; cursor: pointer;">All Notifications</button>
         </div>
@@ -53,9 +53,11 @@
 
             @if($allNotifs->isEmpty())
                 <div style="padding: 64px 24px; text-align: center; color: #94a3b8;">
-                    <div style="font-size: 40px; margin-bottom: 16px;">🔔</div>
-                    <div style="font-size: 16px; font-weight: 600;">No notifications yet</div>
-                    <div style="font-size: 13px; margin-top: 8px;">New announcements and alerts will appear here.</div>
+                    <div style="width: 56px; height: 56px; border-radius: 14px; background: #f1f5f9; color: #94a3b8; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+                        <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                    </div>
+                    <div style="font-size: 16px; font-weight: 700; color: #1e293b;">No notifications yet</div>
+                    <div style="font-size: 13px; margin-top: 4px;">New announcements and alerts will appear here.</div>
                 </div>
             @else
                 @foreach($allNotifs as $item)

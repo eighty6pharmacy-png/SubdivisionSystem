@@ -48,6 +48,13 @@
 <script src="{{ asset('js/gis-map.js') }}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tokenParam = urlParams.get('token');
+        if (tokenParam) {
+            window.location.href = `/v/${tokenParam}`;
+            return;
+        }
+
         const ctx = JSON.parse(localStorage.getItem('visitor_routing_context') || '{}');
         
         // Update UI
