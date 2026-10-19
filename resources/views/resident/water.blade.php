@@ -72,7 +72,7 @@
             @php
                 $minM3 = $waterBill['min_m3'] ?? 10;
                 $minRate = $waterBill['min_rate'] ?? 250;
-                $excessRate = $waterBill['excess_rate'] ?? 25;
+                $excessRate = $waterBill['excess_rate'] ?? (float)(\App\Models\Setting::find('water_rate')?->value ?? 15);
                 $usageM3 = (float)($waterBill['usage_cbm'] ?? 0);
                 
                 $minCharge = $minRate;

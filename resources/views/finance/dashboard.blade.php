@@ -509,7 +509,7 @@
                 const excessCost = excess * WATER_RATE;
                 currentCharges = WATER_MIN_RATE + excessCost;
                 tierRow.style.display = 'flex';
-                document.getElementById('tierBreakdownLabel').innerText = `Base (₱${WATER_MIN_RATE.toFixed(2)}) + Excess (${excess.toFixed(1)} m³ @ ₱${WATER_RATE.toFixed(2)})`;
+                document.getElementById('tierBreakdownLabel').innerText = `Base (₱${WATER_MIN_RATE.toFixed(2)}) + Excess (${excess.toFixed(1)} m³ x ₱${WATER_RATE.toFixed(2)})`;
                 document.getElementById('tierBreakdownValue').innerText = `₱${currentCharges.toFixed(2)}`;
                 document.getElementById('calcRate').innerText = `Base ₱${WATER_MIN_RATE.toFixed(2)} + ₱${WATER_RATE.toFixed(2)}/m³ excess`;
             }

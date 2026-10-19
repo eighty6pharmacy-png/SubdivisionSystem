@@ -650,7 +650,7 @@ Route::put('/api/incidents/{id}/status', function (\Illuminate\Http\Request $req
         return response()->json(['success' => true]);
     }
     return response()->json(['success' => false], 404);
-});
+})->middleware(['auth', 'role:Admin|Security Guard']);
 
 Route::put('/api/appointments/{id}/email', function (\Illuminate\Http\Request $request, $id) {
     $apt = \App\Models\Appointment::whereKey($id)->first();
@@ -1420,10 +1420,77 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         return view('admin.incidents.index', ['incidents' => getIncidents()]);
     });
     Route::get('/incidents/{id}', function ($id) {
-        $incident = collect(getIncidents())->firstWhere('id', $id);
-        if (!$incident)
+        $inc = \App\Models\Incident::with(['user.roles', 'user.lots'])->find($id);
+        if (!$inc) {
             abort(404);
+        }
+
+        $resName = $inc->reporter_name ?: 'Anonymous';
+        if ($inc->user) {
+            $role = $inc->user->roles->first()->name ?? 'Resident';
+            if ($role === 'Resident' && $inc->user->lots->count() > 0) {
+                $lot = $inc->user->lots->first();
+                $resName = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
+            } else {
+                $resName = $inc->user->name ?: ($inc->reporter_name ?: 'Anonymous');
+            }
+        }
+        $photosArray = [];
+        if ($inc->image_url) {
+            $decoded = json_decode($inc->image_url, true);
+            $photosArray = is_array($decoded) ? $decoded : [$inc->image_url];
+        }
+
+        $incident = [
+            'id' => $inc->id,
+            'sub' => $inc->subject,
+            'type' => $inc->type,
+            'res' => $resName,
+            'desc' => $inc->description,
+            'img' => count($photosArray) > 0 ? $photosArray[0] : null,
+            'photos' => $photosArray,
+            'video' => $inc->video_url,
+            'video_url' => $inc->video_url,
+            'admin_notes' => $inc->admin_notes,
+            'status' => $inc->status,
+            'date' => $inc->created_at ? $inc->created_at->toIso8601String() : now()->toIso8601String(),
+            'created_at' => $inc->created_at,
+        ];
+
         return view('admin.incidents.show', ['inc' => $incident, 'id' => $id]);
+    });
+
+    Route::put('/incidents/{id}/status', function (\Illuminate\Http\Request $request, $id) {
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'status' => ['required', \Illuminate\Validation\Rule::in(\App\Enums\IncidentStatus::values())],
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['success' => false, 'message' => 'Invalid incident status.'], 422);
+        }
+
+        $inc = \App\Models\Incident::findOrFail($id);
+        $inc->update(['status' => $request->input('status')]);
+
+        if ($inc->user) {
+            $inc->user->notify(new \App\Notifications\WebAndPushNotification(
+                'Incident Report Update',
+                "Your incident report '{$inc->subject}' status has been updated to: {$request->input('status')}.",
+                'incident'
+            ));
+        }
+
+        return response()->json(['success' => true]);
+    });
+
+    Route::post('/incidents/{id}/notes', function (\Illuminate\Http\Request $request, $id) {
+        $request->validate([
+            'admin_notes' => 'nullable|string|max:5000',
+        ]);
+
+        $inc = \App\Models\Incident::findOrFail($id);
+        $inc->update(['admin_notes' => $request->input('admin_notes')]);
+
+        return response()->json(['success' => true]);
     });
     Route::get('/announcements', function () {
         return view('admin.announcements.index', ['announcements' => getAnnouncements()]);
@@ -1702,29 +1769,53 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             'subject' => 'required|string|max:255',
             'type' => 'required|string|max:100',
             'description' => 'required|string',
-            'photos' => 'nullable|array',
+            'photos' => 'nullable',
+            'photos.*' => 'nullable|file|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
+            'video' => 'nullable|file|mimes:mp4,webm,mov,quicktime|max:102400',
         ]);
 
-        $photos = $request->input('photos');
         $imageUrls = [];
 
-        if (is_array($photos) && count($photos) > 0) {
-            foreach ($photos as $photo) {
+        // 1. Handle multipart photo files
+        if ($request->hasFile('photos')) {
+            $uploadedPhotos = $request->file('photos');
+            if (is_array($uploadedPhotos)) {
+                foreach ($uploadedPhotos as $photoFile) {
+                    if (count($imageUrls) >= 3) break;
+                    if ($photoFile && $photoFile->isValid()) {
+                        $storedPath = $photoFile->store('incidents', 'public');
+                        $imageUrls[] = '/storage/' . $storedPath;
+                    }
+                }
+            }
+        }
+
+        // 2. Fallback: Handle base64 photos if sent as JSON payload
+        $base64Photos = $request->input('photos');
+        if (empty($imageUrls) && is_array($base64Photos) && count($base64Photos) > 0) {
+            foreach ($base64Photos as $photo) {
                 if (count($imageUrls) >= 3) break;
-                if (preg_match('/^data:image\/(\w+);base64,/', $photo, $type)) {
+                if (is_string($photo) && preg_match('/^data:image\/(\w+);base64,/', $photo, $type)) {
                     $photoData = substr($photo, strpos($photo, ',') + 1);
                     $type = strtolower($type[1]);
                     if (in_array($type, ['jpg', 'jpeg', 'gif', 'png', 'webp'])) {
                         $photoData = str_replace(' ', '+', $photoData);
                         $photoDecoded = base64_decode($photoData);
                         if ($photoDecoded !== false) {
-                            $filename = 'incidents/' . \Illuminate\Support\Str::random(10) . '.' . $type;
+                            $filename = 'incidents/' . \Illuminate\Support\Str::random(20) . '.' . $type;
                             \Illuminate\Support\Facades\Storage::disk('public')->put($filename, $photoDecoded);
                             $imageUrls[] = '/storage/' . $filename;
                         }
                     }
                 }
             }
+        }
+
+        // 3. Handle video upload
+        $videoUrl = null;
+        if ($request->hasFile('video') && $request->file('video')->isValid()) {
+            $videoPath = $request->file('video')->store('incidents/videos', 'public');
+            $videoUrl = '/storage/' . $videoPath;
         }
 
         $inc = \App\Models\Incident::create([
@@ -1735,6 +1826,7 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             'resident_id' => \Illuminate\Support\Facades\Auth::id(),
             'reporter_name' => \Illuminate\Support\Facades\Auth::user()?->name,
             'image_url' => count($imageUrls) > 0 ? json_encode($imageUrls) : null,
+            'video_url' => $videoUrl,
         ]);
         
         $admins = \App\Models\User::role('Admin')->get();
@@ -1749,11 +1841,16 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
         return response()->json([
             'success' => true,
             'id' => $inc->id,
-            'reference_id' => 'INC-' . $inc->id,
+            'reference_id' => 'INC-' . str_pad($inc->id, 5, '0', STR_PAD_LEFT),
         ]);
     });
 
     Route::put('/incidents/{id}/status', function (\Illuminate\Http\Request $request, $id) {
+        $user = \Illuminate\Support\Facades\Auth::user();
+        if (!$user->hasAnyRole(['Admin', 'Security Guard'])) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized. Only administration can update incident statuses.'], 403);
+        }
+
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'status' => ['required', \Illuminate\Validation\Rule::in(\App\Enums\IncidentStatus::values())],
         ]);
@@ -1761,17 +1858,19 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             return response()->json(['success' => false, 'message' => 'Invalid incident status. Allowed: ' . implode(', ', \App\Enums\IncidentStatus::values()) . '.'], 422);
         }
 
-        $user = \Illuminate\Support\Facades\Auth::user();
-        $query = \App\Models\Incident::whereKey($id);
-        if (!$user->hasAnyRole(['Admin', 'Security Guard'])) {
-            $query->where('resident_id', $user->id);
-        }
-        $inc = $query->first();
+        $inc = \App\Models\Incident::whereKey($id)->first();
         if ($inc) {
             $inc->update(['status' => $request->input('status')]);
+            if ($inc->user) {
+                $inc->user->notify(new \App\Notifications\WebAndPushNotification(
+                    'Incident Report Update',
+                    "Your incident report '{$inc->subject}' status has been updated to: {$request->input('status')}.",
+                    'incident'
+                ));
+            }
             return response()->json(['success' => true]);
         }
-        return response()->json(['success' => false, 'message' => 'Incident not found or unauthorized.'], 404);
+        return response()->json(['success' => false, 'message' => 'Incident not found.'], 404);
     });
     Route::get('/notifications', function () {
         $user = \Illuminate\Support\Facades\Auth::user();

@@ -73,7 +73,7 @@ return new class extends Migration
             'payment_date', 'created_at', 'updated_at', 'deleted_at',
         ],
         'incidents' => [
-            'id', 'resident_id', 'reporter_name', 'subject', 'type', 'description', 'image_url',
+            'id', 'resident_id', 'reporter_name', 'subject', 'type', 'description', 'image_url', 'video_url', 'admin_notes',
             'status', 'created_at', 'updated_at', 'deleted_at',
         ],
         'visitors' => [
@@ -119,6 +119,14 @@ return new class extends Migration
             Schema::table('visitors', function (Blueprint $table) {
                 $table->string('contact_number', 30)->nullable();
                 $table->string('access_token', 64)->nullable()->unique();
+            });
+        }
+
+        if (Schema::hasTable('incidents')
+            && ! Schema::hasColumn('incidents', 'video_url')) {
+            Schema::table('incidents', function (Blueprint $table) {
+                $table->text('video_url')->nullable();
+                $table->text('admin_notes')->nullable();
             });
         }
 

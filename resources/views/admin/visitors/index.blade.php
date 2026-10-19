@@ -170,9 +170,39 @@
                 renderAdminVisitorTable();
                 
                 if (window.pushSystemNotification) {
-                    window.pushSystemNotification("Visitor Approved", `Code generated for ${visitorName} and sent to resident & security guard.`, "Just now", true);
+                    window.pushSystemNotification("Visitor Approved", `PIN generated for ${visitorName} and dispatched via SMS & gate pass.`, "Just now", true);
                 }
-                Swal.fire(`✓ VISITOR APPROVED!\n\nEmail sent to Resident and Code Forwarded to Security Guard Portal.`);
+
+                const pinSection = data.pin ? `
+                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 16px; margin: 12px 0; display: inline-block;">
+                        <span style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.5px; display: block;">Gate Clearance PIN</span>
+                        <span style="font-size: 24px; font-weight: 800; color: #15803d; letter-spacing: 4px; font-family: monospace;">${data.pin}</span>
+                    </div>
+                ` : '';
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Visitor Approved!',
+                    html: `
+                        <div style="font-size: 14px; color: #334155; line-height: 1.5;">
+                            ${pinSection}
+                            <p style="margin: 6px 0 2px; font-weight: 600; color: #0f172a;">${visitorName}</p>
+                            <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Host: ${hostName || 'Resident'}</p>
+                            <div style="background: #f8fafc; border-radius: 8px; padding: 10px 14px; text-align: left; font-size: 13px; color: #475569; border: 1px solid #e2e8f0;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                                    <span>📱</span>
+                                    <span><strong>SMS Dispatched:</strong> PIN and digital pass link sent to resident and visitor.</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span>🛡️</span>
+                                    <span><strong>Gate Access:</strong> Clearance forwarded to Security Guard Portal.</span>
+                                </div>
+                            </div>
+                        </div>
+                    `,
+                    confirmButtonText: 'Done',
+                    confirmButtonColor: '#059669'
+                });
             } else {
                 Swal.fire('Error approving visitor: ' + data.message);
             }

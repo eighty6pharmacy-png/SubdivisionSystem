@@ -175,7 +175,12 @@ class VisitorController extends Controller
             }
         }
 
-        return response()->json(['success' => true]);
+        return response()->json([
+            'success' => true,
+            'pin' => $pin,
+            'pass_url' => $passUrl,
+            'access_token' => $token,
+        ]);
     }
 
     // Direct Access Route for Visitors (from SMS Link - no PIN input required)

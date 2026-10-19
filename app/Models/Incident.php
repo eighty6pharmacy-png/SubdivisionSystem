@@ -18,8 +18,33 @@ class Incident extends Model
         'type',
         'description',
         'image_url',
+        'video_url',
+        'admin_notes',
         'status',
     ];
+
+    protected static function booted()
+    {
+        static::forceDeleted(function ($incident) {
+            $incident->deleteMediaFiles();
+        });
+    }
+
+    public function deleteMediaFiles(): void
+    {
+        if ($this->image_url) {
+            $decoded = json_decode($this->image_url, true);
+            $photos = is_array($decoded) ? $decoded : [$this->image_url];
+            foreach ($photos as $photo) {
+                $clean = str_replace('/storage/', '', $photo);
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($clean);
+            }
+        }
+        if ($this->video_url) {
+            $cleanVideo = str_replace('/storage/', '', $this->video_url);
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($cleanVideo);
+        }
+    }
 
     public function user(): BelongsTo
     {

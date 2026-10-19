@@ -6,15 +6,15 @@ if (!function_exists('getIncidents')) {
         try {
             $incidentCount = \Illuminate\Support\Facades\Schema::hasTable('incidents') ? \App\Models\Incident::count() : 0;
             if (\Illuminate\Support\Facades\Schema::hasTable('incidents') && $incidentCount > 0) {
-                return \App\Models\Incident::with('user')->get()->map(function ($inc) {
-                    $resName = 'Anonymous';
+                return \App\Models\Incident::with(['user.roles', 'user.lots'])->orderBy('created_at', 'desc')->get()->map(function ($inc) {
+                    $resName = $inc->reporter_name ?: 'Anonymous';
                     if ($inc->user) {
                         $role = $inc->user->roles->first()->name ?? 'Resident';
                         if ($role === 'Resident' && $inc->user->lots->count() > 0) {
                             $lot = $inc->user->lots->first();
                             $resName = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
                         } else {
-                            $resName = $inc->user->name;
+                            $resName = $inc->user->name ?: ($inc->reporter_name ?: 'Anonymous');
                         }
                     }
                     $photosArray = [];
@@ -31,6 +31,9 @@ if (!function_exists('getIncidents')) {
                         'desc' => $inc->description,
                         'img' => count($photosArray) > 0 ? $photosArray[0] : null,
                         'photos' => $photosArray,
+                        'video' => $inc->video_url,
+                        'video_url' => $inc->video_url,
+                        'admin_notes' => $inc->admin_notes,
                         'status' => $inc->status,
                         'date' => $inc->created_at ? $inc->created_at->toIso8601String() : now()->toIso8601String(),
                     ];
@@ -386,7 +389,12 @@ if (!function_exists('getWaterBills')) {
                     $minWaterRate = $minWaterRateSetting ? (float)$minWaterRateSetting->value : 250;
                     
                     $currentRateSetting = \App\Models\Setting::find('water_rate');
-                    $currentRate = $currentRateSetting ? (float)$currentRateSetting->value : 30;
+                    $currentRate = $currentRateSetting ? (float)$currentRateSetting->value : 15;
+                    
+                    $excessUsage = $bill ? max(0, (float)$bill->usage_value - $minWaterM3) : 0;
+                    $appliedRate = ($bill && $excessUsage > 0 && (float)$bill->amount > $minWaterRate)
+                        ? round(((float)$bill->amount - $minWaterRate) / $excessUsage, 2)
+                        : $currentRate;
                     
                     $billIndex = $bill ? $resident->utilityBills->search(fn($b) => $b->id === $bill->id) : false;
                     $previousBill = $billIndex !== false ? $resident->utilityBills->get($billIndex + 1) : null;
@@ -412,7 +420,7 @@ if (!function_exists('getWaterBills')) {
                         'usage_cbm' => $bill ? $bill->usage_value : 0,
                         'min_m3' => $minWaterM3,
                         'min_rate' => $minWaterRate,
-                        'excess_rate' => $currentRate,
+                        'excess_rate' => $appliedRate,
                         'base_amount' => $bill ? $bill->amount : 0,
                         'status' => $bill ? $bill->status : 'unpaid',
                         'due' => ($bill && $bill->due_date) ? \Carbon\Carbon::parse($bill->due_date)->format('Y-m-d') : 'N/A',

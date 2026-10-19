@@ -8,23 +8,29 @@ use Illuminate\Support\Facades\Log;
 class SmsHelper
 {
     /**
-     * Format a Philippine phone number to international format (+63)
+     * Format a Philippine phone number to national format (09XXXXXXXXX)
+     * which TextBee Android gateway requires to dispatch via local SIM.
      */
     public static function formatNumber($number)
     {
-        $number = preg_replace('/[^0-9]/', '', $number);
-        if (str_starts_with($number, '09')) {
-            return '+63' . substr($number, 1);
+        $digits = preg_replace('/[^0-9]/', '', $number);
+
+        // 639XXXXXXXXX (12 digits) -> 09XXXXXXXXX
+        if (str_starts_with($digits, '639') && strlen($digits) === 12) {
+            return '0' . substr($digits, 2);
         }
-        if (str_starts_with($number, '639')) {
-            return '+' . $number;
+
+        // 9XXXXXXXXX (10 digits) -> 09XXXXXXXXX
+        if (str_starts_with($digits, '9') && strlen($digits) === 10) {
+            return '0' . $digits;
         }
-        if (str_starts_with($number, '9') && strlen($number) == 10) {
-            return '+63' . $number;
+
+        // 09XXXXXXXXX (11 digits) -> 09XXXXXXXXX
+        if (str_starts_with($digits, '09') && strlen($digits) === 11) {
+            return $digits;
         }
-        // If it already has +63, or doesn't match above, just return as is (with + prefix if it was 63)
-        // Wait, preg_replace removed the '+'. Let's handle that.
-        return '+' . $number; 
+
+        return $digits;
     }
 
     /**

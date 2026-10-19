@@ -30,6 +30,7 @@
                 <option value="all">All Time</option>
                 <option value="today">Today</option>
                 <option value="this_week">This Week</option>
+                <option value="this_month">This Month</option>
                 <option value="last_month">Last Month</option>
             </select>
             <div class="incident-search-wrapper">
@@ -171,9 +172,14 @@
                     </div>
                 </div>
             </div>
-            <div style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px;">
-                <button class="btn btn-outline" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-weight: 600;" onclick="closeIncidentModal()">Cancel</button>
-                <button class="btn btn-primary" style="padding: 12px 28px; border-radius: 10px; background: linear-gradient(135deg, #059669, #10b981); color: #fff; font-weight: 700; font-size: 14px; border: none; cursor: pointer; box-shadow: 0 4px 14px rgba(16,185,129,0.4); transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(16,185,129,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 14px rgba(16,185,129,0.4)'" onclick="saveIncidentStatus()">✅ Save Changes</button>
+            <div style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <a id="modalIncFullView" href="#" class="btn btn-outline" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-weight: 700; color: #1e293b; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                    Full Report Page &rarr;
+                </a>
+                <div style="display: flex; gap: 12px;">
+                    <button class="btn btn-outline" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-weight: 600;" onclick="closeIncidentModal()">Cancel</button>
+                    <button class="btn btn-primary" style="padding: 12px 28px; border-radius: 10px; background: linear-gradient(135deg, #059669, #10b981); color: #fff; font-weight: 700; font-size: 14px; border: none; cursor: pointer; box-shadow: 0 4px 14px rgba(16,185,129,0.4); transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(16,185,129,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 14px rgba(16,185,129,0.4)'" onclick="saveIncidentStatus()">✅ Save Changes</button>
+                </div>
             </div>
         </div>
     </div>
@@ -205,6 +211,16 @@
 </div>
 
 <script>
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     const rawIncidents = @json($incidents);
     const categoryMeta = {
         'Security':    { icon: '🛡️', color: '#ef4444' },
@@ -226,8 +242,9 @@
         
         incidents = incidents.filter(d => {
             if (dateFilter === 'all') return true;
+            if (!d.date) return false;
             let incDate = new Date(d.date);
-            if (isNaN(incDate.getTime())) incDate = new Date();
+            if (isNaN(incDate.getTime())) return false;
 
             if (dateFilter === 'today') {
                 return incDate.toDateString() === now.toDateString();
@@ -241,6 +258,9 @@
                 endOfWeek.setHours(23, 59, 59, 999);
                 return incDate >= startOfWeek && incDate <= endOfWeek;
             }
+            if (dateFilter === 'this_month') {
+                return incDate.getFullYear() === now.getFullYear() && incDate.getMonth() === now.getMonth();
+            }
             if (dateFilter === 'last_month') {
                 const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
                 const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
@@ -250,15 +270,15 @@
         });
         
         document.getElementById('stat-total').textContent = incidents.length;
-        document.getElementById('stat-progress').textContent = incidents.filter(i => i.status === 'progress').length;
-        document.getElementById('stat-resolved').textContent = incidents.filter(i => i.status === 'resolved').length;
-        document.getElementById('stat-pending').textContent = incidents.filter(i => i.status === 'pending').length;
+        document.getElementById('stat-progress').textContent = incidents.filter(i => (i.status || '').toLowerCase() === 'progress').length;
+        document.getElementById('stat-resolved').textContent = incidents.filter(i => (i.status || '').toLowerCase() === 'resolved').length;
+        document.getElementById('stat-pending').textContent = incidents.filter(i => (i.status || '').toLowerCase() === 'pending').length;
 
         const categories = ['Security', 'Maintenance', 'Utilities', 'Others'];
         categories.forEach(cat => {
             const catData = incidents.filter(i => (i.type || '').toLowerCase() === cat.toLowerCase());
             const catCount = catData.length;
-            const pendingCount = catData.filter(i => i.status === 'pending').length;
+            const pendingCount = catData.filter(i => (i.status || '').toLowerCase() === 'pending').length;
             const slug = cat.toLowerCase().replace(/\s+/g, '-');
             const container = document.getElementById('cat-content-' + slug);
             
@@ -303,8 +323,9 @@
         
         let filtered = dataArr.filter(d => {
             if (dateFilter === 'all') return true;
+            if (!d.date) return false;
             let incDate = new Date(d.date);
-            if (isNaN(incDate.getTime())) incDate = new Date();
+            if (isNaN(incDate.getTime())) return false;
 
             if (dateFilter === 'today') {
                 return incDate.toDateString() === now.toDateString();
@@ -318,6 +339,9 @@
                 endOfWeek.setHours(23, 59, 59, 999);
                 return incDate >= startOfWeek && incDate <= endOfWeek;
             }
+            if (dateFilter === 'this_month') {
+                return incDate.getFullYear() === now.getFullYear() && incDate.getMonth() === now.getMonth();
+            }
             if (dateFilter === 'last_month') {
                 const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
                 const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
@@ -326,10 +350,10 @@
             return true;
         });
 
-        const q = document.getElementById('incidentSearch').value.toLowerCase();
+        const q = document.getElementById('incidentSearch').value.toLowerCase().trim();
         if (q) {
             filtered = filtered.filter(d => {
-                const text = `${d.type} ${d.sub} ${d.res} ${d.desc} ${d.status}`.toLowerCase();
+                const text = `${d.type || ''} ${d.sub || ''} ${d.res || ''} ${d.desc || ''} ${d.status || ''} ${d.id || ''}`.toLowerCase();
                 return text.includes(q);
             });
         }
@@ -401,30 +425,41 @@
             
             pageData.forEach(d => {
                 const statusLabel = { pending: 'Pending', progress: 'In Progress', resolved: 'Resolved' }[d.status] || d.status;
-                let formattedDate = 'Today';
+                let formattedDate = 'Recently';
                 if (d.date) {
                     const dObj = new Date(d.date);
                     if (!isNaN(dObj)) {
                         formattedDate = dObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
                     }
                 }
+
+                const mediaBadges = [];
+                if (d.photos && d.photos.length > 0) {
+                    mediaBadges.push(`<span style="font-size:11px; background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:700;">📷 ${d.photos.length}</span>`);
+                }
+                if (d.video || d.video_url) {
+                    mediaBadges.push(`<span style="font-size:11px; background:#fef3c7; color:#92400e; padding:2px 6px; border-radius:4px; font-weight:700;">🎥 Video</span>`);
+                }
+                const mediaIndicators = mediaBadges.length > 0 ? mediaBadges.join(' ') : '';
+
                 grid.innerHTML += `
                     <div class="incident-card" style="display:flex; flex-direction:column; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';" onmouseout="this.style.transform=''; this.style.boxShadow='var(--shadow-sm)';" onclick="openIncidentModal('${d.id}')">
                         <div class="status-dot">
-                            <span class="badge-premium badge-${d.status}">${statusLabel}</span>
+                            <span class="badge-premium badge-${escapeHtml(d.status)}">${escapeHtml(statusLabel)}</span>
                         </div>
                         <div class="incident-card-header">
-                            <span class="incident-type">${d.type}</span>
-                            <h3 class="incident-subject">${d.sub}</h3>
-                            <div class="incident-meta">
-                                <span class="incident-id">${d.id}</span>
+                            <span class="incident-type">${escapeHtml(d.type)}</span>
+                            <h3 class="incident-subject">${escapeHtml(d.sub)}</h3>
+                            <div class="incident-meta" style="flex-wrap: wrap; gap: 6px;">
+                                <span class="incident-id">INC-${String(d.id).padStart(5, '0')}</span>
                                 <span>&bull;</span>
-                                <span>${d.res || 'Resident'}</span>
+                                <span>${escapeHtml(d.res || 'Resident')}</span>
+                                ${mediaIndicators ? `<span>&bull;</span> ${mediaIndicators}` : ''}
                             </div>
                         </div>
-                        <p class="incident-preview">${d.desc}</p>
+                        <p class="incident-preview">${escapeHtml(d.desc)}</p>
                         <div class="incident-footer" style="margin-top:12px; border-top:1px solid #f1f5f9; padding-top:8px;">
-                            <div style="font-size:11px;font-weight:600;color:var(--incident-text-sub);">${formattedDate}</div>
+                            <div style="font-size:11px;font-weight:600;color:var(--incident-text-sub);">${escapeHtml(formattedDate)}</div>
                         </div>
                     </div>`;
             });
@@ -465,7 +500,7 @@
     let currentIncidentId = null;
 
     function openIncidentModal(id) {
-        if (new URLSearchParams(window.location.search).get('incident') !== id) {
+        if (new URLSearchParams(window.location.search).get('incident') !== String(id)) {
             window.history.pushState(null, '', '?incident=' + id);
         }
         const incidents = rawIncidents;
@@ -474,10 +509,10 @@
 
         currentIncidentId = id;
 
-        document.getElementById('modalIncId').textContent = inc.id;
+        document.getElementById('modalIncId').textContent = 'INC-' + String(inc.id).padStart(5, '0');
         document.getElementById('modalIncSubject').textContent = inc.sub;
         document.getElementById('modalIncType').textContent = inc.type;
-        let formattedDate = 'Today';
+        let formattedDate = 'Recently';
         if (inc.date) {
             const dObj = new Date(inc.date);
             if (!isNaN(dObj)) {
@@ -489,18 +524,37 @@
         document.getElementById('modalIncRes').textContent = inc.res || 'Resident';
         document.getElementById('modalIncStatus').value = inc.status;
 
+        const fullViewLink = document.getElementById('modalIncFullView');
+        if (fullViewLink) {
+            fullViewLink.href = `/admin/incidents/${inc.id}`;
+        }
+
         const mediaContainer = document.getElementById('modalIncMedia');
+        let mediaHtml = '';
+        
+        if (inc.video || inc.video_url) {
+            const vSrc = escapeHtml(inc.video || inc.video_url);
+            mediaHtml += `
+                <div style="height: 100%; max-width: 250px; flex-shrink: 0; border-radius: 6px; overflow: hidden; background: #000;">
+                    <video src="${vSrc}" controls preload="metadata" style="height: 100%; max-width: 250px; object-fit: contain;">
+                        Your browser does not support HTML5 video.
+                    </video>
+                </div>
+            `;
+        }
+
         if (inc.photos && inc.photos.length > 0) {
-            let photosHtml = '';
             inc.photos.forEach(p => {
-                photosHtml += `<img src="${p}" onclick="openFullscreenImage('${p}')" style="height: 100%; max-width: 250px; object-fit: cover; border-radius: 6px; border: 1px solid #cbd5e1; flex-shrink: 0; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" alt="Attachment">`;
+                mediaHtml += `<img src="${p}" onclick="openFullscreenImage('${p}')" style="height: 100%; max-width: 250px; object-fit: cover; border-radius: 6px; border: 1px solid #cbd5e1; flex-shrink: 0; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" alt="Attachment">`;
             });
-            mediaContainer.innerHTML = `<div style="display: flex; gap: 12px; width: 100%; height: 100%; overflow-x: auto; padding-bottom: 4px;">${photosHtml}</div>`;
+        } else if (inc.img && !inc.video && !inc.video_url) {
+            mediaHtml += `<img src="${inc.img}" onclick="openFullscreenImage('${inc.img}')" style="width:100%; height:100%; object-fit:cover; border-radius:6px; cursor: pointer;" alt="Attachment">`;
+        }
+
+        if (mediaHtml) {
+            mediaContainer.innerHTML = `<div style="display: flex; gap: 12px; width: 100%; height: 100%; overflow-x: auto; padding-bottom: 4px;">${mediaHtml}</div>`;
             mediaContainer.style.border = 'none';
             mediaContainer.style.background = 'transparent';
-        } else if (inc.img) {
-            mediaContainer.innerHTML = `<img src="${inc.img}" onclick="openFullscreenImage('${inc.img}')" style="width:100%; height:100%; object-fit:cover; border-radius:6px; cursor: pointer;" alt="Attachment">`;
-            mediaContainer.style.border = 'none';
         } else {
             mediaContainer.innerHTML = `<div style="text-align:center;">
                 <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-bottom:8px; opacity:0.6; display:inline-block;"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
@@ -515,6 +569,8 @@
 
     function closeIncidentModal() {
         window.history.replaceState(null, '', window.location.pathname);
+        const v = document.querySelector('#modalIncMedia video');
+        if (v) v.pause();
         document.getElementById('incidentModal').style.display = 'none';
         currentIncidentId = null;
     }
@@ -524,24 +580,25 @@
         const newStatus = document.getElementById('modalIncStatus').value;
         
         try {
-            const response = await fetch(`/api/incidents/${currentIncidentId}/status`, {
+            const response = await fetch(`/admin/incidents/${currentIncidentId}/status`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                    'Accept': 'application/json'
                 },
                 body: JSON.stringify({ status: newStatus })
             });
             
             const result = await response.json();
             if (result.success) {
-                window.location.reload(); // Reload to fetch fresh data from DB
+                window.location.reload();
             } else {
-                Swal.fire('Failed to update status.');
+                Swal.fire({ icon: 'error', text: result.message || 'Failed to update status.' });
             }
         } catch (error) {
             console.error(error);
-            Swal.fire('An error occurred.');
+            Swal.fire({ icon: 'error', text: 'An error occurred while updating status.' });
         }
     }
 

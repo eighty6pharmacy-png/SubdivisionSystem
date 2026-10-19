@@ -4,6 +4,12 @@
 
 @section('content')
 <link rel="stylesheet" href="{{ asset('css/resident-incidents.css') }}">
+<style>
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
 
 <div class="fade-in">
 @php
@@ -182,7 +188,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Attach Photos (Optional)</label>
+                    <label>Attach Photos (Optional — Max 3 photos, 5MB each)</label>
                     <input type="file" id="reportPhotos" accept="image/*" multiple style="display: none;" onchange="handleFilesUpload(this)">
                     <div class="photo-upload-zone" onclick="document.getElementById('reportPhotos').click()" style="cursor: pointer;">
                         <div id="uploadText">
@@ -191,6 +197,49 @@
                         </div>
                         <div id="uploadPreview" style="display: none; flex-wrap: wrap; gap: 8px; margin-top: 12px; justify-content: center;">
                             <!-- JS injected previews -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Attach Video (Optional — Max 1 video, up to 100MB, duration &le; 60s)</label>
+                    <input type="file" id="reportVideo" accept="video/mp4,video/webm,video/quicktime,video/*" style="display: none;" onchange="handleVideoUpload(this)">
+                    <div class="photo-upload-zone" id="videoUploadZone" onclick="document.getElementById('reportVideo').click()" style="cursor: pointer; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 14px; text-align: center; background: #f8fafc; transition: all 0.2s;">
+                        <div id="videoUploadText">
+                            <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin: 0 auto 6px; display: block; color: #3b82f6;"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                            <span style="font-weight: 700; color: #1e293b; font-size: 13px;">Click to upload video evidence</span>
+                            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">MP4, WebM, MOV</div>
+                        </div>
+
+                        <!-- In-Browser Video Compression Progress (Option 2) -->
+                        <div id="videoCompressingState" style="display: none; text-align: left; background: #fff; padding: 12px 14px; border-radius: 8px; border: 1px solid #bfdbfe;" onclick="event.stopPropagation()">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div style="width: 14px; height: 14px; border: 2px solid #3b82f6; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+                                    <span id="compressStatusText" style="font-size: 12px; font-weight: 700; color: #1e40af;">Compressing video... 0%</span>
+                                </div>
+                                <button type="button" onclick="cancelVideoCompression(event)" style="background: none; border: none; font-size: 11px; font-weight: 700; color: #ef4444; cursor: pointer;">✕ Cancel</button>
+                            </div>
+                            <div style="width: 100%; height: 6px; background: #e2e8f0; border-radius: 999px; overflow: hidden;">
+                                <div id="compressProgressBar" style="width: 0%; height: 100%; background: #3b82f6; transition: width 0.2s ease;"></div>
+                            </div>
+                            <div style="font-size: 10.5px; color: #64748b; margin-top: 6px; display: flex; justify-content: space-between;">
+                                <span>Optimizing resolution & bitrate</span>
+                                <span id="compressSizeEstimate">Original: -- MB</span>
+                            </div>
+                        </div>
+
+                        <div id="videoUploadPreview" style="display: none; align-items: center; justify-content: space-between; background: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;" onclick="event.stopPropagation()">
+                            <div style="display: flex; align-items: center; gap: 10px; text-align: left; overflow: hidden;">
+                                <div style="width: 36px; height: 36px; border-radius: 8px; background: #eff6ff; display: flex; align-items: center; justify-content: center; color: #3b82f6; flex-shrink: 0;">
+                                    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                </div>
+                                <div style="overflow: hidden;">
+                                    <div id="videoFileName" style="font-size: 13px; font-weight: 700; color: #0f172a; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; max-width: 250px;">video.mp4</div>
+                                    <div id="videoMeta" style="font-size: 11px; color: #64748b;">0s &bull; 0 MB</div>
+                                </div>
+                            </div>
+                            <button type="button" onclick="removeVideo(event)" style="background: #ef4444; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 11px; font-weight: 700; cursor: pointer;">Remove</button>
                         </div>
                     </div>
                 </div>
@@ -240,6 +289,13 @@
                 </div>
             </div>
 
+            <div style="margin-bottom: 24px; display: none;" id="detVideoContainer">
+                <h4 style="font-size: 12px; text-transform: uppercase; color: #94a3b8; margin-bottom: 8px;">Attached Video Evidence</h4>
+                <div id="detVideoWrapper" style="border-radius: 12px; overflow: hidden; background: #000;">
+                    <!-- JS injected video -->
+                </div>
+            </div>
+
             <div style="margin-bottom: 24px;">
                 <h4 style="font-size: 12px; text-transform: uppercase; color: #94a3b8; margin-bottom: 12px;">Timeline & Updates</h4>
                 <div id="detTimelineContainer" style="display: flex; flex-direction: column; gap: 16px;">
@@ -261,6 +317,16 @@
 </div>
 
 <script>
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     // Inject DB data
     const dbIncidents = @json($incidents);
     // Map DB fields to what JS expects
@@ -285,11 +351,12 @@
             refId: refId,
             sub: inc.subject || inc.sub || 'Untitled Incident',
             type: inc.type || 'General',
-            date: inc.created_at,
+            date: inc.created_at || inc.date,
             updated: inc.updated_at,
             desc: inc.description || inc.desc || 'No description provided.',
             status: (inc.status || 'pending').toLowerCase(),
-            photos: parsedPhotos
+            photos: parsedPhotos,
+            video: inc.video_url || inc.video || null,
         };
     });
 
@@ -321,19 +388,30 @@
             card.className = 'incident-card';
             const statusClass = inc.status || 'pending';
             const shortDesc = inc.desc.length > 80 ? inc.desc.substring(0, 80) + '...' : inc.desc;
+            
+            const mediaBadges = [];
+            if (inc.photos && inc.photos.length > 0) {
+                mediaBadges.push(`<span>📷 ${inc.photos.length} photo${inc.photos.length > 1 ? 's' : ''}</span>`);
+            }
+            if (inc.video) {
+                mediaBadges.push(`<span>🎥 Video</span>`);
+            }
+            const mediaInfo = mediaBadges.length > 0 ? `<span>•</span>${mediaBadges.join(' ')}` : '';
+
             card.innerHTML = `
                 <div class="incident-info">
-                    <span style="font-size: 11px; font-weight: 700; color: #3b82f6; text-transform: uppercase;">${inc.type}</span>
-                    <h3>${inc.sub}</h3>
-                    <p>${shortDesc}</p>
-                    <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px; font-size: 12px; color: #94a3b8; font-weight: 600;">
-                        <span>Ref: ${inc.refId || inc.id}</span>
+                    <span style="font-size: 11px; font-weight: 700; color: #3b82f6; text-transform: uppercase;">${escapeHtml(inc.type)}</span>
+                    <h3>${escapeHtml(inc.sub)}</h3>
+                    <p>${escapeHtml(shortDesc)}</p>
+                    <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px; font-size: 12px; color: #94a3b8; font-weight: 600; flex-wrap: wrap;">
+                        <span>Ref: ${escapeHtml(inc.refId || inc.id)}</span>
                         <span>•</span>
                         <span>${inc.date ? new Date(inc.date).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'}) : 'Recently'}</span>
+                        ${mediaInfo}
                     </div>
                 </div>
                 <div class="incident-status">
-                    <span class="badge-status badge-${statusClass}">${statusClass.charAt(0).toUpperCase() + statusClass.slice(1)}</span>
+                    <span class="badge-status badge-${statusClass}">${escapeHtml(statusClass.charAt(0).toUpperCase() + statusClass.slice(1))}</span>
                     <button class="btn btn-outline" onclick="openDetailsModal('${inc.id}')" style="padding: 4px 12px; font-size: 11px; border-radius: 6px;">View Details</button>
                 </div>
             `;
@@ -353,15 +431,19 @@
         document.getElementById('reportSubject').value = '';
         document.getElementById('reportDesc').value = '';
         document.getElementById('reportPhotos').value = '';
-        document.getElementById('uploadText').style.display = 'block';
-        document.getElementById('uploadPreview').style.display = 'none';
-        uploadedPhotosBase64 = [];
+        selectedPhotoFiles = [];
+        renderPhotoPreview();
+        removeVideo();
+        
         document.querySelectorAll('.category-opt').forEach(opt => opt.classList.remove('selected'));
         document.getElementById('reportType').value = '';
     }
 
     function closeReportModal() {
         window.history.replaceState(null, '', window.location.pathname);
+        if (typeof cancelVideoCompression === 'function') {
+            cancelVideoCompression();
+        }
         document.getElementById('reportModal').style.display = 'none';
     }
 
@@ -371,50 +453,45 @@
         document.getElementById('reportType').value = category;
     }
 
-    let uploadedPhotosBase64 = [];
+    // Photo Upload Handling
+    let selectedPhotoFiles = [];
     const MAX_PHOTOS = 3;
-    const MAX_SIZE_MB = 5;
+    const MAX_PHOTO_MB = 5;
 
     function handleFilesUpload(input) {
         if (!input.files || input.files.length === 0) return;
+        const incoming = Array.from(input.files);
         
-        for (let i = 0; i < input.files.length; i++) {
-            if (uploadedPhotosBase64.length >= MAX_PHOTOS) {
+        for (const file of incoming) {
+            if (selectedPhotoFiles.length >= MAX_PHOTOS) {
                 Swal.fire({ icon: 'warning', text: `You can only upload a maximum of ${MAX_PHOTOS} photos.` });
                 break;
             }
-            
-            const file = input.files[i];
-            if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-                Swal.fire({ icon: 'warning', text: `File ${file.name} exceeds the ${MAX_SIZE_MB}MB limit.` });
+            if (file.size > MAX_PHOTO_MB * 1024 * 1024) {
+                Swal.fire({ icon: 'warning', text: `File "${file.name}" exceeds the ${MAX_PHOTO_MB}MB limit.` });
                 continue;
             }
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                uploadedPhotosBase64.push(e.target.result);
-                renderPreview();
-            };
-            reader.readAsDataURL(file);
+            selectedPhotoFiles.push(file);
         }
-        
-        input.value = ''; // Reset input to allow selecting the same file again if needed
+        input.value = '';
+        renderPhotoPreview();
     }
 
-    function renderPreview() {
+    function renderPhotoPreview() {
         const preview = document.getElementById('uploadPreview');
         const text = document.getElementById('uploadText');
-        
-        if (uploadedPhotosBase64.length > 0) {
+        if (selectedPhotoFiles.length > 0) {
             text.style.display = 'none';
             preview.style.display = 'flex';
-            
-            preview.innerHTML = uploadedPhotosBase64.map((base64, index) => `
-                <div style="position: relative; display: inline-block; margin: 4px;">
-                    <img src="${base64}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 2px solid #e2e8f0;">
-                    <button type="button" onclick="removePhoto(event, ${index})" style="position: absolute; top: -6px; right: -6px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">✕</button>
-                </div>
-            `).join('');
+            preview.innerHTML = selectedPhotoFiles.map((file, index) => {
+                const objectUrl = URL.createObjectURL(file);
+                return `
+                    <div style="position: relative; display: inline-block; margin: 4px;">
+                        <img src="${objectUrl}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 2px solid #e2e8f0;">
+                        <button type="button" onclick="removePhoto(event, ${index})" style="position: absolute; top: -6px; right: -6px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">✕</button>
+                    </div>
+                `;
+            }).join('');
         } else {
             text.style.display = 'block';
             preview.style.display = 'none';
@@ -424,8 +501,419 @@
 
     function removePhoto(event, index) {
         event.stopPropagation();
-        uploadedPhotosBase64.splice(index, 1);
-        renderPreview();
+        selectedPhotoFiles.splice(index, 1);
+        renderPhotoPreview();
+    }
+
+    // ==========================================
+    // Option 2: In-Browser Video Compression Engine
+    // Downscales 1080p/4K phone clips to 720p HD (~1.3 Mbps)
+    // Compresses raw videos up to 100MB down to ~3MB-8MB before sending
+    // ==========================================
+    let selectedVideoFile = null;
+    let activeVideoCompression = null;
+    let isCompressingVideo = false;
+    let pendingSubmitAfterCompression = false;
+    const COMPRESS_THRESHOLD_MB = 8;
+    const MAX_RAW_VIDEO_MB = 100;
+    const MAX_VIDEO_DURATION_SEC = 60;
+
+    function updateCompressProgress(pct) {
+        const bar = document.getElementById('compressProgressBar');
+        const txt = document.getElementById('compressStatusText');
+        if (bar) bar.style.width = pct + '%';
+        if (txt) txt.textContent = `Compressing video... ${pct}%`;
+    }
+
+    function cancelVideoCompression(event) {
+        if (event) event.stopPropagation();
+        if (activeVideoCompression) {
+            activeVideoCompression.cancel();
+        }
+        removeVideo();
+    }
+
+    function removeVideo(event) {
+        if (event) event.stopPropagation();
+        if (activeVideoCompression) {
+            activeVideoCompression.cancel();
+        }
+        selectedVideoFile = null;
+        isCompressingVideo = false;
+        pendingSubmitAfterCompression = false;
+        const input = document.getElementById('reportVideo');
+        if (input) input.value = '';
+        const txt = document.getElementById('videoUploadText');
+        const comp = document.getElementById('videoCompressingState');
+        const prev = document.getElementById('videoUploadPreview');
+        if (txt) txt.style.display = 'block';
+        if (comp) comp.style.display = 'none';
+        if (prev) prev.style.display = 'none';
+    }
+
+    function getVideoDuration(file) {
+        return new Promise((resolve) => {
+            const video = document.createElement('video');
+            video.preload = 'metadata';
+            const url = URL.createObjectURL(file);
+            video.src = url;
+            video.onloadedmetadata = () => {
+                URL.revokeObjectURL(url);
+                resolve(video.duration || 0);
+            };
+            video.onerror = () => {
+                URL.revokeObjectURL(url);
+                resolve(0); // If browser metadata decode fails, resolve 0 and let server inspect
+            };
+        });
+    }
+
+    async function compressVideo(file, duration) {
+        return new Promise(async (resolve, reject) => {
+            const hasMediaRecorder = typeof window.MediaRecorder !== 'undefined';
+            const hasCaptureStream = HTMLCanvasElement.prototype.captureStream || HTMLCanvasElement.prototype.mozCaptureStream;
+            if (!hasMediaRecorder || !hasCaptureStream) {
+                return reject(new Error('UNSUPPORTED_BROWSER'));
+            }
+
+            // Determine best supported mime type
+            const candidateMimes = [
+                'video/mp4;codecs=avc1,mp4a.40.2',
+                'video/mp4',
+                'video/webm;codecs=vp9,opus',
+                'video/webm;codecs=vp8,opus',
+                'video/webm'
+            ];
+            let chosenMime = '';
+            for (const m of candidateMimes) {
+                try {
+                    if (MediaRecorder.isTypeSupported(m)) {
+                        chosenMime = m;
+                        break;
+                    }
+                } catch(e){}
+            }
+            if (!chosenMime) chosenMime = 'video/webm';
+
+            let hiddenContainer = document.getElementById('videoCompressorHidden');
+            if (!hiddenContainer) {
+                hiddenContainer = document.createElement('div');
+                hiddenContainer.id = 'videoCompressorHidden';
+                hiddenContainer.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;';
+                document.body.appendChild(hiddenContainer);
+            }
+            hiddenContainer.innerHTML = '';
+
+            const video = document.createElement('video');
+            video.playsInline = true;
+            video.preload = 'auto';
+            video.crossOrigin = 'anonymous';
+
+            const blobUrl = URL.createObjectURL(file);
+            video.src = blobUrl;
+            hiddenContainer.appendChild(video);
+
+            let audioCtx = null;
+            let isCancelled = false;
+            let watchdogTimer = null;
+            let recorder = null;
+
+            const cleanup = () => {
+                if (watchdogTimer) clearTimeout(watchdogTimer);
+                try { video.pause(); } catch(e){}
+                try { if (recorder && recorder.state !== 'inactive') recorder.stop(); } catch(e){}
+                try { if (audioCtx && audioCtx.state !== 'closed') audioCtx.close(); } catch(e){}
+                try { URL.revokeObjectURL(blobUrl); } catch(e){}
+                if (hiddenContainer) hiddenContainer.innerHTML = '';
+                isCompressingVideo = false;
+                activeVideoCompression = null;
+            };
+
+            activeVideoCompression = {
+                cancel: () => {
+                    isCancelled = true;
+                    cleanup();
+                    reject(new Error('CANCELLED'));
+                }
+            };
+
+            await new Promise((res) => {
+                if (video.readyState >= 1) return res();
+                video.onloadedmetadata = () => res();
+                video.onerror = () => res();
+            });
+
+            if (isCancelled) return;
+
+            const vidDuration = video.duration || duration || 1;
+            
+            // Calculate target dimensions (max 1280px on longest dimension)
+            let origW = video.videoWidth || 1280;
+            let origH = video.videoHeight || 720;
+            let targetW = origW;
+            let targetH = origH;
+            const maxDim = 1280;
+
+            if (targetW > maxDim || targetH > maxDim) {
+                if (targetW >= targetH) {
+                    targetH = Math.round((targetH * maxDim) / targetW);
+                    targetW = maxDim;
+                } else {
+                    targetW = Math.round((targetW * maxDim) / targetH);
+                    targetH = maxDim;
+                }
+            }
+            // Hardware encoders require even pixel dimensions
+            targetW = targetW % 2 === 0 ? targetW : targetW - 1;
+            targetH = targetH % 2 === 0 ? targetH : targetH - 1;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = targetW;
+            canvas.height = targetH;
+            const ctx = canvas.getContext('2d', { alpha: false });
+
+            const canvasStream = canvas.captureStream ? canvas.captureStream(30) : canvas.mozCaptureStream(30);
+
+            // Audio track processing via Web Audio API
+            let combinedStream = canvasStream;
+            try {
+                const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioCtxClass) {
+                    audioCtx = new AudioCtxClass();
+                    if (audioCtx.state === 'suspended') {
+                        await audioCtx.resume();
+                    }
+                    const source = audioCtx.createMediaElementSource(video);
+                    const dest = audioCtx.createMediaStreamDestination();
+                    source.connect(dest);
+                    // Do NOT connect to audioCtx.destination to prevent speaker noise
+                    const audioTracks = dest.stream.getAudioTracks();
+                    if (audioTracks && audioTracks.length > 0) {
+                        combinedStream = new MediaStream([
+                            ...canvasStream.getVideoTracks(),
+                            audioTracks[0]
+                        ]);
+                    }
+                }
+            } catch (audioErr) {
+                console.warn('Audio capture setup failed, continuing with video only:', audioErr);
+            }
+
+            const recordedChunks = [];
+            try {
+                recorder = new MediaRecorder(combinedStream, {
+                    mimeType: chosenMime,
+                    videoBitsPerSecond: 1300000 // 1.3 Mbps
+                });
+            } catch (e) {
+                try {
+                    recorder = new MediaRecorder(combinedStream);
+                } catch (recErr) {
+                    cleanup();
+                    return reject(recErr);
+                }
+            }
+
+            recorder.ondataavailable = (e) => {
+                if (e.data && e.data.size > 0) {
+                    recordedChunks.push(e.data);
+                }
+            };
+
+            recorder.onstop = () => {
+                if (isCancelled) return;
+                cleanup();
+                const outExt = chosenMime.includes('mp4') ? 'mp4' : 'webm';
+                const compressedBlob = new Blob(recordedChunks, { type: chosenMime });
+                const finalFile = new File([compressedBlob], `incident_clip_${Date.now()}.${outExt}`, { type: chosenMime });
+                resolve(finalFile);
+            };
+
+            const renderFrame = () => {
+                if (isCancelled || video.paused || video.ended) return;
+                ctx.drawImage(video, 0, 0, targetW, targetH);
+                const pct = Math.min(99, Math.round((video.currentTime / vidDuration) * 100));
+                updateCompressProgress(pct);
+
+                if ('requestVideoFrameCallback' in video) {
+                    video.requestVideoFrameCallback(renderFrame);
+                } else {
+                    requestAnimationFrame(renderFrame);
+                }
+            };
+
+            video.ontimeupdate = () => {
+                if (video.currentTime >= vidDuration - 0.25) {
+                    if (!video.ended) {
+                        video.pause();
+                        video.onended();
+                    }
+                }
+            };
+
+            video.onended = () => {
+                updateCompressProgress(100);
+                setTimeout(() => {
+                    if (recorder && recorder.state !== 'inactive') {
+                        recorder.stop();
+                    }
+                }, 200);
+            };
+
+            // Watchdog failsafe timer
+            watchdogTimer = setTimeout(() => {
+                if (recorder && recorder.state !== 'inactive') {
+                    console.warn('Compression watchdog safety stop triggered');
+                    recorder.stop();
+                }
+            }, (vidDuration + 6) * 1000);
+
+            recorder.start(250);
+
+            // Attempt unmuted playback for sound capture; fallback to muted if browser blocks
+            video.muted = false;
+            let playPromise = video.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    renderFrame();
+                }).catch(playErr => {
+                    console.warn('Playback with audio blocked by autoplay, retrying muted:', playErr);
+                    video.muted = true;
+                    video.play().then(() => {
+                        renderFrame();
+                    }).catch(fatalErr => {
+                        cleanup();
+                        reject(fatalErr);
+                    });
+                });
+            }
+        });
+    }
+
+    async function handleVideoUpload(input) {
+        if (!input.files || input.files.length === 0) return;
+        const file = input.files[0];
+        
+        // 1. Raw file size check (100MB limit)
+        if (file.size > MAX_RAW_VIDEO_MB * 1024 * 1024) {
+            Swal.fire({ icon: 'warning', text: `Video file "${file.name}" exceeds the ${MAX_RAW_VIDEO_MB}MB limit.` });
+            input.value = '';
+            return;
+        }
+
+        // 2. Format check
+        const validExtensions = ['mp4', 'webm', 'mov'];
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (!validExtensions.includes(ext) && !file.type.startsWith('video/')) {
+            Swal.fire({ icon: 'warning', text: 'Only MP4, WebM, and MOV video formats are allowed.' });
+            input.value = '';
+            return;
+        }
+
+        // 3. Duration check via HTML5 video element
+        const duration = await getVideoDuration(file);
+        if (duration > MAX_VIDEO_DURATION_SEC) {
+            Swal.fire({ 
+                icon: 'warning', 
+                title: 'Video Too Long',
+                text: `Video duration (${Math.round(duration)}s) exceeds the maximum allowed limit of ${MAX_VIDEO_DURATION_SEC} seconds. Please upload a short incident clip.` 
+            });
+            input.value = '';
+            return;
+        }
+
+        const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+        const durFormatted = duration > 0 ? Math.round(duration) + 's' : 'Clip';
+
+        // 4. If file is already small (<= 8MB), accept immediately without compression
+        if (file.size <= COMPRESS_THRESHOLD_MB * 1024 * 1024) {
+            selectedVideoFile = file;
+            document.getElementById('videoFileName').textContent = file.name;
+            document.getElementById('videoMeta').innerHTML = `${durFormatted} &bull; <strong>${sizeMb} MB</strong> (Ready)`;
+            document.getElementById('videoUploadText').style.display = 'none';
+            document.getElementById('videoCompressingState').style.display = 'none';
+            document.getElementById('videoUploadPreview').style.display = 'flex';
+            input.value = '';
+            return;
+        }
+
+        // 5. File is > 8MB: Compress in-browser
+        const hasMediaRecorder = typeof window.MediaRecorder !== 'undefined';
+        const hasCaptureStream = HTMLCanvasElement.prototype.captureStream || HTMLCanvasElement.prototype.mozCaptureStream;
+
+        if (!hasMediaRecorder || !hasCaptureStream) {
+            if (file.size <= 35 * 1024 * 1024) {
+                selectedVideoFile = file;
+                document.getElementById('videoFileName').textContent = file.name;
+                document.getElementById('videoMeta').innerHTML = `${durFormatted} &bull; <strong>${sizeMb} MB</strong> (Direct upload)`;
+                document.getElementById('videoUploadText').style.display = 'none';
+                document.getElementById('videoCompressingState').style.display = 'none';
+                document.getElementById('videoUploadPreview').style.display = 'flex';
+                input.value = '';
+                return;
+            } else {
+                Swal.fire({ 
+                    icon: 'warning', 
+                    title: 'Browser Not Supported',
+                    text: 'Your browser cannot compress large videos. Please choose a video under 35MB or use modern Chrome/Safari/Edge.' 
+                });
+                input.value = '';
+                return;
+            }
+        }
+
+        // Start compression UI
+        isCompressingVideo = true;
+        document.getElementById('videoUploadText').style.display = 'none';
+        document.getElementById('videoUploadPreview').style.display = 'none';
+        document.getElementById('videoCompressingState').style.display = 'block';
+        document.getElementById('compressSizeEstimate').textContent = `Original: ${sizeMb} MB`;
+        updateCompressProgress(0);
+
+        try {
+            const compressedFile = await compressVideo(file, duration);
+            const compMb = (compressedFile.size / (1024 * 1024)).toFixed(1);
+            
+            if (compressedFile.size < file.size) {
+                selectedVideoFile = compressedFile;
+                const savedPct = Math.round((1 - (compressedFile.size / file.size)) * 100);
+                document.getElementById('videoFileName').textContent = file.name;
+                document.getElementById('videoMeta').innerHTML = `${durFormatted} &bull; <strong style="color: #10b981;">${compMb} MB</strong> <span style="color: #059669; font-size: 11px; font-weight: 700;">(${savedPct}% saved from ${sizeMb}MB)</span>`;
+            } else {
+                selectedVideoFile = (file.size <= 35 * 1024 * 1024) ? file : compressedFile;
+                document.getElementById('videoFileName').textContent = file.name;
+                document.getElementById('videoMeta').innerHTML = `${durFormatted} &bull; <strong>${(selectedVideoFile.size / (1024*1024)).toFixed(1)} MB</strong>`;
+            }
+
+            document.getElementById('videoCompressingState').style.display = 'none';
+            document.getElementById('videoUploadPreview').style.display = 'flex';
+
+            if (pendingSubmitAfterCompression) {
+                pendingSubmitAfterCompression = false;
+                submitReport();
+            }
+        } catch (err) {
+            if (err && err.message === 'CANCELLED') {
+                return;
+            }
+            console.error('Compression failed:', err);
+            if (file.size <= 35 * 1024 * 1024) {
+                selectedVideoFile = file;
+                document.getElementById('videoFileName').textContent = file.name;
+                document.getElementById('videoMeta').innerHTML = `${durFormatted} &bull; <strong>${sizeMb} MB</strong> (Original)`;
+                document.getElementById('videoCompressingState').style.display = 'none';
+                document.getElementById('videoUploadPreview').style.display = 'flex';
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Compression Error',
+                    text: 'Could not compress video on this device. Please choose a smaller video clip (under 35MB).'
+                });
+                removeVideo();
+            }
+        } finally {
+            input.value = '';
+        }
     }
 
     let isSubmittingReport = false;
@@ -440,6 +928,17 @@
         if (!subject) { Swal.fire({ icon: 'warning', text: 'Please enter a subject.' }); return; }
         if (!desc) { Swal.fire({ icon: 'warning', text: 'Please enter a description.' }); return; }
 
+        if (isCompressingVideo) {
+            pendingSubmitAfterCompression = true;
+            const submitBtn = document.getElementById('btnSubmitReport') || document.querySelector('#modalFooter .btn-primary');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Optimizing video... submitting soon';
+                submitBtn.style.opacity = '0.7';
+            }
+            return;
+        }
+
         isSubmittingReport = true;
         const submitBtn = document.getElementById('btnSubmitReport') || document.querySelector('#modalFooter .btn-primary');
         if (submitBtn) {
@@ -448,19 +947,25 @@
             submitBtn.style.opacity = '0.7';
         }
 
+        const formData = new FormData();
+        formData.append('subject', subject);
+        formData.append('type', type);
+        formData.append('description', desc);
+        selectedPhotoFiles.forEach(file => {
+            formData.append('photos[]', file);
+        });
+        if (selectedVideoFile) {
+            formData.append('video', selectedVideoFile, selectedVideoFile.name || 'incident_video.mp4');
+        }
+
         try {
             const response = await fetch('/resident/incidents', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                    'Accept': 'application/json'
                 },
-                body: JSON.stringify({
-                    subject: subject,
-                    type: type,
-                    description: desc,
-                    photos: uploadedPhotosBase64
-                })
+                body: formData
             });
 
             const result = await response.json();
@@ -523,6 +1028,20 @@
         } else {
             photoWrapper.style.display = 'none';
         }
+
+        const videoWrapper = document.getElementById('detVideoWrapper');
+        const videoContainer = document.getElementById('detVideoContainer');
+        if (inc.video) {
+            videoWrapper.innerHTML = `
+                <video src="${escapeHtml(inc.video)}" controls preload="metadata" style="width: 100%; max-height: 240px; display: block; border-radius: 8px; background: #000;">
+                    Your browser does not support HTML5 video.
+                </video>
+            `;
+            videoContainer.style.display = 'block';
+        } else {
+            videoWrapper.innerHTML = '';
+            videoContainer.style.display = 'none';
+        }
         
         const timelineContainer = document.getElementById('detTimelineContainer');
         let timelineHtml = '';
@@ -557,12 +1076,13 @@
         }
         
         timelineContainer.innerHTML = timelineHtml;
-        
         document.getElementById('detailsModal').style.display = 'flex';
     }
 
     function closeDetailsModal() {
         window.history.replaceState(null, '', window.location.pathname);
+        const v = document.querySelector('#detVideoWrapper video');
+        if (v) v.pause();
         document.getElementById('detailsModal').style.display = 'none';
     }
 
@@ -574,12 +1094,12 @@
     function closeFullscreenImage() {
         document.getElementById('fullscreenImageViewer').style.display = 'none';
     }
+
     window.addEventListener('DOMContentLoaded', () => {
         const params = new URLSearchParams(window.location.search);
         if (params.get('action') === 'report') {
             openReportModal();
         } else if (params.get('incident')) {
-            // Give mappedIncidents a moment to be available
             setTimeout(() => {
                 openDetailsModal(params.get('incident'));
             }, 100);

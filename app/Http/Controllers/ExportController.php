@@ -186,7 +186,7 @@ class ExportController extends Controller
             $watUsage = 'N/A';
             $watMinM3 = \App\Models\Setting::find('water_min_m3')?->value ?? 10;
             $watMinRate = \App\Models\Setting::find('water_min_rate')?->value ?? 250;
-            $watExcessRate = \App\Models\Setting::find('water_rate')?->value ?? 30;
+            $watExcessRate = \App\Models\Setting::find('water_rate')?->value ?? 15;
             $watAmount = 'N/A';
             $watPrevBal = 'N/A';
             $watPenalty = 'N/A';
@@ -203,7 +203,11 @@ class ExportController extends Controller
                 $watPrevRead = $waterBill->previous_reading;
                 $watCurrRead = $waterBill->current_reading;
                 $watUsage = $waterBill->usage_value;
-                $watExcess = $watUsage > $watMinM3 ? ($watUsage - $watMinM3) * $watExcessRate : 0;
+                $excessM3 = max(0, (float)$watUsage - (float)$watMinM3);
+                if ($excessM3 > 0 && (float)$waterBill->amount > (float)$watMinRate) {
+                    $watExcessRate = round(((float)$waterBill->amount - (float)$watMinRate) / $excessM3, 2);
+                }
+                $watExcess = $excessM3 * $watExcessRate;
                 $watAmount = $waterBill->amount;
                 $watPrevBal = $waterBill->previous_balance;
                 $watPenalty = ($watAmount + $watPrevBal) * 0.05;

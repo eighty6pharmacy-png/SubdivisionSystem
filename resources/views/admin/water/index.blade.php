@@ -1431,7 +1431,7 @@
         
         let minM3 = bill.min_m3 || 10;
         let minRate = bill.min_rate || 250;
-        let excessRate = bill.excess_rate || 25;
+        let excessRate = bill.excess_rate || currentRate;
         
         let minCharge = minRate; // base minimum
         let excessCharge = usageM3 > minM3 ? (usageM3 - minM3) * excessRate : 0;
@@ -1741,7 +1741,7 @@
         const dueDate = bill.due || 'N/A';
         const minM3 = bill.min_m3 || 10;
         const minRate = bill.min_rate || 250;
-        const excessRate = bill.excess_rate || 25;
+        const excessRate = bill.excess_rate || currentRate;
         const excessCharge = usageM3 > minM3 ? (usageM3 - minM3) * excessRate : 0;
         const currentCharges = minRate + excessCharge;
         const amountBeforeDue = currentCharges + prevBalance;
@@ -1764,7 +1764,7 @@
         ` : '';
 
         const excessRowHtml = excessCharge > 0 ? `
-            <tr><td>Excess Consumption (${usageM3 - minM3}m³ @ ₱${excessRate}/m³)</td><td class="text-right">₱${excessCharge.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
+            <tr><td>Excess Consumption (${usageM3 - minM3}m³ x ₱${excessRate}/m³)</td><td class="text-right">₱${excessCharge.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
         ` : '';
 
         const html = `<!DOCTYPE html>
@@ -1780,8 +1780,9 @@
     margin: 0 auto;
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     color: #000;
-    font-size: 13px;
-    padding: 12mm 15mm;
+    font-size: 11px;
+    line-height: 1.3;
+    padding: 8mm 12mm;
     background: #fff;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
@@ -1790,42 +1791,42 @@
   .header {
     text-align: center;
     border-bottom: 2px solid #000;
-    padding-bottom: 12px;
-    margin-bottom: 18px;
+    padding-bottom: 6px;
+    margin-bottom: 10px;
     position: relative;
   }
   .header h1 {
     color: #000;
     margin: 0;
-    font-size: 22px;
+    font-size: 17px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
   .header p {
-    margin: 4px 0 0;
+    margin: 2px 0 0;
     color: #000;
-    font-size: 12px;
+    font-size: 10.5px;
   }
   .watermark {
     position: absolute;
-    top: 8px;
-    right: 12px;
-    border: 3px solid ${statusColor};
+    top: 2px;
+    right: 8px;
+    border: 2px solid ${statusColor};
     color: ${statusColor};
-    padding: 6px 14px;
-    font-size: 22px;
+    padding: 4px 10px;
+    font-size: 16px;
     font-weight: bold;
-    border-radius: 6px;
-    transform: rotate(12deg);
+    border-radius: 4px;
+    transform: rotate(8deg);
     opacity: 0.85;
-    letter-spacing: 2px;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
   }
-  .row { width: 100%; margin-bottom: 16px; }
+  .row { width: 100%; margin-bottom: 10px; }
   .col-half { width: 48%; display: inline-block; vertical-align: top; }
   .box {
     border: 1px solid #000;
-    padding: 12px;
+    padding: 6px 10px;
     border-radius: 4px;
     background: #fff;
     box-sizing: border-box;
@@ -1833,37 +1834,38 @@
   .box h3 {
     margin-top: 0;
     border-bottom: 1px solid #000;
-    padding-bottom: 5px;
-    font-size: 14px;
+    padding-bottom: 3px;
+    margin-bottom: 4px;
+    font-size: 11.5px;
     color: #000;
     text-transform: uppercase;
   }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-  th, td { padding: 7px 9px; border: 1px solid #000; color: #000; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  th, td { padding: 4px 6px; border: 1px solid #000; color: #000; font-size: 10.5px; }
   th { text-align: left; color: #000; background: #f0f0f0; font-weight: bold; }
   .text-right { text-align: right; }
   .fw-bold { font-weight: bold; }
   .total-row td {
     border-top: 2px solid #000;
     border-bottom: 2px solid #000;
-    font-size: 14px;
+    font-size: 11.5px;
     font-weight: bold;
     color: #000;
     background: #f5f5f5;
   }
   .highlight-row td {
-    font-size: 13px;
+    font-size: 10.5px;
     font-weight: bold;
     color: #000;
     background: #fafafa;
   }
   .footer {
-    margin-top: 24px;
+    margin-top: 14px;
     text-align: center;
-    font-size: 12px;
+    font-size: 10px;
     color: #000;
     border-top: 1px solid #000;
-    padding-top: 12px;
+    padding-top: 8px;
   }
 </style>
 </head>
@@ -1878,24 +1880,24 @@
   <div class="col-half box" style="margin-right:2%;">
     <h3>Account Details</h3>
     <table style="border:none;margin-bottom:0;">
-      <tr><td style="padding:4px;border:none;width:42%;"><strong>Name:</strong></td><td style="padding:4px;border:none;">${resident}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Address:</strong></td><td style="padding:4px;border:none;">${lot}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Date Issued:</strong></td><td style="padding:4px;border:none;">${issuedDate}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Due Date:</strong></td><td style="padding:4px;border:none;font-weight:bold;">${dueDate}</td></tr>
+      <tr><td style="padding:2px 4px;border:none;width:42%;"><strong>Name:</strong></td><td style="padding:2px 4px;border:none;">${resident}</td></tr>
+      <tr><td style="padding:2px 4px;border:none;"><strong>Address:</strong></td><td style="padding:2px 4px;border:none;">${lot}</td></tr>
+      <tr><td style="padding:2px 4px;border:none;"><strong>Date Issued:</strong></td><td style="padding:2px 4px;border:none;">${issuedDate}</td></tr>
+      <tr><td style="padding:2px 4px;border:none;"><strong>Due Date:</strong></td><td style="padding:2px 4px;border:none;font-weight:bold;">${dueDate}</td></tr>
       ${paidRowsHtml}
     </table>
   </div>
   <div class="col-half box">
     <h3>Meter Information</h3>
     <table style="border:none;margin-bottom:0;">
-      <tr><td style="padding:4px;border:none;width:55%;"><strong>Previous Reading:</strong></td><td style="padding:4px;border:none;text-align:right;">${prevReading}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Current Reading:</strong></td><td style="padding:4px;border:none;text-align:right;">${currReading}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Consumption:</strong></td><td style="padding:4px;border:none;text-align:right;font-weight:bold;">${usageM3} m³</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Min. Charge (First ${minM3}m³):</strong></td><td style="padding:4px;border:none;text-align:right;">₱${minRate.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
+      <tr><td style="padding:2px 4px;border:none;width:55%;"><strong>Previous Reading:</strong></td><td style="padding:2px 4px;border:none;text-align:right;">${prevReading}</td></tr>
+      <tr><td style="padding:2px 4px;border:none;"><strong>Current Reading:</strong></td><td style="padding:2px 4px;border:none;text-align:right;">${currReading}</td></tr>
+      <tr><td style="padding:2px 4px;border:none;"><strong>Consumption:</strong></td><td style="padding:2px 4px;border:none;text-align:right;font-weight:bold;">${usageM3} m³</td></tr>
+      <tr><td style="padding:2px 4px;border:none;"><strong>Min. Charge (First ${minM3}m³):</strong></td><td style="padding:2px 4px;border:none;text-align:right;">₱${minRate.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
     </table>
   </div>
 </div>
-<h3 style="color:#000;border-bottom:1px solid #000;padding-bottom:5px;margin:18px 0 10px 0;font-size:14px;text-transform:uppercase;">Billing Summary</h3>
+<h3 style="color:#000;border-bottom:1px solid #000;padding-bottom:3px;margin:10px 0 6px 0;font-size:11.5px;text-transform:uppercase;">Billing Summary</h3>
 <table>
   <thead><tr><th>Description</th><th class="text-right">Amount (PHP)</th></tr></thead>
   <tbody>
