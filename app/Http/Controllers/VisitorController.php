@@ -141,13 +141,14 @@ class VisitorController extends Controller
         ]);
 
         $passUrl = url('/v/' . $token);
+        $smsPassUrl = preg_replace('#^https?://#', '', $passUrl);
 
         // Send SMS and Push Notification to Resident
         if ($visitor->host) {
             if ($visitor->host->contact_number) {
                 $hostName = $visitor->host->name;
                 $visName = $visitor->visitor_name;
-                $message = "Althesa Subd: Visitor request for {$visName} is Approved. PIN: {$pin}. Pass & route link: {$passUrl}. Please forward to your visitor.";
+                $message = "Althesa Subd: Visitor request for {$visName} is Approved. PIN: {$pin}. Pass & route link: {$smsPassUrl}. Please forward to your visitor.";
                 try {
                     \App\Helpers\SmsHelper::sendSms($visitor->host->contact_number, $message);
                 } catch (\Throwable $e) {
@@ -166,7 +167,7 @@ class VisitorController extends Controller
         if (!empty($visitor->contact_number)) {
             $visName = $visitor->visitor_name;
             $hostName = $visitor->host ? $visitor->host->name : ($visitor->host_name ?: 'Resident Host');
-            $visitorMessage = "Althesa Subd: Hello {$visName}, your visitor pass from {$hostName} is Approved! Gate PIN: {$pin}. Show this PIN to the guard upon arrival. View your pass & route map: {$passUrl}";
+            $visitorMessage = "Althesa Subd: Hello {$visName}, your visitor pass from {$hostName} is Approved! Gate PIN: {$pin}. Show this PIN to the guard upon arrival. View your pass & route map: {$smsPassUrl}";
 
             try {
                 \App\Helpers\SmsHelper::sendSms($visitor->contact_number, $visitorMessage);
