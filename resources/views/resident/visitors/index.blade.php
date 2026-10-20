@@ -24,7 +24,7 @@
                 <div>
                     <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Visitor Mobile Number (Optional)</label>
                     <input type="tel" id="visContact" class="filter-select" style="width: 100%; margin-top: 4px;" placeholder="e.g. 09123456789">
-                    <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">* If provided, the PIN and direct map link will be texted to this number upon approval.</div>
+                    <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">* If provided, the Gate PIN and address will be texted upon approval. You can also copy and send the interactive pass link from this page.</div>
                 </div>
                 <div>
                     <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Purpose of Visit</label>
@@ -136,11 +136,11 @@
                     const contactInfo = pin.contact_number ? `<div style="font-size: 11px; color: #0284c7; font-weight: 600; margin-top: 2px;">📞 ${pin.contact_number}</div>` : '';
                     const passFullUrl = pin.access_token ? `${window.location.origin}/v/${pin.access_token}` : '';
                     const directPassLink = (pin.status === 'Approved' || pin.status === 'Entered') && pin.access_token ? `
-                        <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px;">
-                            <button type="button" onclick="copyPassLink('${passFullUrl}')" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 6px; padding: 3px 8px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; width: fit-content;" title="Copy direct link to send to visitor">
-                                📋 Copy Link
+                        <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
+                            <button type="button" onclick="copyPassLink('${passFullUrl}', '${pin.pin || ''}', '${(pin.visitor || pin.visitor_name || 'Guest').replace(/'/g, "\\'")}')" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="Copy pass link or invite message">
+                                📋 Share Pass Link
                             </button>
-                            <a href="/v/${pin.access_token}" target="_blank" style="font-size: 11px; color: #0284c7; text-decoration: none; font-weight: 700;">Open Pass ↗</a>
+                            <a href="/v/${pin.access_token}" target="_blank" style="font-size: 11px; color: #0284c7; text-decoration: none; font-weight: 700; padding: 4px 6px;">Open Pass ↗</a>
                         </div>
                     ` : '';
 
@@ -164,17 +164,47 @@
             }).catch(err => console.error(err));
     }
 
-    function copyPassLink(url) {
+    function copyPassLink(url, pinCode, visitorName) {
         if (!url) return;
-        navigator.clipboard.writeText(url).then(() => {
-            if (window.pushSystemNotification) {
-                window.pushSystemNotification("Link Copied", "Pass link copied! Forward it to your visitor on Messenger, WhatsApp, or SMS.", "Just now", false);
-            } else {
-                Swal.fire({ icon: 'success', title: 'Pass Link Copied!', text: 'You can now paste and send this link to your visitor via Messenger, WhatsApp, or SMS.', timer: 2000, showConfirmButton: false });
-            }
-        }).catch(() => {
-            prompt('Copy this visitor pass link:', url);
-        });
+        
+        const inviteMessage = `Althesa Subd (Zone 1, Tagbong, Pili): Hello ${visitorName || 'Guest'}, your visitor pass is Approved! Gate PIN: ${pinCode || ''}. View your digital pass & interactive route map: ${url}`;
+
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: 'Share Visitor Pass',
+                html: `
+                    <div style="text-align: left; font-size: 13px; color: #334155;">
+                        <p style="margin-bottom: 8px;">Copy the direct link or copy the complete invite text to forward via <strong>Messenger, Viber, WhatsApp, or SMS</strong>:</p>
+                        <div style="margin-bottom: 12px;">
+                            <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Direct Pass URL:</label>
+                            <input type="text" value="${url}" readonly style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc; font-family: monospace; margin-top: 4px;">
+                        </div>
+                    </div>
+                `,
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonText: '📋 Copy Link',
+                cancelButtonText: '💬 Copy Full Invite',
+                confirmButtonColor: '#0284c7',
+                cancelButtonColor: '#059669',
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    navigator.clipboard.writeText(url).then(() => {
+                        Swal.fire({ icon: 'success', title: 'Pass Link Copied!', text: 'Direct pass link copied to clipboard.', timer: 1800, showConfirmButton: false });
+                    });
+                } else if (result.dismiss === Swal.DismissReason.cancel) {
+                    navigator.clipboard.writeText(inviteMessage).then(() => {
+                        Swal.fire({ icon: 'success', title: 'Full Invite Copied!', text: 'Complete invite message copied! Paste it into Messenger, Viber, or SMS.', timer: 2000, showConfirmButton: false });
+                    });
+                }
+            });
+        } else {
+            navigator.clipboard.writeText(url).then(() => {
+                alert('Pass link copied to clipboard!');
+            }).catch(() => {
+                prompt('Copy this visitor pass link:', url);
+            });
+        }
     }
 
     function copyToClipboard(text) {

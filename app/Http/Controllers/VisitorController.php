@@ -141,21 +141,9 @@ class VisitorController extends Controller
         ]);
 
         $passUrl = url('/v/' . $token);
-        $smsPassUrl = preg_replace('#^https?://#', '', $passUrl);
 
-        // Send SMS and Push Notification to Resident
+        // Always notify the resident in-app (web & push notification)
         if ($visitor->host) {
-            if ($visitor->host->contact_number) {
-                $hostName = $visitor->host->name;
-                $visName = $visitor->visitor_name;
-                $message = "Althesa Subd: Visitor request for {$visName} is Approved. PIN: {$pin}. Pass & route link: {$smsPassUrl}. Please forward to your visitor.";
-                try {
-                    \App\Helpers\SmsHelper::sendSms($visitor->host->contact_number, $message);
-                } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::warning('Failed sending host SMS: ' . $e->getMessage());
-                }
-            }
-
             $visitor->host->notify(new \App\Notifications\WebAndPushNotification(
                 'Visitor Approved',
                 "Your visitor request for {$visitor->visitor_name} has been approved. PIN: {$pin}",
@@ -163,16 +151,27 @@ class VisitorController extends Controller
             ));
         }
 
-        // Send SMS directly to Visitor if contact_number was provided
+        // SMS Dispatch Logic: Send exactly ONE SMS to prevent duplicates and multiple prompts.
+        // If the resident provided the visitor's mobile number, send directly to the visitor.
+        // Otherwise, send to the resident host so they have the PIN.
         if (!empty($visitor->contact_number)) {
             $visName = $visitor->visitor_name;
             $hostName = $visitor->host ? $visitor->host->name : ($visitor->host_name ?: 'Resident Host');
-            $visitorMessage = "Althesa Subd: Hello {$visName}, your visitor pass from {$hostName} is Approved! Gate PIN: {$pin}. Show this PIN to the guard upon arrival. View your pass & route map: {$smsPassUrl}";
+            $visitorMessage = "Althesa Subd (Zone 1, Tagbong, Pili): Hello {$visName}, your visitor pass from {$hostName} is Approved! Gate PIN: {$pin}. Show this PIN to the guard upon arrival.";
 
             try {
                 \App\Helpers\SmsHelper::sendSms($visitor->contact_number, $visitorMessage);
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning('Failed sending visitor SMS: ' . $e->getMessage());
+            }
+        } elseif ($visitor->host && !empty($visitor->host->contact_number)) {
+            $visName = $visitor->visitor_name;
+            $message = "Althesa Subd (Zone 1, Tagbong, Pili): Visitor request for {$visName} is Approved. Gate PIN: {$pin}. Please share this PIN with your visitor.";
+
+            try {
+                \App\Helpers\SmsHelper::sendSms($visitor->host->contact_number, $message);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Failed sending host SMS: ' . $e->getMessage());
             }
         }
 

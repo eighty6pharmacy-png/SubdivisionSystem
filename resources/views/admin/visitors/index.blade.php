@@ -191,7 +191,7 @@
                             <div style="background: #f8fafc; border-radius: 8px; padding: 10px 14px; text-align: left; font-size: 13px; color: #475569; border: 1px solid #e2e8f0;">
                                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
                                     <span>📱</span>
-                                    <span><strong>SMS Dispatched:</strong> PIN and digital pass link sent to resident and visitor.</span>
+                                    <span><strong>SMS Dispatched:</strong> Gate Clearance PIN and location sent to resident and visitor.</span>
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <span>🛡️</span>

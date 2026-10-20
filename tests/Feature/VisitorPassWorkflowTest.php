@@ -84,10 +84,56 @@ class VisitorPassWorkflowTest extends TestCase
         $response->assertStatus(200);
         $response->assertJson(['success' => true]);
 
+        // Exactly ONE SMS should be sent to TextBee directly for the visitor (no duplicates)
+        $textBeeRequests = collect(\Illuminate\Support\Facades\Http::recorded())->filter(function ($pair) {
+            return str_contains($pair[0]->url(), 'api.textbee.dev');
+        });
+        $this->assertCount(1, $textBeeRequests);
+        $this->assertTrue(in_array('09193334444', $textBeeRequests->first()[0]['recipients']));
+
         $visitor->refresh();
         $this->assertSame('Approved', $visitor->status);
         $this->assertNotNull($visitor->pin);
         $this->assertSame(6, strlen($visitor->pin));
+    }
+
+    public function test_admin_approval_sends_single_sms_to_resident_when_visitor_contact_is_empty(): void
+    {
+        Http::fake([
+            'api.textbee.dev/*' => Http::response(['status' => 'success'], 200),
+            'onesignal.com/*' => Http::response(['id' => 'fake_onesignal_id'], 200),
+        ]);
+
+        $admin = User::factory()->create(['name' => 'Admin User']);
+        $admin->assignRole('Admin');
+
+        $resident = User::factory()->create([
+            'name' => 'Maria Santos',
+            'contact_number' => '09181112222',
+        ]);
+        $resident->assignRole('Resident');
+
+        $visitor = Visitor::create([
+            'resident_id' => $resident->id,
+            'host_name' => $resident->name,
+            'visitor_name' => 'John Guest',
+            'contact_number' => null, // No visitor contact number provided
+            'purpose' => 'Family Visit',
+            'validity' => 'Today',
+            'status' => 'Pending',
+            'type' => 'Pre-registered',
+            'access_token' => 'sample_token_empty_contact_12345',
+        ]);
+
+        $response = $this->actingAs($admin)->putJson("/api/visitors/{$visitor->id}/approve");
+        $response->assertStatus(200);
+
+        // Exactly ONE SMS should be sent to TextBee for the resident host
+        $textBeeRequests = collect(\Illuminate\Support\Facades\Http::recorded())->filter(function ($pair) {
+            return str_contains($pair[0]->url(), 'api.textbee.dev');
+        });
+        $this->assertCount(1, $textBeeRequests);
+        $this->assertTrue(in_array('09181112222', $textBeeRequests->first()[0]['recipients']));
     }
 
     public function test_direct_pass_view_loads_for_approved_visitor_without_requiring_pin_input(): void
