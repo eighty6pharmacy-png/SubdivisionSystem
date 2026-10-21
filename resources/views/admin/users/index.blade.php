@@ -215,15 +215,15 @@
 
             <div style="display: flex; gap: 12px;">
                 <div style="flex: 1;">
-                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">First Name</label>
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">First Name *</label>
                     <input type="text" id="userFirstName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="First name">
                 </div>
                 <div style="flex: 1;">
-                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Middle Name</label>
-                    <input type="text" id="userMiddleName" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Optional">
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Middle Name *</label>
+                    <input type="text" id="userMiddleName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Initial or name">
                 </div>
                 <div style="flex: 1;">
-                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Last Name</label>
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Last Name *</label>
                     <input type="text" id="userLastName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Last name">
                 </div>
             </div>
@@ -349,15 +349,15 @@
     <input type="hidden" id="editUserDbId">
             <div style="display: flex; gap: 12px;">
                 <div style="flex: 1;">
-                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">First Name</label>
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">First Name *</label>
                     <input type="text" id="editUserFirstName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
                 </div>
                 <div style="flex: 1;">
-                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Middle Name</label>
-                    <input type="text" id="editUserMiddleName" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Optional">
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Middle Name *</label>
+                    <input type="text" id="editUserMiddleName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Initial or name">
                 </div>
                 <div style="flex: 1;">
-                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Last Name</label>
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Last Name *</label>
                     <input type="text" id="editUserLastName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
                 </div>
             </div>
@@ -562,7 +562,7 @@
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; font-size: 12px; color: #475569; line-height: 1.5;">
                 <div style="font-weight: 700; color: #334155; margin-bottom: 6px;">Required columns</div>
                 <code style="font-size: 11px;">first_name, middle_name, last_name, email, contact_number, role, block, lot</code>
-                <div style="margin-top: 8px;"><strong>Residents:</strong> include <code>block</code> and <code>lot</code>. <code>middle_name</code> is optional.</div>
+                <div style="margin-top: 8px;"><strong>Residents:</strong> include <code>block</code> and <code>lot</code>. <code>middle_name</code> is mandatory (initial or name).</div>
                 <div><strong>Staff:</strong> <code>Security Guard</code> or <code>Finance Officer</code>. Leave block and lot blank.</div>
                 <div><strong>Buyers</strong> are added from the buyer master list, not this file.</div>
                 <a href="/admin/users/import/template" class="btn btn-outline" style="margin-top: 12px; width: 100%; justify-content: center; padding: 10px; border-radius: 10px; font-size: 12px; font-weight: 700; text-decoration: none;">Download CSV template</a>
@@ -581,7 +581,7 @@
     </div>
 </div>
 
-<script src="{{ asset('js/gis-dropdowns.js') }}"></script>
+<script src="{{ asset('js/gis-dropdowns.js') }}?v={{ file_exists(public_path('js/gis-dropdowns.js')) ? filemtime(public_path('js/gis-dropdowns.js')) : time() }}"></script>
 <script>
     const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
     const PH_MOBILE_PATTERN = /^(09\d{9}|\+639\d{9}|639\d{9})$/;
@@ -1061,6 +1061,20 @@
         const firstName = document.getElementById('editUserFirstName').value.trim();
         const middleName = document.getElementById('editUserMiddleName').value.trim();
         const lastName = document.getElementById('editUserLastName').value.trim();
+
+        if (!firstName) {
+            Swal.fire({ icon: 'warning', title: 'First Name Required', text: 'First name is mandatory.' });
+            return;
+        }
+        if (!middleName) {
+            Swal.fire({ icon: 'warning', title: 'Middle Name Required', text: 'Middle name is mandatory (enter middle name or initial).' });
+            return;
+        }
+        if (!lastName) {
+            Swal.fire({ icon: 'warning', title: 'Last Name Required', text: 'Last name is mandatory.' });
+            return;
+        }
+
         const emailRaw = document.getElementById('editUserEmail').value;
         const contactRaw = document.getElementById('editUserContact').value;
         const validatedContact = validateUserEmailAndContact(emailRaw, contactRaw);
@@ -1239,6 +1253,20 @@
         const firstName = document.getElementById('userFirstName').value.trim();
         const middleName = document.getElementById('userMiddleName').value.trim();
         const lastName = document.getElementById('userLastName').value.trim();
+
+        if (!firstName) {
+            Swal.fire({ icon: 'warning', title: 'First Name Required', text: 'First name is mandatory.' });
+            return;
+        }
+        if (!middleName) {
+            Swal.fire({ icon: 'warning', title: 'Middle Name Required', text: 'Middle name is mandatory (enter middle name or initial).' });
+            return;
+        }
+        if (!lastName) {
+            Swal.fire({ icon: 'warning', title: 'Last Name Required', text: 'Last name is mandatory.' });
+            return;
+        }
+
         const role = document.getElementById('newRole').value;
         const emailRaw = document.getElementById('userEmail').value;
         const contactRaw = document.getElementById('userContact').value;

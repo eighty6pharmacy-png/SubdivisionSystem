@@ -10,6 +10,22 @@
     <script src="{{ asset('js/subdivision-store.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="{{ asset('css/views/layout-resident.css') }}">
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.init({
+          appId: "{{ config('services.onesignal.app_id') }}",
+          allowLocalhostAsSecureOrigin: true,
+        });
+        
+        OneSignal.Slidedown.promptPush();
+
+        @if(auth()->check())
+            OneSignal.login("{{ auth()->user()->id }}");
+        @endif
+      });
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="admin-body">

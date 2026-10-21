@@ -36,6 +36,7 @@ class ResidentMultiLotTest extends TestCase
 
         $response = $this->actingAs($admin)->putJson("/admin/users/{$resident->id}", [
             'first_name' => $resident->first_name,
+            'middle_name' => 'M.',
             'last_name' => $resident->last_name,
             'email' => $resident->email,
             'contact_number' => $resident->contact_number,

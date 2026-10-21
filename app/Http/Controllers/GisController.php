@@ -11,15 +11,27 @@ class GisController extends Controller
     {
         $lots = Lot::with(['users' => function($q) {
             $q->where('status', '!=', 'Archived');
-        }, 'buyer.user', 'reservations', 'utilityBills'])->get();
+        }, 'buyer.user', 'reservations.buyer', 'utilityBills'])->get();
         
         $lotData = [];
         foreach ($lots as $lot) {
             $user = $lot->users->first();
-            $hasActiveBuyer = BuyerMasterList::where('lot_id', $lot->id)->exists()
-                || $lot->reservations->where('status', '!=', \App\Enums\ReservationStatus::Cancelled->value)->isNotEmpty();
+            $activeReservation = $lot->reservations->whereIn('status', \App\Enums\ReservationStatus::activeValues())->first();
+            $hasActiveBuyer = BuyerMasterList::where('lot_id', $lot->id)->exists() || $activeReservation !== null;
             $isNotConnected = $user === null && ! $hasActiveBuyer;
-            $owner = $user ? $user->name : 'Unassigned';
+
+            $status = $lot->status;
+            if ($user !== null) {
+                $status = in_array($lot->status, ['Available', 'Vacant Lot', 'Unassigned'], true) ? 'Occupied' : $lot->status;
+                $owner = $user->name;
+            } elseif ($activeReservation !== null || $lot->status === \App\Enums\LotStatus::Reserved->value) {
+                $status = 'Reserved';
+                $resBuyer = $activeReservation?->buyer ?? $lot->buyer;
+                $owner = $resBuyer ? ('Reserved (' . trim($resBuyer->first_name . ' ' . $resBuyer->last_name) . ')') : 'Reserved';
+            } else {
+                $owner = 'Unassigned';
+            }
+
             $userId = $user ? $user->id : null;
             $userEmail = $user ? $user->email : '';
             $userContact = $user ? $user->contact_number : '';
@@ -32,7 +44,9 @@ class GisController extends Controller
                 'id' => $lot->id,
                 'block' => $lot->block,
                 'lot_number' => $lot->lot_number,
-                'status' => $lot->status,
+                'status' => $status,
+                'contract_price' => $lot->contract_price !== null ? (float) $lot->contract_price : null,
+                'reservation_amount' => $activeReservation ? (float) $activeReservation->amount : null,
                 'lot_area' => $lot->lot_area,
                 'floor_area' => $lot->floor_area,
                 'description' => $lot->description,

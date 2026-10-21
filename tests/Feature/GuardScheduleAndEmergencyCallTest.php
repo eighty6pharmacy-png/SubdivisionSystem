@@ -136,6 +136,7 @@ class GuardScheduleAndEmergencyCallTest extends TestCase
 
         $response = $this->actingAs($admin)->postJson('/admin/users', [
             'first_name' => 'Ramon',
+            'middle_name' => 'F.',
             'last_name' => 'Magsaysay',
             'email' => 'ramon.guard@gmail.com',
             'contact_number' => '09175551234',
@@ -259,6 +260,7 @@ class GuardScheduleAndEmergencyCallTest extends TestCase
 
         $response = $this->actingAs($admin)->postJson('/admin/users', [
             'first_name' => 'Mateo',
+            'middle_name' => 'S.',
             'last_name' => 'Guard',
             'email' => 'mateo.guard@gmail.com',
             'contact_number' => '09183334444',
@@ -293,6 +295,7 @@ class GuardScheduleAndEmergencyCallTest extends TestCase
 
         $updateResponse = $this->actingAs($admin)->putJson("/admin/users/{$user->id}", [
             'first_name' => 'Mateo',
+            'middle_name' => 'S.',
             'last_name' => 'Guard',
             'email' => 'mateo.guard@gmail.com',
             'contact_number' => '09183334444',
@@ -354,6 +357,7 @@ class GuardScheduleAndEmergencyCallTest extends TestCase
 
         $response = $this->actingAs($admin)->postJson('/admin/users', [
             'first_name' => 'Carlo',
+            'middle_name' => 'B.',
             'last_name' => 'Diaz',
             'email' => 'carlo.guard@gmail.com',
             'contact_number' => '09174445555',

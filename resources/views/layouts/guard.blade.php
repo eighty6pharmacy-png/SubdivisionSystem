@@ -8,6 +8,22 @@
     <link rel="stylesheet" href="{{ asset('css/app.css') }}">
     <link rel="stylesheet" href="{{ asset('css/admin.css') }}">
     <link rel="stylesheet" href="{{ asset('css/views/layout-guard.css') }}">
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.init({
+          appId: "{{ config('services.onesignal.app_id') }}",
+          allowLocalhostAsSecureOrigin: true,
+        });
+        
+        OneSignal.Slidedown.promptPush();
+
+        @if(auth()->check())
+            OneSignal.login("{{ auth()->user()->id }}");
+        @endif
+      });
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="admin-body">

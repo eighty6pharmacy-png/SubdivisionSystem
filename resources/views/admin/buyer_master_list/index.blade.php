@@ -160,7 +160,13 @@
                                         <div style="margin-top: 4px; max-width: 220px; font-size: 11px; color: #92400e;">{{ $buyer->lot_link_warning }}</div>
                                     @endif
                                 </td>
-                                <td style="font-family: monospace;">₱{{ number_format($buyer->financingRecord?->contract_price ?? 0, 2) }}</td>
+                                @php
+                                    $tcpDisplay = (float) ($buyer->financingRecord?->contract_price ?? 0);
+                                    if ($tcpDisplay <= 0 && $buyer->lot?->contract_price) {
+                                        $tcpDisplay = (float) $buyer->lot->contract_price;
+                                    }
+                                @endphp
+                                <td style="font-family: monospace;">₱{{ number_format($tcpDisplay, 2) }}</td>
                                 <td style="font-family: monospace;">₱{{ number_format($buyer->financingRecord?->paid_by_vendee_equity ?? 0, 2) }}</td>
                                 @php
                                     $reservation = $buyer->reservations

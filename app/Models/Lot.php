@@ -20,12 +20,14 @@ class Lot extends Model
         'tct_no',
         'pid',
         'tax_dec_no',
+        'contract_price',
     ];
 
     protected function casts(): array
     {
         return [
             'provider_managed' => 'boolean',
+            'contract_price' => 'decimal:2',
         ];
     }
 

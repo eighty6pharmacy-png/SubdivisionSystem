@@ -36,7 +36,7 @@ return new class extends Migration
         ],
         'lots' => [
             'id', 'block', 'lot_number', 'status', 'provider_managed',
-            'lot_area', 'floor_area', 'description', 'tct_no', 'pid', 'tax_dec_no',
+            'lot_area', 'floor_area', 'description', 'tct_no', 'pid', 'tax_dec_no', 'contract_price',
             'created_at', 'updated_at',
         ],
         'resident_lots' => ['resident_id', 'lot_id', 'created_at', 'updated_at'],
@@ -143,6 +143,14 @@ return new class extends Migration
                 $table->string('tct_no')->nullable();
                 $table->string('pid')->nullable();
                 $table->string('tax_dec_no')->nullable();
+                $table->decimal('contract_price', 12, 2)->nullable();
+            });
+        }
+
+        if (Schema::hasTable('lots')
+            && ! Schema::hasColumn('lots', 'contract_price')) {
+            Schema::table('lots', function (Blueprint $table) {
+                $table->decimal('contract_price', 12, 2)->nullable();
             });
         }
 

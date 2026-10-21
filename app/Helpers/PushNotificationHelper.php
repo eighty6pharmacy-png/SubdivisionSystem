@@ -27,8 +27,9 @@ class PushNotificationHelper
         ];
 
         if ($userIds) {
+            $ids = is_array($userIds) ? $userIds : [$userIds];
             $payload['include_aliases'] = [
-                'external_id' => is_array($userIds) ? $userIds : [$userIds]
+                'external_id' => array_values(array_map('strval', $ids))
             ];
             $payload['target_channel'] = 'push';
         } else {

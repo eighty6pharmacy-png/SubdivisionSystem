@@ -37,7 +37,7 @@ async function fetchGisBlockLotMap() {
                     // Determine if available. It's unavailable if occupied/reserved/sold or user_id is set.
                     let available = true;
                     if (dbLot) {
-                        if (dbLot.status !== 'Available' && dbLot.status !== 'Vacant Lot') {
+                        if (dbLot.status !== 'Available' && dbLot.status !== 'Vacant Lot' && dbLot.status !== 'Vacant House') {
                             available = false;
                         }
                         if (dbLot.isNotConnected === false) { // resident or master-list buyer

@@ -63,4 +63,9 @@ class Reservation extends Model
     {
         return $this->belongsTo(BuyerMasterList::class, 'buyer_id', 'id');
     }
+
+    public function buyer(): BelongsTo
+    {
+        return $this->buyerMasterList();
+    }
 }

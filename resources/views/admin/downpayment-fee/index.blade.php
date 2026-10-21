@@ -511,9 +511,14 @@
                             $readyReservation = $b->reservations->first();
                             $dispBlock = $readyReservation?->lot?->block ?? $b->block_no ?? '?';
                             $dispLot = $readyReservation?->lot?->lot_number ?? $b->lot_no ?? '?';
+                            $lotPrice = $readyReservation?->lot?->contract_price ?? $b->lot?->contract_price;
+                            $effectiveTcp = ($lotPrice !== null && $lotPrice !== '' && (float) $lotPrice > 0)
+                                ? $lotPrice
+                                : ($b->financingRecord?->contract_price ?? '');
                         @endphp
                         <option value="{{ $b->id }}" data-first="{{ $b->first_name }}" data-last="{{ $b->last_name }}"
-                            data-block="{{ $dispBlock }}" data-lot="{{ $dispLot }}" data-tcp="{{ $b->financingRecord?->contract_price ?? '' }}"
+                            data-block="{{ $dispBlock }}" data-lot="{{ $dispLot }}" data-tcp="{{ $effectiveTcp }}"
+                            data-lot-price="{{ $lotPrice ?? '' }}"
                             data-equity="{{ $b->financingRecord?->paid_by_vendee_equity ?? '' }}"
                             data-reservation-id="{{ $readyReservation?->id ?? '' }}"
                             data-reservation-amount="{{ $readyReservation?->amount ?? '' }}">
@@ -1225,6 +1230,35 @@
         inpTcp.addEventListener('input', calculateAmortization);
         inpPercent.addEventListener('input', calculateAmortization);
         inpMonths.addEventListener('input', calculateAmortization);
+
+        let allLotsCache = [];
+        fetch('/api/lots')
+            .then(r => r.ok ? r.json() : [])
+            .then(data => { allLotsCache = Array.isArray(data) ? data : []; })
+            .catch(() => {});
+
+        function checkLotPriceForSelection() {
+            const buyerSelect = document.getElementById('dpBuyerMasterList');
+            const manualContainer = document.getElementById('manualNameContainer');
+            const isManual = manualContainer && manualContainer.style.display !== 'none';
+            if (!isManual && buyerSelect && buyerSelect.value) {
+                return;
+            }
+
+            const blk = document.getElementById('calcBlk')?.value;
+            const lot = document.getElementById('calcLot')?.value;
+            if (!blk || !lot || !allLotsCache.length) return;
+
+            const match = allLotsCache.find(l => String(l.block) === String(blk) && String(l.lot_number) === String(lot));
+            if (match && match.contract_price && Number(match.contract_price) > 0) {
+                document.getElementById('calcTcp').value = Number(match.contract_price).toLocaleString('en-US');
+                validateTcpInput(true);
+                calculateAmortization();
+            }
+        }
+
+        document.getElementById('calcBlk')?.addEventListener('change', checkLotPriceForSelection);
+        document.getElementById('calcLot')?.addEventListener('change', checkLotPriceForSelection);
 
         function autoFillDownpaymentBuyer(select) {
             const option = select.options[select.selectedIndex];

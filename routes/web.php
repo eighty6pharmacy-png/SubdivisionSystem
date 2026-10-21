@@ -966,11 +966,12 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $request->merge([
             'contact_number' => $normalizedContact,
             'email' => trim((string) $request->input('email')),
+            'middle_name' => trim((string) $request->input('middle_name')),
         ]);
 
         $validated = $request->validate([
             'first_name' => 'required_without:name|nullable|string|max:255',
-            'middle_name' => 'nullable|string|max:255',
+            'middle_name' => 'required_with:first_name|string|max:255',
             'last_name' => 'required_without:name|nullable|string|max:255',
             'name' => 'required_without:first_name|nullable|string|max:255',
             'email' => ['required', 'email:rfc,dns', \Illuminate\Validation\Rule::unique('users', 'email')->whereNull('deleted_at'), function (string $attribute, mixed $value, \Closure $fail) {
@@ -986,6 +987,8 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'block' => 'required_if:role,Resident|integer',
             'lot' => 'required_if:role,Resident|integer',
         ], [
+            'middle_name.required_with' => 'Middle Name is mandatory (initial or name).',
+            'middle_name.required' => 'Middle Name is mandatory (initial or name).',
             'email.required' => 'Email Address is required.',
             'email.email' => 'Please enter a real email address on a domain that can receive mail (Gmail, Outlook, company mail, etc.).',
             'contact_number.required' => 'Contact / Mobile Number is required.',
@@ -1059,11 +1062,12 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             $request->merge([
                 'contact_number' => $normalizedContact,
                 'email' => trim((string) $request->input('email', $user->email)),
+                'middle_name' => trim((string) $request->input('middle_name', $user->middle_name)),
             ]);
 
             $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
                 'first_name' => 'required_without:name|nullable|string|max:255',
-                'middle_name' => 'nullable|string|max:255',
+                'middle_name' => 'required_with:first_name|string|max:255',
                 'last_name' => 'required_without:name|nullable|string|max:255',
                 'name' => 'required_without:first_name|nullable|string|max:255',
                 'email' => ['required', 'email:rfc,dns', \Illuminate\Validation\Rule::unique('users', 'email')->whereNull('deleted_at')->ignore($user->id), function (string $attribute, mixed $value, \Closure $fail) {
@@ -1077,6 +1081,8 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                 'block' => 'nullable|integer',
                 'lot' => 'nullable|integer',
             ], [
+                'middle_name.required_with' => 'Middle Name is mandatory (initial or name).',
+                'middle_name.required' => 'Middle Name is mandatory (initial or name).',
                 'email.required' => 'Email Address is required.',
                 'email.email' => 'Please enter a real email address on a domain that can receive mail (Gmail, Outlook, company mail, etc.).',
                 'contact_number.required' => 'Contact / Mobile Number is required.',
@@ -1553,6 +1559,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         // Fetch all buyers from the Master List
         // Eager-load their financing record and any reservations that don't have downpayments yet
         $masterListBuyers = \App\Models\BuyerMasterList::with([
+            'lot',
             'financingRecord',
             'reservations' => function ($q) {
                 $q->whereDoesntHave('downpayments')->with('lot');
@@ -1718,6 +1725,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $validated = $request->validate([
             'block' => 'required|string|max:50',
             'lot' => 'required|string|max:50',
+            'contract_price' => 'nullable|numeric|min:0',
             'lot_area' => 'nullable|numeric|min:0',
             'floor_area' => 'nullable|numeric|min:0',
             'description' => 'nullable|string|max:2000',
@@ -1732,6 +1740,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         );
 
         $lot->update([
+            'contract_price' => $validated['contract_price'] ?? null,
             'lot_area' => $validated['lot_area'] ?? null,
             'floor_area' => $validated['floor_area'] ?? null,
             'description' => $validated['description'] ?? null,
