@@ -22,6 +22,11 @@ class UserImportController extends Controller
 
     private const STAFF_ROLES = ['Security Guard', 'Finance Officer'];
 
+    /**
+     * @var array<string, bool>
+     */
+    private array $dnsCache = [];
+
     public function downloadTemplate(): StreamedResponse
     {
         $headers = [
@@ -66,15 +71,35 @@ class UserImportController extends Controller
 
     public function import(Request $request)
     {
+        @set_time_limit(300);
+        @ini_set('memory_limit', '512M');
+
         $request->validate([
             'csv_file' => 'required|file|mimes:csv,txt',
         ]);
 
         $path = $request->file('csv_file')->getRealPath();
-        $file = fopen($path, 'r');
+
+        $raw = file_get_contents($path);
+        if ($raw === false || trim($raw) === '') {
+            return response()->json(['success' => false, 'message' => 'Empty CSV file']);
+        }
+
+        // Convert Windows-1252 / ISO-8859-1 or other encodings to UTF-8
+        if (!mb_check_encoding($raw, 'UTF-8')) {
+            $raw = mb_convert_encoding($raw, 'UTF-8', 'Windows-1252, ISO-8859-1, ASCII');
+        }
+        // Remove UTF-8 BOM if present
+        $raw = preg_replace('/^\xEF\xBB\xBF/', '', $raw);
+
+        $file = fopen('php://temp', 'r+');
+        fwrite($file, $raw);
+        rewind($file);
+
         $headers = fgetcsv($file);
 
         if (!$headers) {
+            fclose($file);
             return response()->json(['success' => false, 'message' => 'Empty CSV file']);
         }
 
@@ -84,6 +109,7 @@ class UserImportController extends Controller
         $required = ['first_name', 'last_name', 'email', 'contact_number', 'role'];
         foreach ($required as $req) {
             if (!in_array($req, $headers, true)) {
+                fclose($file);
                 return response()->json(['success' => false, 'message' => "Missing required column: {$req}"]);
             }
         }
@@ -120,12 +146,16 @@ class UserImportController extends Controller
 
         fclose($file);
 
+        $safeErrors = array_map(function ($err) {
+            return mb_convert_encoding((string) $err, 'UTF-8', 'UTF-8');
+        }, $errors);
+
         return response()->json([
             'success' => true,
             'processed' => $processed,
             'created' => $created,
             'updated' => $updated,
-            'errors' => $errors,
+            'errors' => $safeErrors,
         ]);
     }
 
@@ -196,7 +226,14 @@ class UserImportController extends Controller
                             return;
                         }
                         $domain = substr(strrchr(strtolower((string) $value), '@') ?: '', 1);
-                        if ($domain === '' || (!checkdnsrr($domain, 'MX') && !checkdnsrr($domain, 'A'))) {
+                        if ($domain === '') {
+                            $fail('That email domain does not appear to accept mail.');
+                            return;
+                        }
+                        if (!array_key_exists($domain, $this->dnsCache)) {
+                            $this->dnsCache[$domain] = checkdnsrr($domain, 'MX') || checkdnsrr($domain, 'A');
+                        }
+                        if (!$this->dnsCache[$domain]) {
                             $fail('That email domain does not appear to accept mail.');
                         }
                     },
@@ -246,10 +283,11 @@ class UserImportController extends Controller
             SendNewUserCredentialsJob::dispatch($user, $password);
 
             return ['error' => null, 'created' => true, 'updated' => false];
-        } catch (\Exception $e) {
-            Log::error("Import error on row {$rowNumber}: ".$e->getMessage());
+        } catch (\Throwable $e) {
+            $safeMsg = mb_convert_encoding($e->getMessage(), 'UTF-8', 'UTF-8');
+            Log::error("Import error on row {$rowNumber}: ".$safeMsg);
 
-            return ['error' => "Row {$rowNumber}: Internal error - ".$e->getMessage(), 'created' => false, 'updated' => false];
+            return ['error' => "Row {$rowNumber}: Internal error - ".$safeMsg, 'created' => false, 'updated' => false];
         }
     }
 
