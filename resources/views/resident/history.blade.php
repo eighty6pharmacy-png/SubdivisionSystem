@@ -46,19 +46,33 @@
                         </tr>
                     </thead>
                     <tbody>
+                        @php
+                            $penaltyKey = $type === 'electricity' ? 'electricity_penalty' : 'water_penalty';
+                            $configuredPenaltyRate = (float) (\App\Models\Setting::find($penaltyKey)?->value ?? 5);
+                            $tz = config('app.timezone', 'Asia/Manila');
+                        @endphp
                         @foreach($bills as $bill)
                             @php
                                 $prevDate = $bill->previous_reading_date ? \Carbon\Carbon::parse($bill->previous_reading_date)->format('M d, Y') : \Carbon\Carbon::parse($bill->created_at)->subMonth()->format('M 01, Y');
                                 $currDate = $bill->current_reading_date ? \Carbon\Carbon::parse($bill->current_reading_date)->format('M d, Y') : \Carbon\Carbon::parse($bill->created_at)->format('M d, Y');
                                 $unit = $type === 'electricity' ? 'kWh' : 'm³';
                                 
-                                $isPaid = strtolower($bill->status) === 'paid';
-                                $totalBeforeDue = $bill->amount;
-                                $penalty = 0;
-                                if (!$isPaid && $bill->due_date && \Carbon\Carbon::parse($bill->due_date)->isPast()) {
-                                    $penalty = ($totalBeforeDue + $bill->previous_balance) * 0.05;
+                                $rawStatus = strtolower($bill->status);
+                                $currentCharges = (float) $bill->amount;
+                                $prevBalance = (float) ($bill->previous_balance ?? 0);
+                                $totalBeforeDue = $currentCharges + $prevBalance;
+                                $totalPaid = $bill->relationLoaded('payments') ? (float) $bill->payments->sum('amount_paid') : (float) $bill->payments()->sum('amount_paid');
+                                
+                                $isPastDue = $bill->due_date && \Carbon\Carbon::parse($bill->due_date, $tz)->endOfDay()->isPast();
+                                $isPaid = $rawStatus === 'paid' || ($totalBeforeDue > 0 && ($totalBeforeDue - $totalPaid) <= 0.01 && !$isPastDue);
+                                $penalty = (!$isPaid && ($bill->is_at_risk || $isPastDue)) ? round($totalBeforeDue * ($configuredPenaltyRate / 100), 2) : 0;
+                                $totalAfterDue = $totalBeforeDue + $penalty;
+                                $remainingBalance = max(0, round($totalAfterDue - $totalPaid, 2));
+                                if ($totalAfterDue > 0 && $remainingBalance <= 0.01) {
+                                    $isPaid = true;
                                 }
-                                $totalAfterDue = $totalBeforeDue + $bill->previous_balance + $penalty;
+                                $isPartiallyPaid = !$isPaid && ($rawStatus === 'partially_paid' || ($totalPaid > 0 && $remainingBalance > 0.01));
+                                $latestPay = $bill->payments ? $bill->payments->sortByDesc('payment_date')->first() : null;
                             @endphp
                             <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
                                 <td style="padding: 16px 24px;">
@@ -78,13 +92,34 @@
                                 </td>
                                 <td style="padding: 16px 24px;">
                                     <div style="font-weight: 800; color: var(--res-primary);">₱{{ number_format($totalAfterDue, 2) }}</div>
-                                    @if($bill->previous_balance > 0 || $penalty > 0)
-                                        <div style="font-size: 11px; color: #ef4444; margin-top: 4px;">+ arrears/penalty</div>
+                                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Current Month: ₱{{ number_format($currentCharges, 2) }}</div>
+                                    @if($prevBalance > 0 || $penalty > 0)
+                                        <div style="font-size: 11px; color: #ef4444; margin-top: 2px;">
+                                            @if($prevBalance > 0) Prev: ₱{{ number_format($prevBalance, 2) }} @endif
+                                            @if($penalty > 0) {{ $prevBalance > 0 ? '|' : '' }} Penalty: ₱{{ number_format($penalty, 2) }} @endif
+                                        </div>
+                                    @endif
+                                    @if($totalPaid > 0)
+                                        <div style="font-size: 11px; color: #16a34a; font-weight: 700; margin-top: 2px;">Paid: ₱{{ number_format($totalPaid, 2) }}@if(!$isPaid) (Bal: ₱{{ number_format($remainingBalance, 2) }})@endif</div>
                                     @endif
                                 </td>
                                 <td style="padding: 16px 24px;">
                                     @if($isPaid)
                                         <span style="background: #dcfce7; color: #166534; padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; border: 1px solid #bbf7d0;">Paid</span>
+                                        @if($latestPay)
+                                            <div style="font-size: 11px; color: #475569; margin-top: 4px; font-weight: 600;">
+                                                {{ \Carbon\Carbon::parse($latestPay->payment_date ?? $latestPay->created_at)->timezone(config('app.timezone', 'Asia/Manila'))->format('M d, Y h:i A') }}
+                                            </div>
+                                        @endif
+                                    @elseif($isPartiallyPaid)
+                                        <span style="background: #dbeafe; color: #1d4ed8; padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; border: 1px solid #bfdbfe;">Partially Paid</span>
+                                        @if($latestPay)
+                                            <div style="font-size: 11px; color: #475569; margin-top: 4px; font-weight: 600;">
+                                                {{ \Carbon\Carbon::parse($latestPay->payment_date ?? $latestPay->created_at)->timezone(config('app.timezone', 'Asia/Manila'))->format('M d, Y h:i A') }}
+                                            </div>
+                                        @endif
+                                    @elseif($penalty > 0)
+                                        <span style="background: #fee2e2; color: #b91c1c; padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; border: 1px solid #fecaca;">Past Due</span>
                                     @else
                                         <span style="background: #fef3c7; color: #b45309; padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; border: 1px solid #fde68a;">Unpaid</span>
                                     @endif

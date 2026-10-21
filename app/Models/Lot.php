@@ -14,6 +14,12 @@ class Lot extends Model
         'lot_number',
         'status',
         'provider_managed',
+        'lot_area',
+        'floor_area',
+        'description',
+        'tct_no',
+        'pid',
+        'tax_dec_no',
     ];
 
     protected function casts(): array

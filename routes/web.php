@@ -316,36 +316,55 @@ Route::prefix('resident')->middleware(['auth', 'web', 'role:Resident', 'sync_pay
             ]);
         }
 
+        $tz = config('app.timezone', 'Asia/Manila');
+        $totalDueBeforePenalty = (float) $bill->amount + (float) $bill->previous_balance;
+        $isOverdue = ($bill->is_at_risk || ($bill->due_date && \Carbon\Carbon::parse($bill->due_date, $tz)->endOfDay()->isPast())) && strtolower((string) $bill->status) !== 'paid';
+        $penaltyRatePercent = (float) (\App\Models\Setting::where('key', $bill->type . '_penalty')->value('value') ?: 5);
+        $penalty = $isOverdue ? round($totalDueBeforePenalty * ($penaltyRatePercent / 100), 2) : 0.0;
+        $totalDue = round($totalDueBeforePenalty + $penalty, 2);
+        $totalPaid = (float) \App\Models\Payment::where('utility_bill_id', $bill->id)->sum('amount_paid');
+        $remainingBalance = max(0.0, round($totalDue - $totalPaid, 2));
+
+        if ($remainingBalance <= 0) {
+            return response()->json(['success' => false, 'message' => 'Bill has already been paid.'], 400);
+        }
+
         $lineItems = [];
-        $usageAmount = $bill->amount;
-        if ($usageAmount > 0) {
+        if ($totalPaid > 0) {
             $lineItems[] = [
                 'currency' => 'PHP',
-                'amount' => (int) round($usageAmount * 100),
-                'name' => ucfirst($bill->type) . ' Usage',
+                'amount' => (int) round($remainingBalance * 100),
+                'name' => ucfirst($bill->type) . ' Bill (Remaining Balance)',
                 'quantity' => 1
             ];
-        }
+        } else {
+            $usageAmount = (float) $bill->amount;
+            if ($usageAmount > 0) {
+                $lineItems[] = [
+                    'currency' => 'PHP',
+                    'amount' => (int) round($usageAmount * 100),
+                    'name' => ucfirst($bill->type) . ' Usage',
+                    'quantity' => 1
+                ];
+            }
 
-        if ($bill->previous_balance > 0) {
-            $lineItems[] = [
-                'currency' => 'PHP',
-                'amount' => (int) round($bill->previous_balance * 100),
-                'name' => 'Previous Balance',
-                'quantity' => 1
-            ];
-        }
+            if ($bill->previous_balance > 0) {
+                $lineItems[] = [
+                    'currency' => 'PHP',
+                    'amount' => (int) round($bill->previous_balance * 100),
+                    'name' => 'Previous Balance',
+                    'quantity' => 1
+                ];
+            }
 
-        $totalDueBeforePenalty = $bill->amount + $bill->previous_balance;
-        $penalty = ($bill->due_date && \Carbon\Carbon::parse($bill->due_date)->isPast()) ? ($totalDueBeforePenalty * 0.05) : 0;
-
-        if ($penalty > 0) {
-            $lineItems[] = [
-                'currency' => 'PHP',
-                'amount' => (int) round($penalty * 100),
-                'name' => 'Late Penalty Fee',
-                'quantity' => 1
-            ];
+            if ($penalty > 0) {
+                $lineItems[] = [
+                    'currency' => 'PHP',
+                    'amount' => (int) round($penalty * 100),
+                    'name' => 'Late Penalty Fee',
+                    'quantity' => 1
+                ];
+            }
         }
 
         if (empty($lineItems)) {
@@ -436,13 +455,15 @@ Route::post('/api/webhooks/paymongo', function (\Illuminate\Http\Request $reques
             $dp = \App\Models\Downpayment::find($dpId);
             if ($dp) {
                 $amountPaid = isset($paymentData['payments'][0]['attributes']['amount']) ? ($paymentData['payments'][0]['attributes']['amount'] / 100) : (isset($paymentData['amount']) ? ($paymentData['amount'] / 100) : $dp->monthly_amortization);
+                $paidAt = isset($paidPayment['attributes']['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paidPayment['attributes']['paid_at'], config('app.timezone')) : (isset($paymentData['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paymentData['paid_at'], config('app.timezone')) : now());
 
                 $recorder->recordDownpaymentPayment(
                     $dp,
                     (float) $amountPaid,
                     \App\Services\PaymentRecorder::methodFromSource($sourceType, 'Online Payment'),
                     $paymongoPaymentId,
-                    \App\Services\PaymentRecorder::onlineTrn($paymentIntentId, $dp->id)
+                    \App\Services\PaymentRecorder::onlineTrn($paymentIntentId, $dp->id),
+                    $paidAt
                 );
                 \Illuminate\Support\Facades\Log::info('Webhook marked DP ' . $dp->id . ' as paid.');
             }
@@ -451,13 +472,15 @@ Route::post('/api/webhooks/paymongo', function (\Illuminate\Http\Request $reques
             $fin = \App\Models\FinancingRecord::find($finId);
             if ($fin) {
                 $amountPaid = isset($paymentData['payments'][0]['attributes']['amount']) ? ($paymentData['payments'][0]['attributes']['amount'] / 100) : (isset($paymentData['amount']) ? ($paymentData['amount'] / 100) : $fin->balance);
+                $paidAt = isset($paidPayment['attributes']['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paidPayment['attributes']['paid_at'], config('app.timezone')) : (isset($paymentData['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paymentData['paid_at'], config('app.timezone')) : now());
 
                 $recorder->recordFinancingPayment(
                     $fin,
                     (float) $amountPaid,
                     \App\Services\PaymentRecorder::methodFromSource($sourceType, 'Online Payment'),
                     $paymongoPaymentId,
-                    \App\Services\PaymentRecorder::onlineTrn($paymentIntentId, $fin->id)
+                    \App\Services\PaymentRecorder::onlineTrn($paymentIntentId, $fin->id),
+                    $paidAt
                 );
                 \Illuminate\Support\Facades\Log::info('Webhook marked FIN ' . $fin->id . ' as paid.');
             }
@@ -898,7 +921,9 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             $activeShiftLabel = $activeDutyShift ? ucfirst($activeDutyShift['shift']) . ' Shift' : null;
 
             $meta = '';
-            if ($lot) {
+            if ($u->lots->isNotEmpty()) {
+                $meta = $u->lots->map(fn($l) => 'Block ' . $l->block . ', Lot ' . $l->lot_number)->implode(' | ');
+            } elseif ($lot) {
                 $meta = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
             } elseif ($role === 'Security Guard') {
                 $meta = $guard ? $guard->formatted_schedule : 'No Schedule Set';
@@ -918,6 +943,11 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                 'contact_number' => $u->contact_number,
                 'block' => $lot ? $lot->block : '',
                 'lot' => $lot ? $lot->lot_number : '',
+                'lots' => $u->lots->map(fn($l) => [
+                    'id' => $l->id,
+                    'block' => $l->block,
+                    'lot_number' => $l->lot_number,
+                ])->toArray(),
                 'meta' => $meta,
                 'schedule_days' => $scheduleDays,
                 'shift_type' => $shiftType,
@@ -1083,13 +1113,39 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                 $user->syncRoles([$request->input('role')]);
             }
             $roleName = $request->input('role') ?: $user->roles()->first()?->name;
-            if ($roleName === 'Resident' && $request->has('block') && $request->has('lot')) {
-                if (!empty($request->input('block')) && !empty($request->input('lot'))) {
-                    $lot = \App\Models\Lot::firstOrCreate([
-                        'block' => (string) $request->input('block'),
-                        'lot_number' => (string) $request->input('lot'),
-                    ]);
-                    $user->lots()->sync([$lot->id]);
+            if ($roleName === 'Resident') {
+                if ($request->has('lots_payload')) {
+                    $lotData = $request->input('lots_payload');
+                    if (is_string($lotData)) {
+                        $lotData = json_decode($lotData, true);
+                    }
+                    if (is_array($lotData)) {
+                        $lotIds = [];
+                        foreach ($lotData as $item) {
+                            if (!empty($item['block']) && !empty($item['lot'])) {
+                                $l = \App\Models\Lot::firstOrCreate([
+                                    'block' => (string) $item['block'],
+                                    'lot_number' => (string) $item['lot'],
+                                ]);
+                                $l->update(['status' => 'Occupied']);
+                                $lotIds[] = $l->id;
+                            } elseif (!empty($item['id'])) {
+                                $lotIds[] = $item['id'];
+                            }
+                        }
+                        if (!empty($lotIds)) {
+                            $user->lots()->sync(array_unique($lotIds));
+                        }
+                    }
+                } elseif ($request->has('block') && $request->has('lot')) {
+                    if (!empty($request->input('block')) && !empty($request->input('lot'))) {
+                        $lot = \App\Models\Lot::firstOrCreate([
+                            'block' => (string) $request->input('block'),
+                            'lot_number' => (string) $request->input('lot'),
+                        ]);
+                        $lot->update(['status' => 'Occupied']);
+                        $user->lots()->sync([$lot->id]);
+                    }
                 }
             }
             if ($roleName === 'Security Guard') {
@@ -1165,16 +1221,40 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     });
 
     Route::post('/reservation-fee', function (\Illuminate\Http\Request $request) {
-        $buyer = \App\Models\BuyerMasterList::with('lot')->find($request->input('buyer_master_list_id'));
+        $buyerId = $request->input('buyer_master_list_id') ?: $request->input('buyer_id');
+        $buyer = \App\Models\BuyerMasterList::find($buyerId);
         if (! $buyer) {
             return response()->json(['success' => false, 'message' => 'Select a buyer from the Master List.'], 422);
         }
 
-        $lot = $buyer->lot;
+        $lot = null;
+        if ($request->filled('lot_id')) {
+            $lot = \App\Models\Lot::find($request->input('lot_id'));
+        } elseif ($request->filled('block') && ($request->filled('lot') || $request->filled('lot_number') || $request->filled('lot_no'))) {
+            $block = (string) $request->input('block');
+            $lotNum = (string) ($request->input('lot') ?? $request->input('lot_number') ?? $request->input('lot_no'));
+            $lot = \App\Models\Lot::firstOrCreate(
+                ['block' => $block, 'lot_number' => $lotNum],
+                ['status' => \App\Enums\LotStatus::Available->value, 'provider_managed' => false]
+            );
+        } elseif ($buyer->lot) {
+            $lot = $buyer->lot;
+        }
+
         if (! $lot) {
             return response()->json([
                 'success' => false,
-                'message' => 'This buyer has no block and lot on the Master List. Set them there before recording a reservation.',
+                'message' => 'Please select a block and lot to reserve.',
+            ], 422);
+        }
+
+        $hasActiveRes = \App\Models\Reservation::where('lot_id', $lot->id)
+            ->whereIn('status', \App\Enums\ReservationStatus::activeValues())
+            ->exists();
+        if ($hasActiveRes || in_array($lot->status, [\App\Enums\LotStatus::Reserved->value, \App\Enums\LotStatus::Occupied->value], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => "Block {$lot->block} Lot {$lot->lot_number} is already reserved or occupied. Please choose an available lot.",
             ], 422);
         }
 
@@ -1183,13 +1263,16 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
         try {
             $res = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $buyer, $lot, $name, $contact) {
+                $rawAmount = str_replace(',', '', (string) ($request->input('amount') ?? '20000'));
+                $amount = is_numeric($rawAmount) ? (float) $rawAmount : 20000;
+
                 $res = \App\Models\Reservation::create([
                     'lot_id' => $lot->id,
                     'buyer_master_list_id' => $buyer->id,
                     'status' => \App\Enums\ReservationStatus::Reserved->value,
                     'reservation_date' => now(),
                     'deadline_date' => $request->input('deadline_date') ? \Carbon\Carbon::parse($request->input('deadline_date')) : null,
-                    'amount' => $request->input('amount') ?? 20000,
+                    'amount' => $amount,
                     'notes' => ($name ?: 'New Buyer') . ' | ' . ($contact ?: 'N/A')
                 ]);
 
@@ -1218,13 +1301,54 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
     Route::post('/downpayment-fee', function (\Illuminate\Http\Request $request) {
         $buyerId = $request->input('buyer_master_list_id');
+        if (! $buyerId) {
+            return response()->json(['success' => false, 'message' => 'Please select a buyer from the Master List.'], 422);
+        }
+
+        $contractAmount = $request->input('contract_amount');
+        $rawDigits = preg_replace('/\D/', '', (string) $contractAmount);
+        if (empty($rawDigits) || strlen($rawDigits) < 6 || (float) $contractAmount <= 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unit Price (TCP) must be a valid number of at least 6 digits (minimum ₱100,000).'
+            ], 422);
+        }
+
+        $monthsToPay = (int) $request->input('months_to_pay', 24);
+        if ($monthsToPay < 1) {
+            return response()->json(['success' => false, 'message' => 'Months to pay must be at least 1 month.'], 422);
+        }
+
+        $penalty = (float) $request->input('penalty_percentage', 0);
+        if ($penalty < 0) {
+            return response()->json(['success' => false, 'message' => 'Penalty percentage cannot be negative.'], 422);
+        }
         
-        // Prevent duplication
-        $existingRes = \App\Models\Reservation::where('buyer_id', $buyerId)
-            ->whereHas('downpayments')
-            ->first();
-        if ($existingRes) {
-            return response()->json(['success' => false, 'message' => 'Buyer already has an active downpayment schedule.'], 403);
+        // Check duplication on this specific reservation or lot
+        if ($request->filled('reservation_id')) {
+            $existingRes = \App\Models\Reservation::where('id', $request->input('reservation_id'))
+                ->whereHas('downpayments')
+                ->first();
+            if ($existingRes) {
+                return response()->json(['success' => false, 'message' => 'This reservation already has an active downpayment schedule.'], 403);
+            }
+        }
+
+        $block = $request->input('block');
+        $lotNumber = $request->input('lot');
+        $lotId = null;
+        if ($block && $lotNumber) {
+            $lotId = \App\Models\Lot::where('block', (string) $block)
+                ->where('lot_number', (string) $lotNumber)
+                ->value('id');
+            if ($lotId) {
+                $alreadyHasDp = \App\Models\Downpayment::whereHas('reservation', function ($q) use ($lotId, $buyerId) {
+                    $q->where('lot_id', $lotId)->where('buyer_id', $buyerId);
+                })->exists();
+                if ($alreadyHasDp) {
+                    return response()->json(['success' => false, 'message' => 'This lot already has an active downpayment schedule.'], 403);
+                }
+            }
         }
 
         $resQuery = \App\Models\Reservation::where('buyer_id', $buyerId)
@@ -1238,14 +1362,29 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
         if ($request->filled('reservation_id')) {
             $resQuery->whereKey($request->input('reservation_id'));
+        } elseif ($lotId) {
+            $resQuery->where('lot_id', $lotId);
         }
 
         $res = $resQuery->first();
         if (! $res) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Record a reservation for this buyer before creating a downpayment contract.',
-            ], 422);
+            $buyer = \App\Models\BuyerMasterList::find($buyerId);
+            $block = $block ?: ($buyer?->block_no ?: '1');
+            $lotNumber = $lotNumber ?: ($buyer?->lot_no ?: '1');
+
+            $lot = \App\Models\Lot::firstOrCreate(
+                ['block' => (string) $block, 'lot_number' => (string) $lotNumber],
+                ['status' => \App\Enums\LotStatus::Reserved->value, 'provider_managed' => false]
+            );
+
+            $res = \App\Models\Reservation::create([
+                'buyer_id' => $buyerId,
+                'lot_id' => $lot->id,
+                'amount' => 0,
+                'status' => \App\Enums\ReservationStatus::Converted->value,
+                'reservation_date' => now(),
+                'notes' => $buyer ? "{$buyer->first_name} {$buyer->last_name}" : 'New Buyer'
+            ]);
         }
 
         try {
@@ -1314,13 +1453,23 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     Route::post('/downpayment-fee/pay', function (\Illuminate\Http\Request $request) {
         $dp = \App\Models\Downpayment::whereKey($request->input('id'))->first();
         if ($dp) {
+            $rawDate = $request->input('payment_date');
+            $paidAt = now();
+            if ($rawDate) {
+                $parsed = \Carbon\Carbon::parse($rawDate);
+                if (strlen(trim($rawDate)) <= 10) {
+                    $parsed->setTime(now()->hour, now()->minute, now()->second);
+                }
+                $paidAt = $parsed;
+            }
+
             $history = app(\App\Services\PaymentRecorder::class)->recordDownpaymentPayment(
                 $dp,
                 (float) $request->input('amount'),
                 'Office Payment',
                 null,
                 null,
-                $request->input('payment_date') ? \Carbon\Carbon::parse($request->input('payment_date')) : now()
+                $paidAt
             );
 
             return response()->json([
@@ -1356,15 +1505,25 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'today_paid' => 40000.00
         ];
         
-        // Only fetch buyers who DO NOT have an active or pending reservation
-        $masterListBuyers = \App\Models\BuyerMasterList::whereDoesntHave('reservations', function ($q) {
-            $q->whereIn('status', ['Reserved', 'Pending']);
-        })->get()->sortBy(fn ($buyer) => $buyer->last_name)->values();
+        // Fetch all master list buyers for selection (supports multiple lot purchases)
+        $masterListBuyers = \App\Models\BuyerMasterList::with(['user', 'reservations.lot'])
+            ->get()
+            ->sortBy(fn ($buyer) => $buyer->last_name)
+            ->values();
+
+        $availableLots = \App\Models\Lot::where('status', \App\Enums\LotStatus::Available->value)
+            ->whereDoesntHave('reservations', function ($q) {
+                $q->whereIn('status', \App\Enums\ReservationStatus::activeValues());
+            })
+            ->orderBy('block')
+            ->orderBy('lot_number')
+            ->get();
 
         return view('admin.reservation-fee.index', [
             'bills' => getReservationFees(),
             'stats' => $yearly_stats,
-            'masterListBuyers' => $masterListBuyers
+            'masterListBuyers' => $masterListBuyers,
+            'availableLots' => $availableLots
         ]);
     });
 
@@ -1391,21 +1550,17 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             ->where('status', '!=', \App\Enums\ReservationStatus::Converted->value)
             ->update(['status' => \App\Enums\ReservationStatus::Converted->value]);
 
-        // Buyers with a reservation and no downpayment contract yet.
-        // Converted reservations stay here until the contract is saved, so both buttons use the same list.
-        $readyReservation = function ($q) {
-            $q->whereIn('status', [
-                \App\Enums\ReservationStatus::Reserved->value,
-                \App\Enums\ReservationStatus::Pending->value,
-                \App\Enums\ReservationStatus::Converted->value,
-            ])->whereDoesntHave('downpayments');
-        };
-        $masterListBuyers = \App\Models\BuyerMasterList::with(['financingRecord', 'reservations' => $readyReservation])
-            ->whereHas('reservations', $readyReservation)
-            ->whereDoesntHave('reservations.downpayments')
-            ->get()
-            ->sortBy(fn ($buyer) => $buyer->last_name)
-            ->values();
+        // Fetch all buyers from the Master List
+        // Eager-load their financing record and any reservations that don't have downpayments yet
+        $masterListBuyers = \App\Models\BuyerMasterList::with([
+            'financingRecord',
+            'reservations' => function ($q) {
+                $q->whereDoesntHave('downpayments')->with('lot');
+            }
+        ])
+        ->get()
+        ->sortBy(fn ($buyer) => $buyer->last_name)
+        ->values();
 
         return view('admin.downpayment-fee.index', [
             'bills' => getDownpaymentFees(),
@@ -1559,6 +1714,38 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         return response()->json(['success' => true]);
     });
 
+    Route::post('/gis/update-lot-details', function (\Illuminate\Http\Request $request) {
+        $validated = $request->validate([
+            'block' => 'required|string|max:50',
+            'lot' => 'required|string|max:50',
+            'lot_area' => 'nullable|numeric|min:0',
+            'floor_area' => 'nullable|numeric|min:0',
+            'description' => 'nullable|string|max:2000',
+            'tct_no' => 'nullable|string|max:255',
+            'pid' => 'nullable|string|max:255',
+            'tax_dec_no' => 'nullable|string|max:255',
+        ]);
+
+        $lot = \App\Models\Lot::firstOrCreate(
+            ['block' => (string) $validated['block'], 'lot_number' => (string) $validated['lot']],
+            ['status' => \App\Enums\LotStatus::VacantLot->value]
+        );
+
+        $lot->update([
+            'lot_area' => $validated['lot_area'] ?? null,
+            'floor_area' => $validated['floor_area'] ?? null,
+            'description' => $validated['description'] ?? null,
+            'tct_no' => $validated['tct_no'] ?? null,
+            'pid' => $validated['pid'] ?? null,
+            'tax_dec_no' => $validated['tax_dec_no'] ?? null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'lot' => $lot->fresh(),
+        ]);
+    });
+
     // Financing System
     Route::resource('financing', \App\Http\Controllers\FinancingRecordController::class);
     Route::post('financing/{id}/pay', [\App\Http\Controllers\FinancingRecordController::class, 'recordPayment'])->name('financing.pay');
@@ -1592,8 +1779,8 @@ Route::prefix('buyer')->middleware(['auth', 'role:Buyer', 'sync_paymongo'])->gro
 
 // Resident Portal Routes
 Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo'])->group(function () {
-    $buildEmptyBill = function(string $type, $user) {
-        $lot = $user ? $user->lots()->first() : null;
+    $buildEmptyBill = function(string $type, $user, $lot = null) {
+        $lot = $lot ?: ($user ? $user->lots()->first() : null);
         $unit = $type === 'electricity' ? 'kWh' : 'm³';
         $emptyHistory = array_map(function($i) {
             return [
@@ -1612,6 +1799,12 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             'period' => 'N/A',
             'provider_managed' => $lot ? $lot->provider_managed : false,
             'amount' => 0,
+            'amount_before_due' => 0,
+            'amount_after_due' => 0,
+            'penalty_rate' => 5,
+            'penalty_amount' => 0,
+            'applied_penalty' => 0,
+            'remaining_balance' => 0,
             'usage' => '0 ' . $unit,
             'usage_' . ($type === 'electricity' ? 'kwh' : 'cubic') => 0,
             'usage_cbm' => 0,
@@ -1640,16 +1833,29 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
 
     Route::get('/dashboard', function () use ($buildEmptyBill) {
         $user = \Illuminate\Support\Facades\Auth::user();
-        $elecBills = getElectricalBills(request('cycle'), true, $user->id);
-        $waterBills = getWaterBills(request('cycle'), true, $user->id);
+        $lots = $user->lots;
+        $selectedLotId = request('lot_id') ?: session('resident_selected_lot_id');
+        if ($selectedLotId && !$lots->contains('id', $selectedLotId)) {
+            $selectedLotId = null;
+        }
+        if (!$selectedLotId) {
+            $selectedLotId = $lots->first()?->id;
+        }
+        if ($selectedLotId) {
+            session(['resident_selected_lot_id' => $selectedLotId]);
+        }
+        $selectedLot = $lots->firstWhere('id', $selectedLotId) ?? $lots->first();
+
+        $elecBills = getElectricalBills(request('cycle'), true, $user->id, $selectedLotId);
+        $waterBills = getWaterBills(request('cycle'), true, $user->id, $selectedLotId);
 
         $elecBill = collect($elecBills)->first(function($b) use ($user) {
             return (isset($b['resident_id']) && $b['resident_id'] === $user->id) || ($b['resident'] ?? '') === $user->name;
-        }) ?? $buildEmptyBill('electricity', $user);
+        }) ?? $buildEmptyBill('electricity', $user, $selectedLot);
 
         $waterBill = collect($waterBills)->first(function($b) use ($user) {
             return (isset($b['resident_id']) && $b['resident_id'] === $user->id) || ($b['resident'] ?? '') === $user->name;
-        }) ?? $buildEmptyBill('water', $user);
+        }) ?? $buildEmptyBill('water', $user, $selectedLot);
 
         $activeIncidentsCount = \App\Models\Incident::where('resident_id', $user->id)
             ->whereIn('status', ['pending', 'progress', 'Open / Pending', 'In Progress'])
@@ -1661,7 +1867,10 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             'elecBill' => $elecBill,
             'waterBill' => $waterBill,
             'activeIncidentsCount' => $activeIncidentsCount,
-            'announcements' => $announcements
+            'announcements' => $announcements,
+            'lots' => $lots,
+            'selectedLot' => $selectedLot,
+            'selectedLotId' => $selectedLotId,
         ]);
     });
     Route::get('/profile', function () {
@@ -1706,9 +1915,13 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             ->orderBy('created_at', 'desc')
             ->first();
             
-        $query = \App\Models\UtilityBill::where('resident_id', $user->id)
+        $query = \App\Models\UtilityBill::with('payments')
+            ->where('resident_id', $user->id)
             ->where('type', $type)
             ->orderBy('created_at', 'desc');
+        if (request('lot_id')) {
+            $query->where('lot_id', request('lot_id'));
+        }
         // Allow residents access to all their statements (both paid and unpaid)
         $bills = $query->get();
         return view('resident.history', compact('bills', 'type'));
@@ -1724,30 +1937,67 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
         $pdf = app('dompdf.wrapper');
         $pdf->setPaper('a4', 'portrait');
         $pdf->loadView('resident.bill_pdf', compact('bill'));
-        return $pdf->stream('Statement_of_Account_'.$type.'_'.\Carbon\Carbon::parse($bill->created_at)->format('Y_m').'.pdf');
+        $isPaid = strtolower((string) $bill->status) === 'paid';
+        $prefix = $isPaid ? 'Receipt_' : 'Statement_of_Account_';
+        return $pdf->stream($prefix . $type . '_' . \Carbon\Carbon::parse($bill->created_at)->format('Y_m') . '.pdf');
     });
 
     Route::get('/electricity', function () use ($buildEmptyBill) {
         $user = \Illuminate\Support\Facades\Auth::user();
-        $elecBills = getElectricalBills(request('cycle'), true, $user->id);
-        $lot = $user->lots()->first();
-        $providerManaged = $lot ? $lot->provider_managed : false;
+        $lots = $user->lots;
+        $selectedLotId = request('lot_id') ?: session('resident_selected_lot_id');
+        if ($selectedLotId && !$lots->contains('id', $selectedLotId)) {
+            $selectedLotId = null;
+        }
+        if (!$selectedLotId) {
+            $selectedLotId = $lots->first()?->id;
+        }
+        if ($selectedLotId) {
+            session(['resident_selected_lot_id' => $selectedLotId]);
+        }
+        $selectedLot = $lots->firstWhere('id', $selectedLotId) ?? $lots->first();
+
+        $elecBills = getElectricalBills(request('cycle'), true, $user->id, $selectedLotId);
+        $providerManaged = $selectedLot ? $selectedLot->provider_managed : false;
 
         $elecBill = collect($elecBills)->first(function($b) use ($user) {
             return (isset($b['resident_id']) && $b['resident_id'] === $user->id) || ($b['resident'] ?? '') === $user->name;
-        }) ?? $buildEmptyBill('electricity', $user);
+        }) ?? $buildEmptyBill('electricity', $user, $selectedLot);
 
-        return view('resident.electricity', ['elecBill' => $elecBill]);
+        return view('resident.electricity', [
+            'elecBill' => $elecBill,
+            'lots' => $lots,
+            'selectedLot' => $selectedLot,
+            'selectedLotId' => $selectedLotId,
+        ]);
     });
     Route::get('/water', function () use ($buildEmptyBill) {
         $user = \Illuminate\Support\Facades\Auth::user();
-        $waterBills = getWaterBills(request('cycle'), true, $user->id);
+        $lots = $user->lots;
+        $selectedLotId = request('lot_id') ?: session('resident_selected_lot_id');
+        if ($selectedLotId && !$lots->contains('id', $selectedLotId)) {
+            $selectedLotId = null;
+        }
+        if (!$selectedLotId) {
+            $selectedLotId = $lots->first()?->id;
+        }
+        if ($selectedLotId) {
+            session(['resident_selected_lot_id' => $selectedLotId]);
+        }
+        $selectedLot = $lots->firstWhere('id', $selectedLotId) ?? $lots->first();
+
+        $waterBills = getWaterBills(request('cycle'), true, $user->id, $selectedLotId);
 
         $waterBill = collect($waterBills)->first(function($b) use ($user) {
             return (isset($b['resident_id']) && $b['resident_id'] === $user->id) || ($b['resident'] ?? '') === $user->name;
-        }) ?? $buildEmptyBill('water', $user);
+        }) ?? $buildEmptyBill('water', $user, $selectedLot);
 
-        return view('resident.water', ['waterBill' => $waterBill]);
+        return view('resident.water', [
+            'waterBill' => $waterBill,
+            'lots' => $lots,
+            'selectedLot' => $selectedLot,
+            'selectedLotId' => $selectedLotId,
+        ]);
     });
     Route::get('/incidents', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
@@ -2611,9 +2861,12 @@ Route::post('/admin/api/billing/pay', function (\Illuminate\Http\Request $reques
 
     $bill = \App\Models\UtilityBill::whereKey($id)->first();
     if ($bill) {
-        $totalDueBeforePenalty = $bill->amount + $bill->previous_balance;
-        $penalty = ($bill->due_date && \Carbon\Carbon::parse($bill->due_date)->isPast()) ? ($totalDueBeforePenalty * 0.05) : 0;
-        $totalDue = $totalDueBeforePenalty + $penalty;
+        $tz = config('app.timezone', 'Asia/Manila');
+        $totalDueBeforePenalty = (float) $bill->amount + (float) $bill->previous_balance;
+        $isOverdue = ($bill->is_at_risk || ($bill->due_date && \Carbon\Carbon::parse($bill->due_date, $tz)->endOfDay()->isPast())) && strtolower((string) $bill->status) !== 'paid';
+        $penaltyRatePercent = (float) (\App\Models\Setting::where('key', $bill->type . '_penalty')->value('value') ?: 5);
+        $penalty = $isOverdue ? round($totalDueBeforePenalty * ($penaltyRatePercent / 100), 2) : 0.0;
+        $totalDue = round($totalDueBeforePenalty + $penalty, 2);
 
         try {
             app(\App\Services\PaymentRecorder::class)->recordUtilityPayment(
@@ -2629,7 +2882,19 @@ Route::post('/admin/api/billing/pay', function (\Illuminate\Http\Request $reques
             return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
         }
 
-        return response()->json(['success' => true]);
+        if ($bill->user) {
+            updateResidentBehavior($bill->user);
+        }
+
+        $newTotalPaid = (float) \App\Models\Payment::where('utility_bill_id', $bill->id)->sum('amount_paid');
+        $remaining = max(0.0, round($totalDue - $newTotalPaid, 2));
+
+        return response()->json([
+            'success' => true,
+            'status' => $bill->status,
+            'total_paid' => $newTotalPaid,
+            'remaining_balance' => $remaining,
+        ]);
     }
     return response()->json(['success' => false, 'message' => 'Bill not found.'], 404);
 });

@@ -171,6 +171,42 @@
                 </div>
             </div>
 
+            <!-- Lot Property Specifications & Titling Info -->
+            <div class="info-card" style="background: #ffffff; border: 1px solid #e2e8f0; margin-top: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <label style="font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; font-weight: 800; margin: 0;">Lot Specifications & Titling</label>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; margin-bottom: 10px;">
+                    <div style="background: #f8fafc; padding: 8px 10px; border-radius: 8px;">
+                        <div style="color: #64748b; font-size: 10px; font-weight: 700; text-transform: uppercase;">Lot Area</div>
+                        <div id="detailLotArea" style="font-weight: 700; color: #0f172a; margin-top: 2px;">—</div>
+                    </div>
+                    <div style="background: #f8fafc; padding: 8px 10px; border-radius: 8px;">
+                        <div style="color: #64748b; font-size: 10px; font-weight: 700; text-transform: uppercase;">Floor Area</div>
+                        <div id="detailFloorArea" style="font-weight: 700; color: #0f172a; margin-top: 2px;">—</div>
+                    </div>
+                    <div style="background: #f8fafc; padding: 8px 10px; border-radius: 8px;">
+                        <div style="color: #64748b; font-size: 10px; font-weight: 700; text-transform: uppercase;">TCT No.</div>
+                        <div id="detailTctNo" style="font-weight: 700; color: #0f172a; margin-top: 2px; word-break: break-all;">—</div>
+                    </div>
+                    <div style="background: #f8fafc; padding: 8px 10px; border-radius: 8px;">
+                        <div style="color: #64748b; font-size: 10px; font-weight: 700; text-transform: uppercase;">PID</div>
+                        <div id="detailPid" style="font-weight: 700; color: #0f172a; margin-top: 2px; word-break: break-all;">—</div>
+                    </div>
+                    <div style="background: #f8fafc; padding: 8px 10px; border-radius: 8px; grid-column: span 2;">
+                        <div style="color: #64748b; font-size: 10px; font-weight: 700; text-transform: uppercase;">Tax Dec No.</div>
+                        <div id="detailTaxDecNo" style="font-weight: 700; color: #0f172a; margin-top: 2px; word-break: break-all;">—</div>
+                    </div>
+                    <div style="background: #f8fafc; padding: 8px 10px; border-radius: 8px; grid-column: span 2;">
+                        <div style="color: #64748b; font-size: 10px; font-weight: 700; text-transform: uppercase;">Description</div>
+                        <div id="detailDescription" style="font-weight: 600; color: #334155; margin-top: 2px;">—</div>
+                    </div>
+                </div>
+                <button id="btnEditLotDetails" class="btn btn-outline" style="width: 100%; padding: 9px; font-size: 11px; justify-content: center; border-color: #3b82f6; color: #2563eb; font-weight: 700;">
+                    <span style="margin-right: 4px;">✎</span> Edit Lot Property Info
+                </button>
+            </div>
+
             <!-- Dynamic Section: Billing Info -->
             <div id="panelBillingOnly" style="display: none;">
                 <div class="info-card" id="panelBillingElecOnly" style="background: #f0fdf4; border-color: #bbf7d0;">
@@ -268,6 +304,59 @@
             <div style="display: flex; gap: 12px; margin-top: 24px;">
                 <button class="btn btn-outline" style="flex:1;" onclick="document.getElementById('occupancyUpdateModal').style.display='none'">Cancel</button>
                 <button class="btn btn-primary" id="btnSaveOccupancy" style="flex:1;" onclick="updateOccupancyStatus()">Save Update</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lot Property Info Update Modal -->
+    <div id="lotDetailsUpdateModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 3000; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px);">
+        <div class="bill-modal-content" style="max-width: 480px; width: 92%; padding: 28px; border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div>
+                    <h3 id="lotModalTitle" style="font-size: 18px; font-weight: 800; margin: 0; color: #0f172a;">Edit Lot Property Info</h3>
+                    <p style="font-size: 12px; color: #64748b; margin: 4px 0 0 0;">Update area measurements and titling identifiers for this lot.</p>
+                </div>
+                <button onclick="document.getElementById('lotDetailsUpdateModal').style.display='none'" style="background: #f1f5f9; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer;">✕</button>
+            </div>
+
+            <input type="hidden" id="lotEditBlock">
+            <input type="hidden" id="lotEditNumber">
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+                <div>
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Lot Area (sqm)</label>
+                    <input type="number" step="0.01" min="0" id="lotEditLotArea" placeholder="e.g. 120.00" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;">
+                </div>
+                <div>
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Floor Area (sqm)</label>
+                    <input type="number" step="0.01" min="0" id="lotEditFloorArea" placeholder="e.g. 60.00" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+                <div>
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">TCT No.</label>
+                    <input type="text" id="lotEditTctNo" placeholder="e.g. T-123456" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;">
+                </div>
+                <div>
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">PID (Property ID)</label>
+                    <input type="text" id="lotEditPid" placeholder="e.g. PID-001" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;">
+                </div>
+            </div>
+
+            <div style="margin-bottom: 14px;">
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Tax Declaration No.</label>
+                <input type="text" id="lotEditTaxDecNo" placeholder="e.g. TD-2026-0001" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;">
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Property Description</label>
+                <textarea id="lotEditDescription" rows="2" placeholder="e.g. Single Attached / Corner Lot" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px; resize: vertical;"></textarea>
+            </div>
+
+            <div style="display: flex; gap: 12px;">
+                <button class="btn btn-outline" style="flex:1; justify-content: center;" onclick="document.getElementById('lotDetailsUpdateModal').style.display='none'">Cancel</button>
+                <button class="btn btn-primary" id="btnSaveLotDetails" style="flex:1; justify-content: center;" onclick="updateLotDetails()">Save Lot Details</button>
             </div>
         </div>
     </div>
@@ -492,6 +581,33 @@
                     document.getElementById('occupancyUpdateModal').style.display = 'flex';
                 };
             }
+
+            // Populate Lot Specifications & Titling
+            document.getElementById('detailLotArea').innerText = (dbLot.lot_area !== null && dbLot.lot_area !== undefined && dbLot.lot_area !== '') ? `${parseFloat(dbLot.lot_area).toFixed(2)} sqm` : '—';
+            document.getElementById('detailFloorArea').innerText = (dbLot.floor_area !== null && dbLot.floor_area !== undefined && dbLot.floor_area !== '') ? `${parseFloat(dbLot.floor_area).toFixed(2)} sqm` : '—';
+            document.getElementById('detailTctNo').innerText = dbLot.tct_no || '—';
+            document.getElementById('detailPid').innerText = dbLot.pid || '—';
+            document.getElementById('detailTaxDecNo').innerText = dbLot.tax_dec_no || '—';
+            document.getElementById('detailDescription').innerText = dbLot.description || '—';
+
+            const btnEditLotDetails = document.getElementById('btnEditLotDetails');
+            if (btnEditLotDetails) {
+                btnEditLotDetails.onclick = () => {
+                    const parts = id.replace('B','').replace('L','').split(' ');
+                    const block = parts[0];
+                    const lot = parts[1];
+                    document.getElementById('lotModalTitle').innerText = `Edit Lot Info — Block ${block}, Lot ${lot}`;
+                    document.getElementById('lotEditBlock').value = block;
+                    document.getElementById('lotEditNumber').value = lot;
+                    document.getElementById('lotEditLotArea').value = dbLot.lot_area ?? '';
+                    document.getElementById('lotEditFloorArea').value = dbLot.floor_area ?? '';
+                    document.getElementById('lotEditTctNo').value = dbLot.tct_no ?? '';
+                    document.getElementById('lotEditPid').value = dbLot.pid ?? '';
+                    document.getElementById('lotEditTaxDecNo').value = dbLot.tax_dec_no ?? '';
+                    document.getElementById('lotEditDescription').value = dbLot.description ?? '';
+                    document.getElementById('lotDetailsUpdateModal').style.display = 'flex';
+                };
+            }
         }
 
         function closeDetails() {
@@ -587,6 +703,80 @@
                 // Reset UI
                 btnSave.disabled = false;
                 btnSave.innerText = 'Save Update';
+            }
+        }
+
+        async function updateLotDetails() {
+            const block = document.getElementById('lotEditBlock').value;
+            const lot = document.getElementById('lotEditNumber').value;
+            const payload = {
+                block: block,
+                lot: lot,
+                lot_area: document.getElementById('lotEditLotArea').value || null,
+                floor_area: document.getElementById('lotEditFloorArea').value || null,
+                tct_no: document.getElementById('lotEditTctNo').value.trim() || null,
+                pid: document.getElementById('lotEditPid').value.trim() || null,
+                tax_dec_no: document.getElementById('lotEditTaxDecNo').value.trim() || null,
+                description: document.getElementById('lotEditDescription').value.trim() || null,
+            };
+
+            const btnSave = document.getElementById('btnSaveLotDetails');
+            try {
+                btnSave.disabled = true;
+                btnSave.innerText = 'Saving...';
+
+                const res = await fetch('/admin/gis/update-lot-details', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    const key = `B${block} L${lot}`;
+                    if (!dbLots[key]) {
+                        dbLots[key] = {
+                            owner: 'Unassigned',
+                            status: data.lot?.status || 'Vacant Lot',
+                            electricity_status: 'unpaid',
+                            water_status: 'unpaid',
+                            block: block,
+                            lot_number: lot,
+                            isNotConnected: true
+                        };
+                    }
+                    dbLots[key].lot_area = data.lot.lot_area;
+                    dbLots[key].floor_area = data.lot.floor_area;
+                    dbLots[key].tct_no = data.lot.tct_no;
+                    dbLots[key].pid = data.lot.pid;
+                    dbLots[key].tax_dec_no = data.lot.tax_dec_no;
+                    dbLots[key].description = data.lot.description;
+
+                    if (document.getElementById('detailLotId').innerText === key) {
+                        selectLot(key, dbLots[key]);
+                    }
+
+                    document.getElementById('lotDetailsUpdateModal').style.display = 'none';
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Lot Details Updated',
+                        text: `Block ${block}, Lot ${lot} property specifications saved.`,
+                        timer: 1800,
+                        showConfirmButton: false
+                    });
+                } else {
+                    Swal.fire('Error', data.message || 'Failed to update lot property details.', 'error');
+                }
+            } catch (e) {
+                console.error(e);
+                Swal.fire('Error', 'An error occurred while saving lot details.', 'error');
+            } finally {
+                btnSave.disabled = false;
+                btnSave.innerText = 'Save Lot Details';
             }
         }
 

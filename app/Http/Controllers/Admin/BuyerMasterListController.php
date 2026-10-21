@@ -20,9 +20,9 @@ class BuyerMasterListController extends Controller
         $query = BuyerMasterList::query();
 
         if ($request->status === 'cancelled') {
-            $query->onlyTrashed()->with(['reservations' => fn ($q) => $q->withTrashed(), 'financingRecord']);
+            $query->onlyTrashed()->with(['user', 'lot', 'reservations.lot' => fn ($q) => $q->withTrashed(), 'financingRecord']);
         } else {
-            $query->with(['reservations', 'financingRecord']);
+            $query->with(['user', 'lot', 'reservations.lot', 'financingRecord']);
         }
 
         if ($request->filled('search')) {
@@ -35,7 +35,10 @@ class BuyerMasterListController extends Controller
         }
 
         if ($request->filled('block')) {
-            $query->whereHas('lot', fn ($q) => $q->where('block', $request->block));
+            $query->where(function ($q) use ($request) {
+                $q->whereHas('reservations.lot', fn ($inner) => $inner->where('block', $request->block))
+                    ->orWhereHas('lot', fn ($inner) => $inner->where('block', $request->block));
+            });
         }
 
         $buyers = $query->orderBy('created_at', 'desc')->paginate(15)->withQueryString();
@@ -63,33 +66,36 @@ class BuyerMasterListController extends Controller
         }
 
         if (User::where('email', $validated['email'])->exists()) {
-
             return response()->json([
                 'success' => false,
-                'message' => 'That email address is already used by a buyer account. Edit that buyer to set the block and lot. Do not add them again.',
+                'message' => 'That email address is already used by an account.',
             ], 422);
         }
 
-        $lotId = $this->matchingLotId($validated['block_no'] ?? null, $validated['lot_no'] ?? null);
-        if ($message = $this->lotAssignmentConflictMessage($lotId, null)) {
-            return response()->json(['success' => false, 'message' => $message], 422);
+        $lotId = null;
+        if (!empty($validated['block_no']) && !empty($validated['lot_no'])) {
+            $lotId = $this->matchingLotId($validated['block_no'], $validated['lot_no']);
+            if ($message = $this->lotAssignmentConflictMessage($lotId, null)) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
         }
 
         try {
             $buyer = DB::transaction(function () use ($validated, $lotId) {
-                $validated['lot_id'] = $lotId;
+                if ($lotId) {
+                    $validated['lot_id'] = $lotId;
+                }
 
                 return BuyerMasterList::create($validated);
             });
         } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'That email address is already used by a buyer account. Edit that buyer to set the block and lot. Do not add them again.',
+                'message' => 'That email address is already used by a buyer account.',
             ], 422);
         }
 
         $buyer->unsetRelation('lot');
-
 
         return response()->json(['success' => true, 'message' => 'Buyer added successfully to the Master List.']);
     }
@@ -101,13 +107,15 @@ class BuyerMasterListController extends Controller
         $this->prepareBuyerContactEmail($request);
         $validated = $request->validate($this->buyerFormRules(), $this->buyerFormMessages());
 
-        $lotId = $this->matchingLotId($validated['block_no'] ?? null, $validated['lot_no'] ?? null);
-        $lotChanged = ($validated['block_no'] ?? null) != $buyer->block_no || ($validated['lot_no'] ?? null) != $buyer->lot_no;
-        if ($lotId || $lotChanged) {
-            if ($message = $this->lotAssignmentConflictMessage($lotId, (int) $buyer->id)) {
-                return response()->json(['success' => false, 'message' => $message], 422);
+        if (!empty($validated['block_no']) && !empty($validated['lot_no'])) {
+            $lotId = $this->matchingLotId($validated['block_no'], $validated['lot_no']);
+            $lotChanged = ($validated['block_no'] ?? null) != $buyer->block_no || ($validated['lot_no'] ?? null) != $buyer->lot_no;
+            if ($lotId && $lotChanged) {
+                if ($message = $this->lotAssignmentConflictMessage($lotId, (int) $buyer->id)) {
+                    return response()->json(['success' => false, 'message' => $message], 422);
+                }
+                $validated['lot_id'] = $lotId;
             }
-            $validated['lot_id'] = $lotId;
         }
 
         $buyer->update($validated);
@@ -225,16 +233,16 @@ class BuyerMasterListController extends Controller
             'contact_number' => ['required', 'regex:/^(09\d{9}|\+639\d{9}|639\d{9})$/'],
             'id_type' => ['required', 'string', Rule::in(BuyerMasterList::ID_TYPES)],
             'proof_of_id' => 'required|string|max:255',
-            'pagibig_number' => 'required|string|max:255',
+            'pagibig_number' => 'nullable|string|max:255',
 
-            'block_no' => 'required|string|max:50',
-            'lot_no' => 'required|string|max:50',
+            'block_no' => 'nullable|string|max:50',
+            'lot_no' => 'nullable|string|max:50',
             'tct_no' => 'nullable|string|max:255',
             'pid' => 'nullable|string|max:255',
             'tax_dec_no' => 'nullable|string|max:255',
-            'lot_area' => 'required|numeric|min:0',
-            'floor_area' => 'required|numeric|min:0',
-            'description' => 'required|string',
+            'lot_area' => 'nullable|numeric|min:0',
+            'floor_area' => 'nullable|numeric|min:0',
+            'description' => 'nullable|string',
         ];
     }
 

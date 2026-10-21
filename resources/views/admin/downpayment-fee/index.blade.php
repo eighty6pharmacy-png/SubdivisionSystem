@@ -496,27 +496,29 @@
             @if($masterListBuyers->isEmpty())
                 <div role="status"
                     style="margin-bottom: 16px; padding: 14px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; border: 1px solid #fde68a; background: #fffbeb; color: #92400e;">
-                    No buyers are ready for downpayment yet. Each buyer needs an active reservation on the Reservation Fee page first.
+                    No buyers found in Buyer Master List. Please add buyers in the Master List first.
                 </div>
             @endif
 
             <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Select
-                    buyer (reservation required)</label>
+                    buyer from Master List</label>
                 <select id="dpBuyerMasterList" class="filter-select" style="width: 100%; padding: 12px;"
                     onchange="autoFillDownpaymentBuyer(this)">
                     <option value="">-- Choose Buyer --</option>
                     @foreach($masterListBuyers as $b)
                         @php
                             $readyReservation = $b->reservations->first();
+                            $dispBlock = $readyReservation?->lot?->block ?? $b->block_no ?? '?';
+                            $dispLot = $readyReservation?->lot?->lot_number ?? $b->lot_no ?? '?';
                         @endphp
                         <option value="{{ $b->id }}" data-first="{{ $b->first_name }}" data-last="{{ $b->last_name }}"
-                            data-block="{{ $b->block_no }}" data-lot="{{ $b->lot_no }}" data-tcp="{{ $b->financingRecord?->contract_price ?? '' }}"
+                            data-block="{{ $dispBlock }}" data-lot="{{ $dispLot }}" data-tcp="{{ $b->financingRecord?->contract_price ?? '' }}"
                             data-equity="{{ $b->financingRecord?->paid_by_vendee_equity ?? '' }}"
                             data-reservation-id="{{ $readyReservation?->id ?? '' }}"
                             data-reservation-amount="{{ $readyReservation?->amount ?? '' }}">
                             {{ $b->last_name }}, {{ $b->first_name }}
-                            {{ $b->middle_name ? substr($b->middle_name, 0, 1) . '.' : '' }} — (Block {{ $b->block_no ?? '?' }}, Lot {{ $b->lot_no ?? '?' }})
+                            {{ $b->middle_name ? substr($b->middle_name, 0, 1) . '.' : '' }} — (Block {{ $dispBlock }}, Lot {{ $dispLot }})
                         </option>
                     @endforeach
                 </select>
@@ -595,15 +597,21 @@
                             style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Unit
                             Price (TCP) ₱</label>
                         <input type="text" id="calcTcp" class="filter-select"
-                            style="width: 100%; padding: 12px; font-weight: 700;" placeholder="2,000,000"
-                            oninput="formatNumberInput(this)">
+                            style="width: 100%; padding: 12px; font-weight: 700; transition: border-color 0.2s;" placeholder="2,000,000"
+                            inputmode="numeric" autocomplete="off"
+                            onkeydown="filterTcpKeydown(event)"
+                            oninput="handleTcpInput(this)"
+                            onblur="handleTcpBlur()">
+                        <div id="calcTcpError" style="display: none; color: #ef4444; font-size: 12px; font-weight: 600; margin-top: 6px;"></div>
                     </div>
                     <div>
                         <label
                             style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">DP
                             Percentage %</label>
                         <input type="number" id="calcDpPercent" class="filter-select"
-                            style="width: 100%; padding: 12px; font-weight: 700;" value="30">
+                            style="width: 100%; padding: 12px; font-weight: 700;" value="30" min="1" max="100"
+                            onkeydown="filterPositiveNumberKeydown(event)"
+                            oninput="sanitizePositiveNumber(this, 100)">
                     </div>
                 </div>
                 <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px;">
@@ -619,7 +627,9 @@
                             style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Months
                             to Pay</label>
                         <input type="number" id="calcMonths" class="filter-select" style="width: 100%; padding: 12px;"
-                            value="24">
+                            value="24" min="1" max="120"
+                            onkeydown="filterPositiveNumberKeydown(event)"
+                            oninput="sanitizePositiveNumber(this)">
                     </div>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr; margin-top: 16px;">
@@ -627,7 +637,9 @@
                         <label
                             style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Penalty %</label>
                         <input type="number" id="calcPenalty" class="filter-select" style="width: 100%; padding: 12px;"
-                            value="0">
+                            value="0" min="0" max="100"
+                            onkeydown="filterPositiveNumberKeydown(event)"
+                            oninput="sanitizePositiveNumber(this, 100)">
                     </div>
                 </div>
                 <div style="margin-top: 16px; border-top: 1px dashed #cbd5e1; padding-top: 16px;">
@@ -677,10 +689,155 @@
         }
 
         function formatNumberInput(input) {
-            let value = input.value.replace(/,/g, '');
-            if (!isNaN(value) && value !== '') {
-                input.value = Number(value).toLocaleString('en-US');
+            let clean = input.value.replace(/[^\d.]/g, '');
+            const parts = clean.split('.');
+            if (parts.length > 2) {
+                clean = parts[0] + '.' + parts.slice(1).join('');
             }
+            let whole = parts[0];
+            let decimal = parts.length > 1 ? '.' + parts[1].slice(0, 2) : '';
+            if (whole) {
+                input.value = Number(whole).toLocaleString('en-US') + decimal;
+            } else {
+                input.value = '';
+            }
+        }
+
+        function filterTcpKeydown(e) {
+            const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab', 'Home', 'End', 'Enter'];
+            if (allowedKeys.includes(e.key) || e.ctrlKey || e.metaKey) {
+                return;
+            }
+            if (e.key === '-' || e.key === '+' || /^[a-zA-Z]$/.test(e.key)) {
+                e.preventDefault();
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Invalid Input',
+                        text: 'Letters and signs like negative (-) are not allowed. Please enter positive digits only.',
+                        toast: true,
+                        position: 'top-end',
+                        timer: 2500,
+                        showConfirmButton: false
+                    });
+                }
+                return;
+            }
+            // Disallow any other non-digit character
+            if (!/^\d$/.test(e.key)) {
+                e.preventDefault();
+            }
+        }
+
+        function filterPositiveNumberKeydown(e) {
+            // Disallow negative '-', '+', exponent 'e' / 'E', letters
+            if (['-', '+', 'e', 'E'].includes(e.key) || /^[a-zA-Z]$/.test(e.key)) {
+                e.preventDefault();
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Invalid Input',
+                        text: 'Negative signs and letters are not allowed in this field.',
+                        toast: true,
+                        position: 'top-end',
+                        timer: 2500,
+                        showConfirmButton: false
+                    });
+                }
+            }
+        }
+
+        function sanitizePositiveNumber(input, max = null) {
+            let val = parseFloat(input.value);
+            if (isNaN(val) || val < 0) {
+                input.value = '';
+            } else if (max !== null && val > max) {
+                input.value = max;
+            }
+            calculateAmortization();
+        }
+
+        function handleTcpInput(input) {
+            const original = input.value;
+            if (/[a-zA-Z\-]/.test(original) && typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Invalid Input',
+                    text: 'Letters and negative signs were removed. Only positive numbers are allowed.',
+                    toast: true,
+                    position: 'top-end',
+                    timer: 2500,
+                    showConfirmButton: false
+                });
+            }
+            let rawDigits = original.replace(/\D/g, '');
+            if (rawDigits !== '') {
+                input.value = Number(rawDigits).toLocaleString('en-US');
+            } else {
+                input.value = '';
+            }
+
+            const errBox = document.getElementById('calcTcpError');
+            if (errBox && errBox.style.display !== 'none') {
+                validateTcpInput(true);
+            }
+
+            calculateAmortization();
+        }
+
+        function handleTcpBlur() {
+            const input = document.getElementById('calcTcp');
+            if (!input) return;
+            const rawDigits = input.value.replace(/\D/g, '');
+            if (input.value.trim() !== '') {
+                if (rawDigits.length < 6) {
+                    validateTcpInput(true);
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Invalid Unit Price (TCP)',
+                            text: `Unit Price (TCP) must be at least 6 digits (minimum ₱100,000). Currently ${rawDigits.length} digit${rawDigits.length === 1 ? '' : 's'}.`
+                        });
+                    }
+                } else {
+                    validateTcpInput(true);
+                }
+            } else {
+                validateTcpInput(true);
+            }
+        }
+
+        function validateTcpInput(showVisual = false) {
+            const input = document.getElementById('calcTcp');
+            const errBox = document.getElementById('calcTcpError');
+            if (!input) return { valid: false, message: 'Unit Price input not found.' };
+
+            const rawDigits = input.value.replace(/\D/g, '');
+
+            if (!rawDigits || rawDigits.length === 0) {
+                if (showVisual && errBox) {
+                    input.style.borderColor = '#ef4444';
+                    errBox.textContent = 'Please enter a valid Unit Price (TCP) number.';
+                    errBox.style.display = 'block';
+                }
+                return { valid: false, message: 'Please enter a valid Unit Price (TCP) number.' };
+            }
+
+            if (rawDigits.length < 6) {
+                if (showVisual && errBox) {
+                    input.style.borderColor = '#ef4444';
+                    errBox.textContent = `Unit Price must be at least 6 digits (currently ${rawDigits.length} digit${rawDigits.length === 1 ? '' : 's'}). Minimum ₱100,000.`;
+                    errBox.style.display = 'block';
+                }
+                return { valid: false, message: 'Unit Price (TCP) must be at least 6 digits (minimum ₱100,000).' };
+            }
+
+            if (showVisual && errBox) {
+                input.style.borderColor = '#cbd5e1';
+                errBox.textContent = '';
+                errBox.style.display = 'none';
+            }
+            return { valid: true, value: Number(rawDigits) };
         }
 
         function preselectDownpaymentBuyer(buyerId) {
@@ -697,6 +854,15 @@
         }
 
         function openContractModal() {
+            const errBox = document.getElementById('calcTcpError');
+            if (errBox) {
+                errBox.textContent = '';
+                errBox.style.display = 'none';
+            }
+            const tcpInput = document.getElementById('calcTcp');
+            if (tcpInput) {
+                tcpInput.style.borderColor = '#cbd5e1';
+            }
             document.getElementById('newContractModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
             calculateAmortization();
@@ -704,6 +870,15 @@
 
         function closeContractModal() {
             window.history.replaceState(null, '', window.location.pathname);
+            const errBox = document.getElementById('calcTcpError');
+            if (errBox) {
+                errBox.textContent = '';
+                errBox.style.display = 'none';
+            }
+            const tcpInput = document.getElementById('calcTcp');
+            if (tcpInput) {
+                tcpInput.style.borderColor = '#cbd5e1';
+            }
             document.getElementById('newContractModal').style.display = 'none';
             document.body.style.overflow = 'auto';
         }
@@ -830,7 +1005,7 @@
     <table style="border:none;margin-bottom:0;">
       <tr><td style="padding:4px;border:none;width:48%;"><strong>Installment:</strong></td><td style="padding:4px;border:none;">${installmentNo} of ${bill.total_months}</td></tr>
       <tr><td style="padding:4px;border:none;"><strong>Due date:</strong></td><td style="padding:4px;border:none;font-weight:bold;">${dueDate}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Date paid:</strong></td><td style="padding:4px;border:none;">${paidDate}</td></tr>
+      <tr><td style="padding:4px;border:none;"><strong>Payment Date &amp; Time:</strong></td><td style="padding:4px;border:none;font-weight:bold;">${paidDate}</td></tr>
       <tr><td style="padding:4px;border:none;"><strong>Method:</strong></td><td style="padding:4px;border:none;">${mop}</td></tr>
       <tr><td style="padding:4px;border:none;"><strong>Reference (TRN):</strong></td><td style="padding:4px;border:none;font-family:monospace;font-size:11px;">${trn}</td></tr>
       <tr><td style="padding:4px;border:none;"><strong>Timing:</strong></td><td style="padding:4px;border:none;">${behavior}</td></tr>
@@ -862,6 +1037,7 @@
 </table>
 <div class="footer">
   <p style="font-weight:bold;margin:0;">This installment has been settled. Thank you for your payment.</p>
+  <p style="margin:4px 0 0;font-size:11px;color:#64748b;">Transaction Reference: ${trn} · Payment Date &amp; Time: ${paidDate}</p>
 </div>
 </body>
 </html>`;
@@ -1059,18 +1235,38 @@
                 const blk = option.getAttribute('data-block');
                 const lot = option.getAttribute('data-lot');
                 if (blk) {
-                    const bOpt = Array.from(document.getElementById('calcBlk').options).find(o => o.text.includes(blk) || o.value == blk);
-                    if (bOpt) bOpt.selected = true;
+                    let bOpt = Array.from(document.getElementById('calcBlk').options).find(o => o.text.includes(blk) || o.value == blk);
+                    if (!bOpt) {
+                        bOpt = new Option(blk, blk, true, true);
+                        document.getElementById('calcBlk').add(bOpt);
+                    }
+                    bOpt.selected = true;
                 }
                 if (lot) {
-                    const lOpt = Array.from(document.getElementById('calcLot').options).find(o => o.text.includes(lot) || o.value == lot);
-                    if (lOpt) lOpt.selected = true;
+                    let lOpt = Array.from(document.getElementById('calcLot').options).find(o => o.text.includes(lot) || o.value == lot);
+                    if (!lOpt) {
+                        lOpt = new Option(lot, lot, true, true);
+                        document.getElementById('calcLot').add(lOpt);
+                    }
+                    lOpt.selected = true;
                 }
 
                 const tcp = option.getAttribute('data-tcp');
                 const equity = option.getAttribute('data-equity'); // DP
                 if (tcp) {
                     document.getElementById('calcTcp').value = Number(tcp).toLocaleString('en-US');
+                    validateTcpInput(true);
+                } else {
+                    document.getElementById('calcTcp').value = '';
+                    const errBox = document.getElementById('calcTcpError');
+                    if (errBox) {
+                        errBox.textContent = '';
+                        errBox.style.display = 'none';
+                    }
+                    const tcpInput = document.getElementById('calcTcp');
+                    if (tcpInput) {
+                        tcpInput.style.borderColor = '#cbd5e1';
+                    }
                 }
                 if (equity && tcp) {
                     const perc = (Number(equity) / Number(tcp)) * 100;
@@ -1083,42 +1279,90 @@
 
         async function submitContract() {
             const btn = document.querySelector('#newContractModal .btn-primary');
+            const restoreBtn = () => {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Save & Initialize Contract';
+                    btn.style.opacity = '1';
+                }
+            };
+
+            const buyerSelect = document.getElementById('dpBuyerMasterList');
+            const buyerId = buyerSelect.value;
+            if (!buyerId) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Select Buyer',
+                    text: 'Please select a buyer from the Master List.'
+                });
+                restoreBtn();
+                return;
+            }
+
+            const tcpValidation = validateTcpInput(true);
+            if (!tcpValidation.valid) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Invalid Unit Price (TCP)',
+                    text: tcpValidation.message
+                });
+                document.getElementById('calcTcp').focus();
+                restoreBtn();
+                return;
+            }
+
+            const percent = parseFloat(inpPercent.value) || 0;
+            if (percent <= 0 || percent > 100) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Invalid DP Percentage',
+                    text: 'DP Percentage must be between 1% and 100%.'
+                });
+                restoreBtn();
+                return;
+            }
+
+            const months = parseInt(inpMonths.value) || 0;
+            if (months < 1) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Invalid Months to Pay',
+                    text: 'Months to pay must be at least 1 month.'
+                });
+                restoreBtn();
+                return;
+            }
+
+            const penalty = parseFloat(document.getElementById('calcPenalty').value);
+            if (isNaN(penalty) || penalty < 0) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Invalid Penalty',
+                    text: 'Penalty percentage cannot be negative.'
+                });
+                restoreBtn();
+                return;
+            }
+
             if (btn) {
                 btn.disabled = true;
                 btn.textContent = 'Saving...';
                 btn.style.opacity = '0.7';
             }
 
-            const buyerSelect = document.getElementById('dpBuyerMasterList');
-            const buyerId = buyerSelect.value;
+            const tcp = tcpValidation.value;
             const selectedOption = buyerSelect.options[buyerSelect.selectedIndex];
             const reservationId = selectedOption?.getAttribute('data-reservation-id') || '';
-            const firstName = document.getElementById('calcFirstName').value || 'New';
-            const lastName = document.getElementById('calcLastName').value || 'Buyer';
+            const firstName = document.getElementById('calcFirstName').value || selectedOption?.getAttribute('data-first') || 'New';
+            const lastName = document.getElementById('calcLastName').value || selectedOption?.getAttribute('data-last') || 'Buyer';
             const contractDate = new Date().toISOString().split('T')[0];
-            const blk = document.getElementById('calcBlk').value;
-            const lot = document.getElementById('calcLot').value;
-
-            const tcpStr = inpTcp.value.replace(/,/g, '');
-            const tcp = parseFloat(tcpStr) || 0;
-            const percent = parseFloat(inpPercent.value) || 0;
-            const months = parseInt(inpMonths.value) || 1;
-            const penalty = parseFloat(document.getElementById('calcPenalty').value) || 0;
+            const blk = document.getElementById('calcBlk')?.value || selectedOption?.getAttribute('data-block') || '';
+            const lot = document.getElementById('calcLot')?.value || selectedOption?.getAttribute('data-lot') || '';
             const dpAmount = tcp * (percent / 100);
             const amortization = dpAmount / months;
 
             const nextDate = new Date();
             nextDate.setMonth(nextDate.getMonth() + 1);
-
-            if (!buyerId) {
-                Swal.fire('Please select a buyer from the Master List.');
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = 'Save & Initialize Contract';
-                    btn.style.opacity = '1';
-                }
-                return;
-            }
 
             try {
                 const res = await fetch('/admin/downpayment-fee', {
@@ -1149,21 +1393,21 @@
                     window.location.href = '/admin/downpayment-fee';
                 } else {
                     const errorData = await res.json().catch(() => null);
-                    Swal.fire(errorData && errorData.message ? errorData.message : 'Failed to save contract to database');
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.textContent = 'Save & Initialize Contract';
-                        btn.style.opacity = '1';
-                    }
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: errorData && errorData.message ? errorData.message : 'Failed to save contract to database'
+                    });
+                    restoreBtn();
                 }
             } catch (e) {
                 console.error(e);
-                Swal.fire('Error connecting to server');
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = 'Save & Initialize Contract';
-                    btn.style.opacity = '1';
-                }
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Error connecting to server'
+                });
+                restoreBtn();
             }
         }
 

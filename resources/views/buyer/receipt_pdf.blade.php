@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Downpayment Receipt - {{ \Carbon\Carbon::parse($hist->created_at)->format('M d, Y') }}</title>
+    <title>Downpayment Receipt - {{ \Carbon\Carbon::parse($hist->payment_date ?? $hist->created_at)->format('M d, Y h:i A') }}</title>
     <style>
         @page {
             size: a4 portrait;
@@ -142,8 +142,8 @@
     @php
         $paymentType = $hist->payment_method ?? 'Office Payment';
         $trn = empty($hist->trn) ? 'Manual' : $hist->trn;
-        $paymentDateRaw = isset($hist->payment_date) ? $hist->payment_date : $hist->created_at;
-        $paymentDate = \Carbon\Carbon::parse($paymentDateRaw)->format('F d, Y h:i A');
+        $paymentDateRaw = isset($hist->payment_date) && $hist->payment_date ? $hist->payment_date : $hist->created_at;
+        $paymentDate = \Carbon\Carbon::parse($paymentDateRaw)->timezone(config('app.timezone', 'Asia/Manila'))->format('F d, Y h:i A');
         $monthly = (float) ($dp->monthly_amortization ?? 0);
         $paid = (float) $hist->amount;
         $principal = $paid > ($monthly + 0.009) ? round($monthly, 2) : round($paid, 2);
@@ -195,8 +195,8 @@
                     <td style="padding:5px; border:none; color: #dc2626;">{{ $dueThis }}</td>
                 </tr>
                 <tr>
-                    <td style="padding:5px; border:none;"><strong>Payment Date:</strong></td>
-                    <td style="padding:5px; border:none;">{{ $paymentDate }}</td>
+                    <td style="padding:5px; border:none;"><strong>Payment Date &amp; Time:</strong></td>
+                    <td style="padding:5px; border:none; font-weight: bold;">{{ $paymentDate }}</td>
                 </tr>
                 <tr>
                     <td style="padding:5px; border:none;"><strong>Payment Method:</strong></td>
@@ -258,6 +258,7 @@
     </div>
 
     <div class="footer">
+        <p style="margin: 0; font-size: 11px; color: #475569;">Official Downpayment Receipt &bull; Payment recorded on: <strong>{{ $paymentDate }}</strong> &bull; Reference Number: <strong style="font-family: monospace;">{{ $trn }}</strong></p>
     </div>
 </body>
 

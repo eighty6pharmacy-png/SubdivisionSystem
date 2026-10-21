@@ -57,7 +57,7 @@ return new class extends Migration
         'downpayment_histories' => ['Paid'],
         'financing_records' => ['Pending', 'Processing', 'Released', 'Cleared'],
         'financing_payment_histories' => ['Paid'],
-        'utility_bills' => ['unpaid', 'paid', 'pending', 'overdue'],
+        'utility_bills' => ['unpaid', 'partially_paid', 'paid', 'pending', 'overdue'],
         'incidents' => ['pending', 'progress', 'resolved', 'Open / Pending', 'In Progress', 'Resolved'],
         'visitors' => ['Pending', 'Approved', 'Entered', 'Rejected', 'Awaiting Admin Approval'],
         'announcements' => ['Published', 'published', 'Archived', 'archived', 'Scheduled', 'scheduled', 'Draft', 'draft'],

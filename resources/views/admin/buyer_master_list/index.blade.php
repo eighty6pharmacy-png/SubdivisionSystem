@@ -122,8 +122,7 @@
                             <th>First Name</th>
                             <th>Middle Name</th>
                             <th>Last Name</th>
-                            <th>Block</th>
-                            <th>Lot</th>
+                            <th>Reserved Lot(s)</th>
                             <th>Contract Amount</th>
                             <th>Equity</th>
                             <th>Reservation Deadline</th>
@@ -136,9 +135,27 @@
                                 <td style="font-weight: 600;">{{ $buyer->first_name }}</td>
                                 <td style="font-weight: 600;">{{ $buyer->middle_name ?? '-' }}</td>
                                 <td style="font-weight: 600;">{{ $buyer->last_name }}</td>
-                                <td>{{ $buyer->block_no ?? '-' }}</td>
                                 <td>
-                                    {{ $buyer->lot_no ?? '-' }}
+                                    @php
+                                        $activeRes = $buyer->reservations->filter(fn ($r) => $r->status !== \App\Enums\ReservationStatus::Cancelled->value);
+                                    @endphp
+                                    @if($activeRes->isNotEmpty())
+                                        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                                            @foreach($activeRes as $r)
+                                                @if($r->lot)
+                                                    <span style="display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: 700; background: #e0f2fe; color: #0369a1; border-radius: 6px; border: 1px solid #bae6fd;">
+                                                        Blk {{ $r->lot->block }} Lot {{ $r->lot->lot_number }}
+                                                    </span>
+                                                @endif
+                                            @endforeach
+                                        </div>
+                                    @elseif($buyer->block_no && $buyer->lot_no)
+                                        <span style="display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: 700; background: #f1f5f9; color: #475569; border-radius: 6px;">
+                                            Blk {{ $buyer->block_no }} Lot {{ $buyer->lot_no }}
+                                        </span>
+                                    @else
+                                        <span style="font-size: 12px; color: #94a3b8; font-style: italic;">No lots reserved</span>
+                                    @endif
                                     @if($buyer->lot_link_warning)
                                         <div style="margin-top: 4px; max-width: 220px; font-size: 11px; color: #92400e;">{{ $buyer->lot_link_warning }}</div>
                                     @endif
@@ -215,7 +232,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="9" style="text-align: center; padding: 40px; color: #64748b;">
+                                <td colspan="8" style="text-align: center; padding: 40px; color: #64748b;">
                                     {{ request('status') === 'cancelled' ? 'No cancelled buyers.' : 'No buyers in the Master List yet.' }}
                                 </td>
                             </tr>
@@ -267,9 +284,7 @@
 
                 <!-- Tab Navigation -->
                 <div style="display: flex; gap: 8px; border-bottom: 2px solid #e2e8f0; margin-bottom: 24px;">
-                    <button type="button" class="tab-btn active" onclick="switchTab('tab-profile', this)">Profile &
-                        Property</button>
-                    <button type="button" class="tab-btn" onclick="switchTab('tab-title', this)">Titling Documents</button>
+                    <button type="button" class="tab-btn active" onclick="switchTab('tab-profile', this)">Personal Information</button>
                 </div>
 
                 <div id="tab-profile" class="tab-content active">
@@ -347,66 +362,14 @@
                                 class="view-readonly"></div>
                         <div><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Pag-IBIG
-                                No. *</label><input type="text" name="pagibig_number" id="inp_pagibig_number" required
+                                No. <span style="font-weight:400; color:#64748b;">(Optional)</span></label><input type="text" name="pagibig_number" id="inp_pagibig_number"
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly"></div>
+                                class="view-readonly" placeholder="Optional"></div>
                     </div>
 
-                    <h4 style="color: #3b82f6; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">Property Details</h4>
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
-                        <div>
-                            <label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Block No. *</label>
-                            <select name="block_no" id="inp_block_no" class="view-readonly" required
-                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;">
-                                <option value="">-- Select Block --</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Lot No. *</label>
-                            <select name="lot_no" id="inp_lot_no" class="view-readonly" required
-                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;">
-                                <option value="">-- Select Lot --</option>
-                            </select>
-                        </div>
-                        <div><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Lot Area
-                                (sqm) *</label><input type="number" step="0.01" min="0" name="lot_area" id="inp_lot_area" required
-                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly"></div>
-                        <div><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Floor Area
-                                (sqm) *</label><input type="number" step="0.01" min="0" name="floor_area" id="inp_floor_area" required
-                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly"></div>
-                        <div style="grid-column: span 2;"><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Description *</label><textarea
-                                name="description" id="inp_description" rows="4" required
-                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; resize:vertical; font-family:inherit;"
-                                class="view-readonly"></textarea></div>
-                    </div>
-                </div>
-
-                <div id="tab-title" class="tab-content">
-                    <h4 style="color: #3b82f6; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-top: 0;">
-                        Titling Documents</h4>
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 30px;">
-                        <div><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">TCT
-                                No.</label><input type="text" name="tct_no" id="inp_tct_no"
-                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly"></div>
-                        <div><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Tax Dec
-                                No.</label><input type="text" name="tax_dec_no" id="inp_tax_dec_no"
-                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly"></div>
-                        <div><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">PID (Property
-                                ID)</label><input type="text" name="pid" id="inp_pid"
-                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly"></div>
+                    <div id="view_reserved_lots_section" style="display: none; margin-top: 16px; padding: 14px 18px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px;">
+                        <span style="font-size: 12px; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.5px;">Active Reserved Lot(s)</span>
+                        <div id="view_reserved_lots_content" style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
                     </div>
                 </div>
 
@@ -585,15 +548,20 @@
             document.getElementById('tab-profile').classList.add('active');
             document.querySelector('.tab-btn').classList.add('active');
 
+            const lotsSection = document.getElementById('view_reserved_lots_section');
+            const lotsContent = document.getElementById('view_reserved_lots_content');
+            if (lotsSection) lotsSection.style.display = 'none';
+            if (lotsContent) lotsContent.innerHTML = '';
+
             if (mode === 'add') {
                 document.getElementById('modalTitle').textContent = 'Add New Buyer';
                 document.getElementById('formMethod').value = 'POST';
                 document.getElementById('buyerId').value = '';
                 document.getElementById('saveButton').style.display = 'block';
+                document.getElementById('saveButton').textContent = 'Save Record';
                 readOnlyElements.forEach(el => el.removeAttribute('disabled'));
                 readOnlyElements.forEach(el => el.removeAttribute('readonly'));
 
-                bindGisDropdowns('inp_block_no', 'inp_lot_no', { includePlaceholder: true });
                 syncSpouseField();
             } else {
                 const buyer = buyersData.find(b => b.id == id);
@@ -613,23 +581,32 @@
                 document.getElementById('inp_proof_of_id').value = buyer.proof_of_id || '';
                 document.getElementById('inp_pagibig_number').value = buyer.pagibig_number || '';
 
-                bindGisDropdowns('inp_block_no', 'inp_lot_no', { currentBlock: buyer.block_no, currentLot: buyer.lot_no });
                 syncSpouseField();
 
-                document.getElementById('inp_lot_area').value = buyer.lot_area || '';
-                document.getElementById('inp_floor_area').value = buyer.floor_area || '';
-                document.getElementById('inp_description').value = buyer.description || '';
-
-                document.getElementById('inp_tct_no').value = buyer.tct_no || '';
-                document.getElementById('inp_tax_dec_no').value = buyer.tax_dec_no || '';
-                document.getElementById('inp_pid').value = buyer.pid || '';
+                // Show reserved lots if any
+                if (lotsSection && lotsContent) {
+                    const activeLots = (buyer.reservations || [])
+                        .filter(r => r.status !== 'Cancelled' && r.lot)
+                        .map(r => `Blk ${r.lot.block} Lot ${r.lot.lot_number}`);
+                    
+                    if (activeLots.length > 0) {
+                        lotsContent.innerHTML = activeLots.map(l => 
+                            `<span style="display:inline-block; padding: 4px 10px; font-size: 12px; font-weight: 700; background: #dcfce7; color: #15803d; border-radius: 6px; border: 1px solid #86efac;">${l}</span>`
+                        ).join('');
+                        lotsSection.style.display = 'block';
+                    } else if (buyer.block_no && buyer.lot_no) {
+                        lotsContent.innerHTML = `<span style="display:inline-block; padding: 4px 10px; font-size: 12px; font-weight: 700; background: #f1f5f9; color: #475569; border-radius: 6px;">Blk ${buyer.block_no} Lot ${buyer.lot_no}</span>`;
+                        lotsSection.style.display = 'block';
+                    } else {
+                        lotsContent.innerHTML = `<span style="font-size: 12px; color: #94a3b8; font-style: italic;">No lots reserved yet.</span>`;
+                        lotsSection.style.display = 'block';
+                    }
+                }
 
                 if (mode === 'view') {
                     document.getElementById('modalTitle').textContent = 'View Buyer Details';
                     document.getElementById('saveButton').style.display = 'none';
                     readOnlyElements.forEach(el => el.setAttribute('readonly', true));
-                    document.getElementById('inp_block_no').setAttribute('disabled', true);
-                    document.getElementById('inp_lot_no').setAttribute('disabled', true);
                     document.getElementById('inp_civil_status').setAttribute('disabled', true);
                     document.getElementById('inp_id_type').setAttribute('disabled', true);
                     syncSpouseField();
@@ -639,8 +616,6 @@
                     document.getElementById('saveButton').style.display = 'block';
                     document.getElementById('saveButton').textContent = 'Update Record';
                     readOnlyElements.forEach(el => el.removeAttribute('readonly'));
-                    document.getElementById('inp_block_no').removeAttribute('disabled');
-                    document.getElementById('inp_lot_no').removeAttribute('disabled');
                     document.getElementById('inp_civil_status').removeAttribute('disabled');
                     document.getElementById('inp_id_type').removeAttribute('disabled');
                     syncSpouseField();

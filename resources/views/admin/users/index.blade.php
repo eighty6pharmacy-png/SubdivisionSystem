@@ -121,6 +121,7 @@
                         data-role="{{ $user['role'] }}" 
                         data-status="{{ $user['status'] }}" 
                         data-block="{{ $user['block'] ?? '' }}"
+                        data-lots='@json($user['lots'] ?? [])'
                         data-schedule-days='@json($user['schedule_days'] ?? [])'
                         data-shift-type="{{ $user['shift_type'] ?? 'day' }}"
                         data-shift-start="{{ $user['shift_start'] ?? '06:00' }}"
@@ -372,18 +373,36 @@
                 </div>
             </div>
 
-            <div id="editResidentFields" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div id="editResidentFields" style="display: flex; flex-direction: column; gap: 14px; background: #f8fafc; padding: 16px; border-radius: 14px; border: 1px solid #e2e8f0;">
                 <div>
-                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Block</label>
-                    <select id="editResBlock" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px;">
-                        @for($i=1; $i<=18; $i++) <option value="{{$i}}">{{$i}}</option> @endfor
-                    </select>
+                    <label style="font-size: 11px; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px;">Assigned Lots / Houses</label>
+                    <p style="font-size: 12px; color: #64748b; margin: 2px 0 8px 0;">This resident can own or occupy multiple lots. Manage their assigned properties below.</p>
+                    <div id="editResidentLotsBadges" style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 32px; align-items: center;">
+                        <!-- Badges rendered via JS -->
+                    </div>
                 </div>
-                <div>
-                    <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Lot</label>
-                    <select id="editResLot" class="filter-select" style="width: 100%; margin-top: 6px; padding: 12px;">
-                        @for($i=1; $i<=15; $i++) <option value="{{$i}}">{{$i}}</option> @endfor
-                    </select>
+
+                <div style="border-top: 1px dashed #cbd5e1; padding-top: 12px;">
+                    <label style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Attach Another Lot</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin-top: 6px; align-items: flex-end;">
+                        <div>
+                            <span style="font-size: 10px; color: #64748b; font-weight: 700;">BLOCK</span>
+                            <select id="editResBlock" class="filter-select" style="width: 100%; padding: 8px; font-size: 12px;">
+                                @for($i=1; $i<=18; $i++) <option value="{{$i}}">{{$i}}</option> @endfor
+                            </select>
+                        </div>
+                        <div>
+                            <span style="font-size: 10px; color: #64748b; font-weight: 700;">LOT</span>
+                            <select id="editResLot" class="filter-select" style="width: 100%; padding: 8px; font-size: 12px;">
+                                @for($i=1; $i<=15; $i++) <option value="{{$i}}">{{$i}}</option> @endfor
+                            </select>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-outline" style="padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; color: #047857; border-color: #a7f3d0; background: #ecfdf5; white-space: nowrap;" onclick="addLotToEditResident()">
+                                + Attach Lot
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -826,9 +845,21 @@
         document.getElementById('viewUserJoined').innerText = joined;
 
         const propContainer = document.getElementById('viewUserPropertyContainer');
-        if (role === 'Resident' && block && lot) {
-            document.getElementById('viewUserProperty').innerText = `Block ${block}, Lot ${lot}`;
-            propContainer.style.display = 'block';
+        if (role === 'Resident') {
+            const row = document.querySelector(`.user-row[data-dbid="${dbid}"]`);
+            let userLots = [];
+            if (row && row.dataset.lots) {
+                try { userLots = JSON.parse(row.dataset.lots); } catch(e) {}
+            }
+            if (userLots.length > 0) {
+                document.getElementById('viewUserProperty').innerText = userLots.map(l => `Block ${l.block}, Lot ${l.lot_number}`).join(' | ');
+                propContainer.style.display = 'block';
+            } else if (block && lot) {
+                document.getElementById('viewUserProperty').innerText = `Block ${block}, Lot ${lot}`;
+                propContainer.style.display = 'block';
+            } else {
+                propContainer.style.display = 'none';
+            }
         } else {
             propContainer.style.display = 'none';
         }
@@ -913,7 +944,20 @@
         
         const resFields = document.getElementById('editResidentFields');
         if (role === 'Resident') {
-            resFields.style.display = 'grid';
+            resFields.style.display = 'flex';
+            const row = document.querySelector(`.user-row[data-dbid="${dbid}"]`);
+            let userLots = [];
+            if (row && row.dataset.lots) {
+                try { userLots = JSON.parse(row.dataset.lots); } catch(e) {}
+            }
+            if (userLots.length > 0) {
+                currentEditResidentLots = userLots.map(l => ({ id: l.id, block: l.block, lot: l.lot_number, lot_number: l.lot_number }));
+            } else if (block && lot) {
+                currentEditResidentLots = [{ block: block, lot: lot, lot_number: lot }];
+            } else {
+                currentEditResidentLots = [];
+            }
+            renderEditResidentLotsBadges();
             bindGisDropdowns('editResBlock', 'editResLot', { currentBlock: block, currentLot: lot });
         } else {
             resFields.style.display = 'none';
@@ -963,6 +1007,48 @@
         document.getElementById('editUserModal').style.display = 'flex';
     }
 
+    let currentEditResidentLots = [];
+
+    function renderEditResidentLotsBadges() {
+        const container = document.getElementById('editResidentLotsBadges');
+        if (!container) return;
+        if (currentEditResidentLots.length === 0) {
+            container.innerHTML = '<span style="font-size: 12px; color: #dc2626; font-style: italic;">No lots currently assigned. Please attach at least one lot below.</span>';
+            return;
+        }
+        container.innerHTML = currentEditResidentLots.map((l, idx) => `
+            <span style="display: inline-flex; align-items: center; gap: 6px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 700;">
+                Block ${l.block}, Lot ${l.lot_number || l.lot}
+                <button type="button" onclick="removeLotFromEditResident(${idx})" style="background: none; border: none; color: #047857; cursor: pointer; padding: 0; font-size: 14px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%;" title="Remove this lot">&times;</button>
+            </span>
+        `).join('');
+    }
+
+    function addLotToEditResident() {
+        const block = document.getElementById('editResBlock').value;
+        const lot = document.getElementById('editResLot').value;
+        if (!block || !lot) {
+            Swal.fire({ icon: 'warning', text: 'Please select both Block and Lot.' });
+            return;
+        }
+        const exists = currentEditResidentLots.some(l => String(l.block) === String(block) && String(l.lot_number || l.lot) === String(lot));
+        if (exists) {
+            Swal.fire({ icon: 'info', text: `Block ${block}, Lot ${lot} is already in the list.` });
+            return;
+        }
+        currentEditResidentLots.push({ block: block, lot: lot, lot_number: lot });
+        renderEditResidentLotsBadges();
+    }
+
+    function removeLotFromEditResident(idx) {
+        if (currentEditResidentLots.length <= 1) {
+            Swal.fire({ icon: 'warning', text: 'A Resident must have at least one assigned lot.' });
+            return;
+        }
+        currentEditResidentLots.splice(idx, 1);
+        renderEditResidentLotsBadges();
+    }
+
     function closeEditModal() {
         window.history.replaceState(null, '', window.location.pathname);
         document.getElementById('editUserModal').style.display = 'none';
@@ -986,12 +1072,13 @@
         
         const resFields = document.getElementById('editResidentFields');
         if (resFields && resFields.style.display !== 'none') {
-            payload.block = document.getElementById('editResBlock').value;
-            payload.lot = document.getElementById('editResLot').value;
-            if (!payload.block || !payload.lot) {
-                Swal.fire('Block and Lot are mandatory for Resident accounts.');
+            if (currentEditResidentLots.length === 0) {
+                Swal.fire('At least one Block and Lot is mandatory for Resident accounts.');
                 return;
             }
+            payload.lots_payload = currentEditResidentLots;
+            payload.block = currentEditResidentLots[0].block;
+            payload.lot = currentEditResidentLots[0].lot_number || currentEditResidentLots[0].lot;
         }
 
         const editRole = document.getElementById('editUserModal').dataset.role;

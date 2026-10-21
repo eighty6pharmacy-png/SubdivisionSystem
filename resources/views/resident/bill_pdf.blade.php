@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>{{ ucfirst($bill->type) }} Statement of Account - {{ \Carbon\Carbon::parse($bill->created_at)->format('F Y') }}</title>
+    <title>{{ (isset($bill->status) && strtolower($bill->status) === 'paid') ? 'Official Receipt' : 'Statement of Account' }} - {{ ucfirst($bill->type) }} - {{ \Carbon\Carbon::parse($bill->created_at)->format('F Y') }}</title>
     <style>
         @page {
             size: a4 portrait;
@@ -52,6 +52,11 @@
         .watermark.paid {
             color: #10b981;
             border-color: #10b981;
+        }
+        .watermark.partial {
+            color: #2563eb;
+            border-color: #2563eb;
+            font-size: 13px;
         }
         .watermark.unpaid {
             color: #ef4444;
@@ -131,16 +136,21 @@
 </head>
 <body>
     @php
-        $isPaid = strtolower($bill->status) === 'paid';
+        $rawStatus = strtolower($bill->status);
+        $totalPaid = $bill->payments ? (float) $bill->payments->sum('amount_paid') : 0;
+        $isPaid = $rawStatus === 'paid';
+        $isPartiallyPaid = !$isPaid && ($rawStatus === 'partially_paid' || $totalPaid > 0);
     @endphp
 
     <div class="header">
         <h1>Mayon Builders Realty & Development Corporation</h1>
         <p>Z1, Tagbong, Pili, Camarines Sur</p>
-        <p><strong>STATEMENT OF ACCOUNT ({{ strtoupper($bill->type) }})</strong></p>
+        <p><strong>{{ $isPaid ? 'OFFICIAL RECEIPT & STATEMENT OF ACCOUNT' : 'STATEMENT OF ACCOUNT' }} ({{ strtoupper($bill->type) }})</strong></p>
         
         @if($isPaid)
             <div class="watermark paid">PAID</div>
+        @elseif($isPartiallyPaid)
+            <div class="watermark partial">PARTIALLY PAID</div>
         @else
             <div class="watermark unpaid">UNPAID</div>
         @endif
@@ -160,19 +170,24 @@
         $currentCharges = (float) $bill->amount;
         $prevBalance = (float) ($bill->previous_balance ?? 0);
         $amountBeforeDue = $currentCharges + $prevBalance;
-        $penaltyRate = 5;
-        $penaltyAmount = $amountBeforeDue * ($penaltyRate / 100);
+        $penaltyKey = $bill->type === 'electricity' ? 'electricity_penalty' : 'water_penalty';
+        $penaltyRate = (float) (\App\Models\Setting::find($penaltyKey)?->value ?? 5);
+        $penaltyAmount = round($amountBeforeDue * ($penaltyRate / 100), 2);
         $amountAfterDue = $amountBeforeDue + $penaltyAmount;
-        $totalPaid = $bill->payments ? (float) $bill->payments->sum('amount_paid') : 0;
+        $tz = config('app.timezone', 'Asia/Manila');
+        $isPastDue = $bill->due_date && \Carbon\Carbon::parse($bill->due_date, $tz)->endOfDay()->isPast();
+        $effectiveTotalDue = (!$isPaid && ($bill->is_at_risk || $isPastDue)) ? $amountAfterDue : $amountBeforeDue;
+        $remainingBalance = max(0, round($effectiveTotalDue - $totalPaid, 2));
 
         $mop = 'N/A';
         $trn = 'N/A';
         $paidDate = 'N/A';
         if ($bill->payments && $bill->payments->count() > 0) {
             $latestPayment = $bill->payments->sortByDesc('payment_date')->first();
-            $mop = $latestPayment->method;
-            $trn = $latestPayment->trn;
-            $paidDate = \Carbon\Carbon::parse($latestPayment->payment_date)->format('M d, Y h:i A');
+            $mop = $latestPayment->method ?? 'Office Payment';
+            $trn = $latestPayment->trn ?? 'N/A';
+            $pDateRaw = $latestPayment->payment_date ?? $latestPayment->created_at;
+            $paidDate = \Carbon\Carbon::parse($pDateRaw)->timezone(config('app.timezone', 'Asia/Manila'))->format('F d, Y h:i A');
         }
     @endphp
 
@@ -196,7 +211,7 @@
                     <td style="padding:2px 4px; border:none;"><strong>Due Date:</strong></td>
                     <td style="padding:2px 4px; border:none; font-weight:bold;">{{ $dueDateFormatted }}</td>
                 </tr>
-                @if($isPaid)
+                @if($isPaid || ($bill->payments && $bill->payments->count() > 0))
                 <tr>
                     <td style="padding:2px 4px; border:none;"><strong>MOP:</strong></td>
                     <td style="padding:2px 4px; border:none;">{{ $mop }}</td>
@@ -206,8 +221,8 @@
                     <td style="padding:2px 4px; border:none; font-family: monospace; font-size: 10px;">{{ $trn }}</td>
                 </tr>
                 <tr>
-                    <td style="padding:2px 4px; border:none;"><strong>Date Paid:</strong></td>
-                    <td style="padding:2px 4px; border:none; font-size: 10px;">{{ $paidDate }}</td>
+                    <td style="padding:2px 4px; border:none;"><strong>Payment Date &amp; Time:</strong></td>
+                    <td style="padding:2px 4px; border:none; font-size: 10px; font-weight: bold;">{{ $paidDate }}</td>
                 </tr>
                 @endif
             </table>
@@ -289,18 +304,55 @@
                 <td><strong>Amount after {{ $dueDateFormatted }}</strong></td>
                 <td class="text-right"><strong>₱{{ number_format($amountAfterDue, 2) }}</strong></td>
             </tr>
-            @if($isPaid)
+            @if($isPaid || $totalPaid > 0)
             <tr>
                 <td class="fw-bold">Total Paid</td>
                 <td class="text-right fw-bold">₱{{ number_format($totalPaid, 2) }}</td>
             </tr>
             @endif
+            @if(!$isPaid && $totalPaid > 0)
+            <tr class="highlight-row">
+                <td class="fw-bold">Remaining Balance Due</td>
+                <td class="text-right fw-bold">₱{{ number_format($remainingBalance, 2) }}</td>
+            </tr>
+            @endif
         </tbody>
     </table>
+
+    @if($bill->payments && $bill->payments->count() > 0)
+    <h3 style="color:#000; border-bottom:1px solid #000; padding-bottom:3px; margin: 10px 0 6px 0; font-size: 11.5px; text-transform:uppercase;">Payment Transactions</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Payment Date &amp; Time</th>
+                <th>Reference (TRN)</th>
+                <th>Payment Method</th>
+                <th class="text-right">Amount Paid</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($bill->payments->sortByDesc('payment_date') as $pay)
+            @php
+                $payDateRaw = $pay->payment_date ?? $pay->created_at;
+                $payDateFormatted = \Carbon\Carbon::parse($payDateRaw)->timezone(config('app.timezone', 'Asia/Manila'))->format('F d, Y h:i A');
+            @endphp
+            <tr>
+                <td><strong>{{ $payDateFormatted }}</strong></td>
+                <td style="font-family: monospace; font-size: 10px;">{{ $pay->trn }}</td>
+                <td>{{ $pay->method ?? 'Office Payment' }}</td>
+                <td class="text-right fw-bold">₱{{ number_format($pay->amount_paid, 2) }}</td>
+            </tr>
+            @endforeach
+        </tbody>
+    </table>
+    @endif
 
     <div class="footer">
         @if($isPaid)
             <p style="font-weight: bold; margin: 0;">This bill has been fully settled. Thank you for your payment!</p>
+            @if($paidDate !== 'N/A')
+                <p style="margin: 3px 0 0; font-size: 9.5px; color: #475569;">Payment Recorded: <strong>{{ $paidDate }}</strong></p>
+            @endif
         @else
             <p style="margin: 0;">Please pay on or before the due date to avoid penalty charges.</p>
         @endif

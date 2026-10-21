@@ -277,58 +277,76 @@
     <!-- Record New Reservation Modal -->
     <div id="newReservationModal" class="bill-modal"
         style="display: none; align-items: center; justify-content: center; z-index: 3000;">
-        <div class="bill-modal-content" style="max-width: 500px; padding: 32px; border-radius: 24px;">
+        <div class="bill-modal-content" style="max-width: 540px; padding: 32px; border-radius: 24px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                <h2 style="font-size: 24px; font-weight: 800; color: #0f172a;">Manual Reservation Logging</h2>
+                <h2 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">Manual Reservation Logging</h2>
                 <button onclick="closeReservationModal()"
-                    style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+                    style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">&times;</button>
             </div>
 
-            <div style="margin-bottom: 16px;">
-                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Select
-                    Buyer from Master List</label>
-                <select id="resBuyerMasterList" class="filter-select" style="width: 100%; padding: 12px;"
-                    onchange="autoFillReservationBuyer(this)">
-                    <option value="">-- Choose Buyer --</option>
-                    @foreach($masterListBuyers as $b)
-                        <option value="{{ $b->id }}" data-name="{{ $b->first_name }} {{ $b->last_name }}"
-                            data-contact="{{ $b->contact_number }}" data-block="{{ $b->block_no }}" data-lot="{{ $b->lot_no }}">
-                            {{ $b->last_name }}, {{ $b->first_name }}
-                            {{ $b->middle_name ? substr($b->middle_name, 0, 1) . '.' : '' }} — (Block {{ $b->block_no ?? '?' }}, Lot {{ $b->lot_no ?? '?' }})
-                        </option>
-                    @endforeach
-                </select>
-            </div>
+            <!-- Buyer Selection with Real-Time Search -->
+            <input type="hidden" id="resBuyerMasterList" value="">
+            <input type="hidden" id="resName" value="">
+            <input type="hidden" id="resContact" value="">
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; display: none;"
-                id="manualNameContact">
+            <div id="selectedBuyerCard" style="display: none; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 14px; padding: 14px 18px; margin-bottom: 16px; justify-content: space-between; align-items: center;">
                 <div>
-                    <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Buyer
-                        Name</label>
-                    <input type="text" id="resName" class="filter-select" style="width: 100%; padding: 12px;"
-                        placeholder="Full Name">
+                    <div id="selectedBuyerName" style="font-size: 15px; font-weight: 800; color: #166534;"></div>
+                    <div id="selectedBuyerMeta" style="font-size: 12px; color: #15803d; margin-top: 3px;"></div>
+                    <div id="selectedBuyerLots" style="margin-top: 6px;"></div>
+                </div>
+                <button type="button" onclick="clearSelectedBuyer()" 
+                    style="background: #ffffff; border: 1px solid #86efac; color: #15803d; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
+                    Change Buyer
+                </button>
+            </div>
+
+            <div id="buyerSearchContainer" style="margin-bottom: 16px; position: relative;">
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">
+                    Select Buyer from Master List *
+                </label>
+                <div style="position: relative;">
+                    <input type="text" id="buyerSearchInput" class="filter-select"
+                        style="width: 100%; padding: 12px 14px 12px 38px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 14px; box-sizing: border-box;"
+                        placeholder="Search buyer by name, email, or contact number..."
+                        oninput="filterBuyers(this.value)"
+                        onfocus="filterBuyers(this.value)"
+                        autocomplete="off">
+                    <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; display: flex; align-items: center;">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    </span>
+                </div>
+                <div id="buyerSearchResults" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #fff; border: 1.5px solid #cbd5e1; border-radius: 12px; max-height: 220px; overflow-y: auto; z-index: 3100; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);">
+                </div>
+            </div>
+
+            <!-- Block and Lot Selection -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                <div>
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">
+                        Select Block *
+                    </label>
+                    <select id="resBlock" class="filter-select" style="width: 100%; padding: 12px; border-radius: 10px;">
+                        <option value="">-- Select Block --</option>
+                    </select>
                 </div>
                 <div>
-                    <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Contact
-                        Number</label>
-                    <input type="text" id="resContact" class="filter-select" style="width: 100%; padding: 12px;"
-                        placeholder="09XX-XXX-XXXX">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">
+                        Select Lot *
+                    </label>
+                    <select id="resLot" class="filter-select" style="width: 100%; padding: 12px; border-radius: 10px;">
+                        <option value="">-- Select Lot --</option>
+                    </select>
                 </div>
             </div>
 
-            <div id="resAssignedLot"
-                style="margin-bottom: 16px; padding: 12px 14px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 14px; font-weight: 700; color: #64748b;">
-                Select a buyer to use their block and lot from the Master List.
-            </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
                 <div>
                     <label
                         style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Amount
                         Paid (₱)</label>
                     <input type="text" id="resAmount" class="filter-select"
-                        style="width: 100%; font-size: 16px; padding: 12px;" value="20,000"
+                        style="width: 100%; font-size: 16px; padding: 12px; border-radius: 10px; box-sizing: border-box;" value="20,000"
                         oninput="formatNumberInput(this)">
                 </div>
                 <div>
@@ -336,18 +354,20 @@
                         style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Deadline
                         of Reservation</label>
                     <input type="date" id="resDeadline" class="filter-select"
-                        style="width: 100%; font-size: 16px; padding: 12px;"
+                        style="width: 100%; font-size: 16px; padding: 12px; border-radius: 10px; box-sizing: border-box;"
                         value="{{ \Carbon\Carbon::now()->addDays(30)->format('Y-m-d') }}">
                 </div>
             </div>
 
-            <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 14px;"
+            <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 14px; border-radius: 10px; font-size: 15px; font-weight: 700;"
                 onclick="submitReservation()">Save Reservation Record</button>
         </div>
     </div>
 
+    <script src="{{ asset('js/gis-dropdowns.js') }}"></script>
     <script>
         const allBillsRaw = @json($bills);
+        const masterBuyersList = @json($masterListBuyers);
 
         let currentModalId = null;
 
@@ -358,32 +378,112 @@
             }
         }
 
-        function autoFillReservationBuyer(select) {
-            const option = select.options[select.selectedIndex];
-            const label = document.getElementById('resAssignedLot');
-            if (!option || !option.value) {
-                label.textContent = 'Select a buyer to use their block and lot from the Master List.';
-                label.style.color = '#64748b';
+        function filterBuyers(query) {
+            const resultsBox = document.getElementById('buyerSearchResults');
+            if (!resultsBox) return;
+
+            const q = (query || '').toLowerCase().trim();
+            const filtered = masterBuyersList.filter(b => {
+                const fullName = `${b.first_name || ''} ${b.middle_name || ''} ${b.last_name || ''}`.toLowerCase();
+                const reverseName = `${b.last_name || ''} ${b.first_name || ''}`.toLowerCase();
+                const email = (b.email || '').toLowerCase();
+                const contact = (b.contact_number || '').toLowerCase();
+                return !q || fullName.includes(q) || reverseName.includes(q) || email.includes(q) || contact.includes(q);
+            });
+
+            if (filtered.length === 0) {
+                resultsBox.innerHTML = '<div style="padding: 16px; text-align: center; color: #94a3b8; font-size: 13px;">No matching buyers found.</div>';
+                resultsBox.style.display = 'block';
                 return;
             }
 
-            document.getElementById('resName').value = option.getAttribute('data-name');
-            document.getElementById('resContact').value = option.getAttribute('data-contact');
+            resultsBox.innerHTML = filtered.map(b => {
+                const fullName = `${b.last_name}, ${b.first_name}${b.middle_name ? ' ' + b.middle_name.charAt(0) + '.' : ''}`;
+                const contact = b.contact_number || 'No contact';
+                const email = b.email || '';
+                
+                // Active lots owned
+                const lots = (b.reservations || [])
+                    .filter(r => r.status !== 'Cancelled' && r.lot)
+                    .map(r => `Blk ${r.lot.block} Lot ${r.lot.lot_number}`);
+                const lotsBadge = lots.length > 0 
+                    ? `<span style="font-size: 11px; padding: 2px 6px; background: #e0f2fe; color: #0369a1; border-radius: 4px; font-weight: 700;">${lots.length} active (${lots.join(', ')})</span>`
+                    : `<span style="font-size: 11px; padding: 2px 6px; background: #f1f5f9; color: #64748b; border-radius: 4px;">0 lots</span>`;
 
-            const blk = option.getAttribute('data-block');
-            const lot = option.getAttribute('data-lot');
-            if (blk && lot) {
-                label.textContent = `Block ${blk}, Lot ${lot}`;
-                label.style.color = '#0f172a';
-            } else {
-                label.textContent = 'This buyer has no block and lot on the Master List. Set them there before reserving.';
-                label.style.color = '#b45309';
-            }
+                return `
+                    <div onclick="selectBuyer('${b.id}')" 
+                        style="padding: 10px 14px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background 0.15s ease;"
+                        onmouseover="this.style.background='#f8fafc'" 
+                        onmouseout="this.style.background='#ffffff'">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 700; font-size: 14px; color: #0f172a;">${fullName}</span>
+                            ${lotsBadge}
+                        </div>
+                        <div style="font-size: 12px; color: #64748b; margin-top: 2px;">
+                            ${email ? email + ' • ' : ''}${contact}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            resultsBox.style.display = 'block';
         }
+
+        function selectBuyer(id) {
+            const buyer = masterBuyersList.find(b => String(b.id) === String(id));
+            if (!buyer) return;
+
+            document.getElementById('resBuyerMasterList').value = buyer.id;
+            document.getElementById('resName').value = `${buyer.first_name || ''} ${buyer.last_name || ''}`.trim();
+            document.getElementById('resContact').value = buyer.contact_number || '';
+
+            const fullName = `${buyer.last_name}, ${buyer.first_name}${buyer.middle_name ? ' ' + buyer.middle_name : ''}`;
+            document.getElementById('selectedBuyerName').textContent = fullName;
+            document.getElementById('selectedBuyerMeta').textContent = `${buyer.email ? buyer.email + ' • ' : ''}${buyer.contact_number || 'No contact'}`;
+
+            const lots = (buyer.reservations || [])
+                .filter(r => r.status !== 'Cancelled' && r.lot)
+                .map(r => `Blk ${r.lot.block} Lot ${r.lot.lot_number}`);
+            
+            const lotsContainer = document.getElementById('selectedBuyerLots');
+            if (lots.length > 0) {
+                lotsContainer.innerHTML = `<span style="font-size: 12px; font-weight: 600; color: #15803d;">Existing lots: </span>` +
+                    lots.map(l => `<span style="display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: 700; background: #dcfce7; color: #166534; border-radius: 6px; margin-right: 4px;">${l}</span>`).join('');
+            } else {
+                lotsContainer.innerHTML = `<span style="font-size: 11px; color: #64748b; font-style: italic;">No previous lots reserved</span>`;
+            }
+
+            document.getElementById('selectedBuyerCard').style.display = 'flex';
+            document.getElementById('buyerSearchContainer').style.display = 'none';
+            document.getElementById('buyerSearchResults').style.display = 'none';
+        }
+
+        function clearSelectedBuyer() {
+            document.getElementById('resBuyerMasterList').value = '';
+            document.getElementById('resName').value = '';
+            document.getElementById('resContact').value = '';
+            document.getElementById('buyerSearchInput').value = '';
+            document.getElementById('selectedBuyerCard').style.display = 'none';
+            document.getElementById('buyerSearchContainer').style.display = 'block';
+            document.getElementById('buyerSearchInput').focus();
+        }
+
+        // Close search results when clicking outside
+        document.addEventListener('click', function(e) {
+            const container = document.getElementById('buyerSearchContainer');
+            const results = document.getElementById('buyerSearchResults');
+            if (container && results && !container.contains(e.target)) {
+                results.style.display = 'none';
+            }
+        });
 
         function openReservationModal() {
             if (new URLSearchParams(window.location.search).get('action') !== 'add') {
                 window.history.pushState(null, '', '?action=add');
+            }
+            clearSelectedBuyer();
+            if (typeof bindGisDropdowns === 'function') {
+                bindGisDropdowns('resBlock', 'resLot', { includePlaceholder: true });
             }
             document.getElementById('newReservationModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
@@ -402,48 +502,44 @@
 
         async function submitReservation() {
             const btn = document.querySelector('#newReservationModal .btn-primary');
+            const resetBtn = () => {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Save Reservation Record';
+                    btn.style.opacity = '1';
+                }
+            };
+
             if (btn) {
                 btn.disabled = true;
                 btn.textContent = 'Saving...';
                 btn.style.opacity = '0.7';
             }
 
-            const buyerSelect = document.getElementById('resBuyerMasterList');
-            const buyerId = buyerSelect.value;
-            const buyerOption = buyerSelect.options[buyerSelect.selectedIndex];
+            const buyerId = document.getElementById('resBuyerMasterList').value;
             const name = document.getElementById('resName').value.trim();
             const contact = document.getElementById('resContact').value.trim();
+            const block = document.getElementById('resBlock').value;
+            const lot = document.getElementById('resLot').value;
             const deadline = document.getElementById('resDeadline').value;
             const amountStr = document.getElementById('resAmount').value.replace(/,/g, '');
             const amount = parseFloat(amountStr);
 
             if (!buyerId) {
-                Swal.fire('Please select a buyer from the Master List.');
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = 'Save Reservation Record';
-                    btn.style.opacity = '1';
-                }
+                Swal.fire({ icon: 'warning', title: 'Buyer Required', text: 'Please search and select a buyer from the Master List.' });
+                resetBtn();
                 return;
             }
 
-            if (!buyerOption.getAttribute('data-block') || !buyerOption.getAttribute('data-lot')) {
-                Swal.fire('This buyer has no block and lot on the Master List. Set them there before reserving.');
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = 'Save Reservation Record';
-                    btn.style.opacity = '1';
-                }
+            if (!block || !lot) {
+                Swal.fire({ icon: 'warning', title: 'Block and Lot Required', text: 'Please select both Block and Lot to reserve.' });
+                resetBtn();
                 return;
             }
 
             if (isNaN(amount) || amount <= 0) {
-                Swal.fire('Please enter a valid amount.');
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = 'Save Reservation Record';
-                    btn.style.opacity = '1';
-                }
+                Swal.fire({ icon: 'warning', title: 'Invalid Amount', text: 'Please enter a valid reservation fee amount.' });
+                resetBtn();
                 return;
             }
 
@@ -456,6 +552,8 @@
                     },
                     body: JSON.stringify({
                         buyer_master_list_id: buyerId,
+                        block: block,
+                        lot: lot,
                         name: name,
                         contact: contact,
                         amount: amount,
@@ -468,20 +566,12 @@
                     window.location.reload();
                 } else {
                     Swal.fire(data.message || 'Failed to save reservation to database');
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.textContent = 'Save Reservation Record';
-                        btn.style.opacity = '1';
-                    }
+                    resetBtn();
                 }
             } catch (e) {
                 console.error(e);
                 Swal.fire('Error connecting to server');
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = 'Save Reservation Record';
-                    btn.style.opacity = '1';
-                }
+                resetBtn();
             }
         }
 
@@ -677,8 +767,8 @@
                 openReservationModal();
             }
 
-            if (window.jQuery && $.fn.select2) {
-                $('#resBuyerMasterList').select2({
+            if (window.jQuery && $.fn.select2 && $('select#resBuyerMasterList').length) {
+                $('select#resBuyerMasterList').select2({
                     placeholder: "-- Choose Buyer --",
                     allowClear: true,
                     width: '100%'

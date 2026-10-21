@@ -499,45 +499,125 @@ class DatabaseConstraintsTest extends TestCase
         $this->putJson('/api/appointments/abc/status', ['status' => 'Bogus'])->assertStatus(422);
     }
 
-    public function test_reservation_uses_the_master_list_lot(): void
+    public function test_reservation_picks_block_and_lot_and_supports_multiple_lots(): void
     {
-        $lot = $this->lot('8', '3');
-        $other = $this->lot('9', '4');
-        $buyer = $this->buyer(['lot_id' => $lot->id, 'email' => 'reserved.buyer@gmail.com']);
+        $lot1 = $this->lot('8', '3');
+        $lot2 = $this->lot('9', '4');
+        $buyer = $this->buyer(['email' => 'multilot.buyer@gmail.com']);
         $admin = $this->admin();
 
         $this->actingAs($admin)
             ->get('/admin/reservation-fee')
             ->assertOk()
-            ->assertDontSee('id="resBlock"', false)
-            ->assertDontSee('id="resLot"', false)
-            ->assertSee('id="resAssignedLot"', false);
+            ->assertSee('id="resBlock"', false)
+            ->assertSee('id="resLot"', false)
+            ->assertSee('id="buyerSearchInput"', false);
 
+        // First lot reservation
         $this->actingAs($admin)
             ->postJson('/admin/reservation-fee', [
                 'buyer_master_list_id' => $buyer->id,
-                'block' => $other->block,
-                'lot' => $other->lot_number,
+                'block' => $lot1->block,
+                'lot' => $lot1->lot_number,
                 'amount' => 20000,
                 'deadline_date' => now()->addDays(30)->toDateString(),
             ])
             ->assertOk()
             ->assertJson(['success' => true]);
 
-        $reservation = Reservation::where('buyer_id', $buyer->id)->first();
-        $this->assertNotNull($reservation);
-        $this->assertSame($lot->id, $reservation->lot_id);
-        $this->assertSame($lot->id, $buyer->fresh()->lot_id);
-        $this->assertSame('Reserved', $lot->fresh()->status);
-        $this->assertSame('Available', $other->fresh()->status);
+        $res1 = Reservation::where('buyer_id', $buyer->id)->where('lot_id', $lot1->id)->first();
+        $this->assertNotNull($res1);
+        $this->assertSame('Reserved', $lot1->fresh()->status);
 
-        $unassigned = $this->buyer(['email' => 'nolot.buyer@gmail.com']);
+        // Second lot reservation for the SAME buyer (Multiple lots)
         $this->actingAs($admin)
             ->postJson('/admin/reservation-fee', [
-                'buyer_master_list_id' => $unassigned->id,
+                'buyer_master_list_id' => $buyer->id,
+                'block' => $lot2->block,
+                'lot' => $lot2->lot_number,
+                'amount' => 20000,
+                'deadline_date' => now()->addDays(30)->toDateString(),
+            ])
+            ->assertOk()
+            ->assertJson(['success' => true]);
+
+        $res2 = Reservation::where('buyer_id', $buyer->id)->where('lot_id', $lot2->id)->first();
+        $this->assertNotNull($res2);
+        $this->assertSame('Reserved', $lot2->fresh()->status);
+        $this->assertSame(2, Reservation::where('buyer_id', $buyer->id)->count());
+
+        // Reserving without a lot fails with 422
+        $this->actingAs($admin)
+            ->postJson('/admin/reservation-fee', [
+                'buyer_master_list_id' => $buyer->id,
                 'amount' => 20000,
             ])
             ->assertStatus(422)
             ->assertJson(['success' => false]);
+    }
+
+    public function test_buyer_created_without_lot_and_optional_pagibig(): void
+    {
+        $admin = $this->admin();
+
+        $this->actingAs($admin)
+            ->postJson('/admin/buyer-master-list', [
+                'first_name' => 'Roberto',
+                'middle_name' => 'Cruz',
+                'last_name' => 'Mendoza',
+                'email' => 'roberto.mendoza@gmail.com',
+                'contact_number' => '09181234567',
+                'civil_status' => 'Single',
+                'present_address' => 'Sample Street, City',
+                'postal_address' => 'Sample Street, City',
+                'id_type' => 'Philippine National ID',
+                'proof_of_id' => '1234-5678-9012-3456',
+                // pagibig_number, block_no, lot_no omitted!
+            ])
+            ->assertOk()
+            ->assertJson(['success' => true]);
+
+        $buyer = BuyerMasterList::whereHas('user', fn ($q) => $q->where('email', 'roberto.mendoza@gmail.com'))->first();
+        $this->assertNotNull($buyer);
+        $this->assertNull($buyer->lot_id);
+        $this->assertNull($buyer->pagibig_number);
+    }
+
+    public function test_gis_updates_lot_property_details_and_syncs_to_reserved_buyer(): void
+    {
+        $admin = $this->admin();
+        $lot = $this->lot('3', '8', 'Vacant Lot');
+
+        $this->actingAs($admin)
+            ->postJson('/admin/gis/update-lot-details', [
+                'block' => '3',
+                'lot' => '8',
+                'lot_area' => 150.5,
+                'floor_area' => 75.25,
+                'description' => 'Corner Lot with Duplex',
+                'tct_no' => 'TCT-2026-888',
+                'pid' => 'PID-308',
+                'tax_dec_no' => 'TD-2026-308',
+            ])
+            ->assertOk()
+            ->assertJson(['success' => true]);
+
+        $lot->refresh();
+        $this->assertEquals(150.5, (float) $lot->lot_area);
+        $this->assertEquals(75.25, (float) $lot->floor_area);
+        $this->assertSame('Corner Lot with Duplex', $lot->description);
+        $this->assertSame('TCT-2026-888', $lot->tct_no);
+        $this->assertSame('PID-308', $lot->pid);
+        $this->assertSame('TD-2026-308', $lot->tax_dec_no);
+
+        // When a buyer reserves this lot, buyer accessors fall back to the reserved lot's property details
+        $buyer = $this->buyer(['lot_id' => null]);
+        $this->reservation($lot, 'Reserved', $buyer);
+
+        $buyer = $buyer->fresh(['reservations.lot']);
+        $this->assertEquals(150.5, (float) $buyer->lot_area);
+        $this->assertSame('TCT-2026-888', $buyer->tct_no);
+        $this->assertSame('PID-308', $buyer->pid);
+        $this->assertSame('TD-2026-308', $buyer->tax_dec_no);
     }
 }

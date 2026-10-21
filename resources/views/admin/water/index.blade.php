@@ -27,8 +27,8 @@
     $paidBills  = collect($bills)->where('status', 'paid')->count();
     $unpaidBills = $totalBills - $paidBills;
     $totalBilled    = collect($bills)->sum('amount');
-    $totalCollected = collect($bills)->where('status', 'paid')->sum('amount');
-    $totalBalanceRemaining = collect($bills)->where('status', '!=', 'paid')->sum('amount');
+    $totalCollected = collect($bills)->sum(fn($b) => $b['status'] === 'paid' ? max((float)$b['total_paid'], (float)$b['amount']) : (float)$b['total_paid']);
+    $totalBalanceRemaining = max(0, $totalBilled - $totalCollected);
     $cerPct = $totalBilled > 0 ? round(($totalCollected / $totalBilled) * 100) : 0;
     $circumference = 2 * M_PI * 52;
     $cerStroke = ($cerPct / 100) * $circumference;
@@ -274,6 +274,7 @@
             <select id="statusFilter" class="filter-select">
                 <option value="all">All Statuses</option>
                 <option value="paid">Paid</option>
+                <option value="partially_paid">Partially Paid</option>
                 <option value="unpaid">Unpaid</option>
             </select>
         </div>
@@ -338,11 +339,17 @@
                         <!-- Dynamic Amounts for JS recalculation -->
                         <td class="dynamic-amount-cell" 
                             data-usage-cubic="{{ $bill['usage_m3'] }}" 
+                            data-base-amount="{{ $bill['base_amount'] ?? 0 }}"
                             data-previous-balance="{{ $bill['previous_balance'] }}"
+                            data-total-paid="{{ $bill['total_paid'] ?? 0 }}"
                             data-at-risk="{{ $bill['at_risk'] ? 'true' : 'false' }}" 
                             data-status="{{ $bill['status'] }}"
                             style="font-weight: 700;">
-                            ₱{{ number_format($bill['amount'], 2) }}
+                            <div>₱{{ number_format($bill['amount'], 2) }}</div>
+                            @if(($bill['total_paid'] ?? 0) > 0 && $bill['status'] !== 'paid')
+                                <div style="font-size: 11px; color: #10b981; font-weight: 600; margin-top: 2px;">Paid: ₱{{ number_format($bill['total_paid'], 2) }}</div>
+                                <div style="font-size: 11px; color: #d97706; font-weight: 700;">Bal: ₱{{ number_format($bill['remaining_balance'] ?? max(0, $bill['amount'] - $bill['total_paid']), 2) }}</div>
+                            @endif
                         </td>
                         <td>
                             @if(($bill['payment_behavior'] ?? 'Not available yet') === 'Early')
@@ -357,6 +364,7 @@
                         </td>
                         <td>
                             @if($bill['method'])
+                                <span class="method-badge method-{{ strtolower($bill['method']) }}">
                                     @if($bill['method'] === 'GCash') 📱 @else 🏢 @endif
                                     {{ $bill['method'] }}
                                 </span>
@@ -368,8 +376,12 @@
                             @if($bill['status'] === 'paid')
                                 <span class="badge badge-success">Paid</span>
                                 <div style="font-size: 10px; color: #10b981; margin-top: 4px;">{{ $bill['paid_date'] }}</div>
+                            @elseif($bill['status'] === 'partially_paid')
+                                <span class="badge" style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a;">Partially Paid</span>
+                                <div style="font-size: 10px; color: #059669; font-weight: 700; margin-top: 4px;">Paid: ₱{{ number_format($bill['total_paid'] ?? 0, 2) }}</div>
+                                <div style="font-size: 10px; color: {{ $bill['at_risk'] ? 'var(--bill-danger)' : '#b45309' }}; margin-top: 2px;">Due: {{ $bill['due'] }}{{ $bill['at_risk'] ? ' (Past Due)' : '' }}</div>
                             @else
-                                <span class="badge badge-danger">Unpaid</span>
+                                <span class="badge badge-danger">{{ $bill['at_risk'] ? 'Past Due' : 'Unpaid' }}</span>
                                 <div style="font-size: 10px; color: var(--bill-danger); margin-top: 4px;">Due: {{ $bill['due'] }}</div>
                             @endif
                         </td>
@@ -387,6 +399,7 @@
         @include('partials.admin-client-pagination', ['prefix' => 'waterTable'])
         @endif
     </div>
+    <script id="cycle-bills-json" type="application/json">@json($bills)</script>
 </div>
 
 <!-- Full Screen Immersive Modal -->
@@ -394,7 +407,10 @@
     <div class="bill-modal-content">
         <div class="modal-header">
             <div>
-                <span id="modalLot" style="font-size: 12px; font-weight: 700; color: var(--bill-primary); text-transform: uppercase; letter-spacing: 0.1em;">BLOCK 1 LOT 5</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span id="modalLot" style="font-size: 12px; font-weight: 700; color: var(--bill-primary); text-transform: uppercase; letter-spacing: 0.1em;">BLOCK 1 LOT 5</span>
+                    <span id="modalPaymentBadge" class="badge badge-danger">Unpaid</span>
+                </div>
                 <h2 id="modalResident" style="font-size: 32px; font-weight: 800; color: #0f172a; margin-top: 8px;">Juan Dela Cruz</h2>
             </div>
             <button class="ann-btn-icon" onclick="closeModal()" style="padding: 12px; background: #f1f5f9;">
@@ -432,34 +448,42 @@
                     <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
                         <h4 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 16px; margin-top: 0; letter-spacing: 0.05em;">Financial Breakdown</h4>
                         
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                             <span style="font-size: 14px; color: #475569;">Current Bill (Minimum) <span id="modalMinBillSub" style="font-size: 12px; color: #94a3b8; margin-left: 4px;">First 10m³</span></span>
                             <span id="modalMinBill" style="font-size: 15px; font-weight: 700; color: #0f172a;">₱0.00</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                             <span style="font-size: 14px; color: #475569;">Excess Consumption <span id="modalExcessSub" style="font-size: 12px; color: #94a3b8; margin-left: 4px;"></span></span>
                             <span id="modalExcessAmount" style="font-size: 15px; font-weight: 700; color: #0f172a;">₱0.00</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9;">
+                            <span style="font-size: 14px; font-weight: 700; color: #0f172a;">Current Month Charges <span style="font-size: 11px; font-weight: 600; color: #64748b;">(This Month Only)</span></span>
+                            <span id="modalCurrentCharges" style="font-size: 15px; font-weight: 800; color: var(--bill-primary);">₱0.00</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
                             <span style="font-size: 14px; color: #475569;">Previous Unpaid Bill (Arrears)</span>
                             <span id="modalPrevBalance" style="font-size: 15px; font-weight: 700; color: #0f172a;">₱0.00</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                            <span style="font-size: 14px; color: #475569;">Late Payment Penalty (5%)</span>
-                            <span id="modalPenalty" style="font-size: 15px; font-weight: 700; color: #f59e0b;">₱0.00</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                            <span id="modalAmountBeforeLabel" style="font-size: 14px; color: #475569;">Amount Before</span>
+                            <span id="modalAmountBeforeLabel" style="font-size: 14px; color: #475569;">Amount Before Due</span>
                             <span id="modalAmountBefore" style="font-size: 15px; font-weight: 700; color: #0f172a;">₱1,250.50</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                            <span id="modalAmountAfterLabel" style="font-size: 14px; color: #475569;">Amount After</span>
-                            <span id="modalAmountAfter" style="font-size: 15px; font-weight: 700; color: #0f172a;">₱1,313.02</span>
+                            <span id="modalPenaltyLabel" style="font-size: 14px; color: #475569;">Late Payment Penalty (5%)</span>
+                            <span id="modalPenalty" style="font-size: 15px; font-weight: 700; color: #f59e0b;">₱0.00</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #f1f5f9;">
+                            <span id="modalAmountAfterLabel" style="font-size: 14px; font-weight: 700; color: #0f172a;">Amount After Due</span>
+                            <span id="modalAmountAfter" style="font-size: 15px; font-weight: 800; color: #0f172a;">₱1,313.02</span>
                         </div>
                         
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px dashed #e2e8f0;">
-                            <span style="font-size: 14px; color: #475569;">Total Paid</span>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                            <span style="font-size: 14px; font-weight: 600; color: #059669;">Total Paid</span>
                             <span id="modalTotalPaid" style="font-size: 15px; font-weight: 800; color: #10b981;">₱0.00</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px dashed #e2e8f0;">
+                            <span style="font-size: 14px; font-weight: 800; color: #0f172a;">Remaining Balance Due</span>
+                            <span id="modalRemainingBalance" style="font-size: 16px; font-weight: 800; color: #ef4444;">₱0.00</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span style="font-size: 14px; font-weight: 700; color: #64748b;">Date Issued</span>
@@ -727,27 +751,40 @@
     let currentMinRate = {{ floatval(\App\Models\Setting::where('key', 'water_min_rate')->value('value') ?: 250) }};
 
     // Load Data safely
-    const allBillsRaw = @json($bills);
+    let allBillsRaw = @json($bills);
 
 
     function recalculateLedger() {
         const amountCells = document.querySelectorAll('.dynamic-amount-cell');
         amountCells.forEach(cell => {
-            const usage = parseInt(cell.dataset.usageCubic) || 0;
+            const usage = parseFloat(cell.dataset.usageCubic) || 0;
+            const baseAmount = parseFloat(cell.dataset.baseAmount) || 0;
             const previousBalance = parseFloat(cell.dataset.previousBalance) || 0;
+            const totalPaid = parseFloat(cell.dataset.totalPaid) || 0;
+            const status = (cell.dataset.status || 'unpaid').toLowerCase();
             const isAtRisk = cell.dataset.atRisk === 'true';
             
-            let minCharge = currentMinRate;
+            let hasBilledReading = usage > 0 || baseAmount > 0;
+            let minCharge = hasBilledReading ? currentMinRate : 0;
             let excessCharge = usage > currentMinM3 ? (usage - currentMinM3) * currentRate : 0;
             let amountBefore = minCharge + excessCharge + previousBalance;
             let total = amountBefore;
-            if (isAtRisk) {
+            if (isAtRisk && status !== 'paid') {
                 total += amountBefore * (currentPenaltyRate / 100);
             }
+            const remaining = Math.max(0, total - totalPaid);
 
             // Save the raw active total back into the cell dataset for the summary dashboard to read
             cell.dataset.rawTotal = total;
-            cell.innerHTML = `₱${total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            let html = `<div>₱${total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>`;
+            if (isAtRisk && status !== 'paid' && amountBefore > 0) {
+                html += `<div style="font-size: 10px; color: #ef4444; font-weight: 600;">Incl. ${currentPenaltyRate}% Penalty</div>`;
+            }
+            if (totalPaid > 0 && status !== 'paid') {
+                html += `<div style="font-size: 11px; color: #10b981; font-weight: 600; margin-top: 2px;">Paid: ₱${totalPaid.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>`;
+                html += `<div style="font-size: 11px; color: #d97706; font-weight: 700;">Bal: ₱${remaining.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>`;
+            }
+            cell.innerHTML = html;
         });
         
         updateSummaryDashboard();
@@ -769,17 +806,20 @@
         let countPastDue = 0;
 
         rows.forEach(row => {
-            const status = row.dataset.status;
+            const status = (row.dataset.status || 'unpaid').toLowerCase();
             const cell = row.querySelector('.dynamic-amount-cell') || row.cells[1];
             const amt = parseFloat(cell.dataset.rawTotal || cell.textContent.replace(/[^\d.-]/g, '')) || 0;
+            const totalPaid = parseFloat(cell.dataset.totalPaid) || 0;
+            const isAtRisk = cell.dataset.atRisk === 'true';
 
             if (status === 'paid') {
                 countPaid++;
-                totalCollected += amt;
+                totalCollected += (totalPaid > 0 ? totalPaid : amt);
             } else {
                 countUnpaid++;
-                totalRemaining += amt;
-                if (row.querySelector('.trend-late') || row.dataset.trend === 'at-risk') {
+                totalCollected += totalPaid;
+                totalRemaining += Math.max(0, amt - totalPaid);
+                if (isAtRisk || row.querySelector('.trend-late') || row.dataset.trend === 'at-risk') {
                     countPastDue++;
                 }
             }
@@ -1306,7 +1346,7 @@
                 },
                 body: JSON.stringify({
                     type: 'water',
-                    cycle: '{{ request("cycle") }}',
+                    cycle: document.getElementById('summaryMonth')?.value || '{{ request("cycle") }}',
                     prev_date: prevDate,
                     curr_date: currDate,
                     due_date: dueDate,
@@ -1420,34 +1460,53 @@
 
         const resident = bill.resident;
         const lot = bill.lot;
-        const usageM3 = bill.usage_m3;
-        const isAtRisk = bill.at_risk;
-        const status = bill.status;
+        const usageM3 = parseFloat(bill.usage_m3) || 0;
+        const baseAmount = parseFloat(bill.base_amount) || 0;
+        const isAtRisk = Boolean(bill.at_risk);
+        const status = (bill.status || 'unpaid').toLowerCase();
         const history = bill.payment_history || [];
 
-        const atRiskBool = isAtRisk;
+        const atRiskBool = isAtRisk && status !== 'paid';
 
-        let previousBalance = bill.previous_balance || 0;
+        let previousBalance = parseFloat(bill.previous_balance) || 0;
         
         let minM3 = bill.min_m3 || 10;
         let minRate = bill.min_rate || 250;
         let excessRate = bill.excess_rate || currentRate;
         
-        let minCharge = minRate; // base minimum
+        let hasBilledReading = usageM3 > 0 || baseAmount > 0;
+        let minCharge = hasBilledReading ? minRate : 0;
         let excessCharge = usageM3 > minM3 ? (usageM3 - minM3) * excessRate : 0;
         let currentCharges = minCharge + excessCharge;
         
-        let arrearsPenalty = previousBalance > 0 ? previousBalance * 0.05 : 0;
-        
         let amountBefore = currentCharges + previousBalance;
-        let amountAfter = amountBefore + (amountBefore * (currentPenaltyRate / 100));
+        let penaltyAmount = amountBefore * (currentPenaltyRate / 100);
+        let amountAfter = amountBefore + penaltyAmount;
         
-        let totalPaid = bill.total_paid || 0;
-        let totalDueBefore = Math.max(0, amountBefore - totalPaid);
-        let totalDueAfter = Math.max(0, amountAfter - totalPaid);
+        let totalPaid = parseFloat(bill.total_paid) || 0;
+        let totalDueBefore = Math.max(0, Number((amountBefore - totalPaid).toFixed(2)));
+        let totalDueAfter = Math.max(0, Number((amountAfter - totalPaid).toFixed(2)));
+        let remainingBalance = status === 'paid' ? 0 : (atRiskBool ? totalDueAfter : totalDueBefore);
 
         document.getElementById('modalResident').textContent = resident;
         document.getElementById('modalLot').textContent = lot;
+
+        const modalBadge = document.getElementById('modalPaymentBadge');
+        if (modalBadge) {
+            if (status === 'paid') {
+                modalBadge.className = 'badge badge-success';
+                modalBadge.style.cssText = '';
+                modalBadge.textContent = 'Paid';
+            } else if (status === 'partially_paid') {
+                modalBadge.className = 'badge';
+                modalBadge.style.cssText = 'background: #fef3c7; color: #b45309; border: 1px solid #fde68a;';
+                modalBadge.textContent = atRiskBool ? 'Partially Paid (Past Due)' : 'Partially Paid';
+            } else {
+                modalBadge.className = 'badge badge-danger';
+                modalBadge.style.cssText = '';
+                modalBadge.textContent = atRiskBool ? 'Unpaid (Past Due)' : 'Unpaid';
+            }
+        }
         
         document.getElementById('modalPrevReading').textContent = bill.prev_reading || 0;
         document.getElementById('modalCurrReading').textContent = bill.curr_reading || 0;
@@ -1463,14 +1522,31 @@
             document.getElementById('modalExcessSub').textContent = ``;
         }
         document.getElementById('modalExcessAmount').textContent = `₱${excessCharge.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        const currChargesEl = document.getElementById('modalCurrentCharges');
+        if (currChargesEl) {
+            currChargesEl.textContent = `₱${currentCharges.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        }
+        const penaltyLabelEl = document.getElementById('modalPenaltyLabel');
+        if (penaltyLabelEl) {
+            penaltyLabelEl.textContent = atRiskBool
+                ? `Late Payment Penalty (${currentPenaltyRate}% — Applied)`
+                : `Late Payment Penalty (${currentPenaltyRate}% if paid after ${bill.due})`;
+            penaltyLabelEl.style.color = atRiskBool ? '#dc2626' : '#475569';
+            penaltyLabelEl.style.fontWeight = atRiskBool ? '700' : '400';
+        }
         
         document.getElementById('modalAmountBeforeLabel').textContent = `Amount Before ${bill.due}`;
-        document.getElementById('modalAmountAfterLabel').textContent = `Amount After ${bill.due}`;
+        document.getElementById('modalAmountAfterLabel').textContent = `Amount After ${bill.due}${atRiskBool ? ' (Active Due)' : ''}`;
         document.getElementById('modalAmountBefore').textContent = `₱${amountBefore.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('modalAmountAfter').textContent = `₱${amountAfter.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-        document.getElementById('modalPenalty').textContent = `₱${arrearsPenalty.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        document.getElementById('modalPenalty').textContent = `₱${penaltyAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('modalPrevBalance').textContent = `₱${previousBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('modalTotalPaid').textContent = `₱${totalPaid.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        const remBalEl = document.getElementById('modalRemainingBalance');
+        if (remBalEl) {
+            remBalEl.textContent = `₱${remainingBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            remBalEl.style.color = remainingBalance > 0 ? '#ef4444' : '#10b981';
+        }
         document.getElementById('modalDateIssued').textContent = bill.issued_date || 'N/A';
         
         
@@ -1482,12 +1558,12 @@
 
         // Payment Action Button
         const actionContainer = document.getElementById('modalPaymentAction');
-        if (status === 'unpaid') {
-            const amountToPay = atRiskBool ? totalDueAfter : totalDueBefore;
+        if (status !== 'paid') {
+            const amountToPay = remainingBalance;
             actionContainer.innerHTML = `
                 <div style="display: flex; gap: 12px; width: 100%; flex-wrap: wrap;">
                     <button class="btn btn-outline" style="flex: 1 1 200px; justify-content: center; padding: 14px; font-weight: 700; border-color: var(--bill-primary); color: var(--bill-primary);" onclick="addPreviousBalanceFromModal('${id}', '${resident}')">➕ Add Unpaid Balance</button>
-                    <button class="btn btn-success" style="flex: 1 1 200px; justify-content: center; padding: 14px; font-weight: 700;" onclick="recordOfficePaymentFromModal('${id}', '${resident}', ${amountToPay})">🏢 Record Office Payment</button>
+                    <button class="btn btn-success" style="flex: 1 1 200px; justify-content: center; padding: 14px; font-weight: 700;" onclick="recordOfficePaymentFromModal('${id}', '${resident}', ${amountToPay})">🏢 Record Office Payment (₱${amountToPay.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})</button>
                 </div>
             `;
         } else {
@@ -1679,7 +1755,7 @@
     <h3>Payment Details</h3>
     <table style="border:none;margin-bottom:0;">
       <tr><td style="padding:4px;border:none;width:48%;"><strong>Reference (TRN):</strong></td><td style="padding:4px;border:none;font-family:monospace;font-size:11px;font-weight:bold;">${trnVal}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Date Paid:</strong></td><td style="padding:4px;border:none;font-size:11px;">${paidDate}</td></tr>
+      <tr><td style="padding:4px;border:none;"><strong>Payment Date &amp; Time:</strong></td><td style="padding:4px;border:none;font-size:11px;font-weight:bold;">${paidDate}</td></tr>
       <tr><td style="padding:4px;border:none;"><strong>Method:</strong></td><td style="padding:4px;border:none;">${mop}</td></tr>
       <tr><td style="padding:4px;border:none;"><strong>Status:</strong></td><td style="padding:4px;border:none;color:#10b981;font-weight:bold;">${payment.status || 'Paid'}</td></tr>
     </table>
@@ -1706,7 +1782,7 @@
 </table>
 <div class="footer">
   <p style="font-weight:bold;margin:0;">This payment has been successfully recorded and settled. Thank you for your payment!</p>
-  <p style="margin:4px 0 0;font-size:11px;color:#64748b;">Transaction Reference: ${trnVal} · Printed on: ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+  <p style="margin:4px 0 0;font-size:11px;color:#64748b;">Transaction Reference: ${trnVal} · Payment Date &amp; Time: ${paidDate}</p>
 </div>
 </body>
 </html>`;
@@ -1749,18 +1825,21 @@
         const amountAfterDue = amountBeforeDue + arrearsPenalty;
 
         const history = bill.payment_history || [];
-        const latestPay = history.length > 0 ? history[history.length - 1] : null;
+        const latestPay = history.length > 0 ? history[0] : null;
         const trn = latestPay ? (latestPay.trn || 'N/A') : 'N/A';
         const mop = latestPay ? (latestPay.method || 'Office Payment') : 'N/A';
         const paidDate = latestPay ? (latestPay.date || 'N/A') : 'N/A';
 
-        const statusColor = status === 'paid' ? '#10b981' : '#ef4444';
-        const statusLabel = status === 'paid' ? 'PAID' : 'UNPAID';
+        const statusColor = status === 'paid' ? '#10b981' : (status === 'partially_paid' ? '#d97706' : '#ef4444');
+        const statusLabel = status === 'paid' ? 'PAID' : (status === 'partially_paid' ? 'PARTIALLY PAID' : 'UNPAID');
+        const isAtRisk = Boolean(bill.at_risk) && status !== 'paid';
+        const effectiveTotal = isAtRisk ? amountAfterDue : amountBeforeDue;
+        const remainingBal = status === 'paid' ? 0 : Math.max(0, effectiveTotal - totalPaid);
 
-        const paidRowsHtml = status === 'paid' ? `
+        const paidRowsHtml = (status === 'paid' || totalPaid > 0) ? `
             <tr><td style="padding:4px;border:none;"><strong>MOP:</strong></td><td style="padding:4px;border:none;">${mop}</td></tr>
             <tr><td style="padding:4px;border:none;"><strong>Reference (TRN):</strong></td><td style="padding:4px;border:none;font-family:monospace;font-size:11px;">${trn}</td></tr>
-            <tr><td style="padding:4px;border:none;"><strong>Date Paid:</strong></td><td style="padding:4px;border:none;font-size:11px;">${paidDate}</td></tr>
+            <tr><td style="padding:4px;border:none;"><strong>Payment Date &amp; Time:</strong></td><td style="padding:4px;border:none;font-size:11px;font-weight:bold;">${paidDate}</td></tr>
         ` : '';
 
         const excessRowHtml = excessCharge > 0 ? `
@@ -1908,7 +1987,8 @@
     <tr><td>Late Payment Penalty (5% if paid after due date)</td><td class="text-right">₱${arrearsPenalty.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
     <tr class="highlight-row"><td><strong>Amount before ${dueDate}</strong></td><td class="text-right"><strong>₱${amountBeforeDue.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></td></tr>
     <tr class="total-row"><td><strong>Amount after ${dueDate}</strong></td><td class="text-right"><strong>₱${amountAfterDue.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></td></tr>
-    ${status === 'paid' ? `<tr><td class="fw-bold">Total Paid</td><td class="text-right fw-bold">₱${totalPaid.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>` : ''}
+    ${totalPaid > 0 ? `<tr><td class="fw-bold">Total Paid</td><td class="text-right fw-bold" style="color:#10b981;">₱${totalPaid.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>` : ''}
+    ${status !== 'paid' && totalPaid > 0 ? `<tr class="total-row"><td class="fw-bold">Remaining Balance Due</td><td class="text-right fw-bold" style="color:#d97706;">₱${remainingBal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>` : ''}
   </tbody>
 </table>
 <div class="footer">
@@ -2151,6 +2231,23 @@
                 // Replace everything except the script tags at the bottom.
                 document.querySelector('.bill-container').innerHTML = doc.querySelector('.bill-container').innerHTML;
                 document.querySelector('.bill-container').style.opacity = '1';
+
+                const jsonEl = document.getElementById('cycle-bills-json');
+                if (jsonEl) {
+                    try {
+                        allBillsRaw = JSON.parse(jsonEl.textContent);
+                    } catch (e) {
+                        console.error('Failed to parse cycle bills JSON:', e);
+                    }
+                }
+
+                window.waterTablePagination = initTablePagination({
+                    rowSelector: '.bill-row',
+                    infoEl: '#waterTablePageInfo',
+                    prevEl: '#waterTablePagePrev',
+                    nextEl: '#waterTablePageNext',
+                    perPage: 15,
+                });
                 
                 // reattach listeners
                 ['billingSearch', 'statusFilter', 'blockFilter', 'behaviorFilter'].forEach(id => {

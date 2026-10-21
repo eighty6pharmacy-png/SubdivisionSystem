@@ -154,7 +154,9 @@ class BuyerMasterList extends Model
 
     public function getBlockNoAttribute(): ?string
     {
-        return $this->lot?->block;
+        return $this->lot?->block
+            ?? $this->reservations->where('status', '!=', \App\Enums\ReservationStatus::Cancelled->value)->first()?->lot?->block
+            ?? ($this->attributes['block_no'] ?? null);
     }
 
     public function setBlockNoAttribute(mixed $value): void
@@ -163,11 +165,49 @@ class BuyerMasterList extends Model
 
     public function getLotNoAttribute(): ?string
     {
-        return $this->lot?->lot_number;
+        return $this->lot?->lot_number
+            ?? $this->reservations->where('status', '!=', \App\Enums\ReservationStatus::Cancelled->value)->first()?->lot?->lot_number
+            ?? ($this->attributes['lot_no'] ?? null);
     }
 
     public function setLotNoAttribute(mixed $value): void
     {
+    }
+
+    protected function resolveActiveLot(): ?Lot
+    {
+        return $this->lot
+            ?? $this->reservations->where('status', '!=', \App\Enums\ReservationStatus::Cancelled->value)->first()?->lot;
+    }
+
+    public function getLotAreaAttribute($value)
+    {
+        return $this->resolveActiveLot()?->lot_area ?? $value;
+    }
+
+    public function getFloorAreaAttribute($value)
+    {
+        return $this->resolveActiveLot()?->floor_area ?? $value;
+    }
+
+    public function getDescriptionAttribute($value)
+    {
+        return $this->resolveActiveLot()?->description ?? $value;
+    }
+
+    public function getTctNoAttribute($value)
+    {
+        return $this->resolveActiveLot()?->tct_no ?? $value;
+    }
+
+    public function getPidAttribute($value)
+    {
+        return $this->resolveActiveLot()?->pid ?? $value;
+    }
+
+    public function getTaxDecNoAttribute($value)
+    {
+        return $this->resolveActiveLot()?->tax_dec_no ?? $value;
     }
 
     public function getFirstNameAttribute(): ?string

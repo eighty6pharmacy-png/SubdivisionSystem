@@ -239,14 +239,14 @@
                     <table style="width: 100%; text-align: left; border-collapse: collapse; font-size: 14px;">
                         <thead>
                             <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
-                                <th style="padding: 12px 24px; font-weight: 600; color: #64748b;">Date</th>
+                                <th style="padding: 12px 24px; font-weight: 600; color: #64748b;">Payment Date &amp; Time</th>
                                 <th style="padding: 12px 24px; font-weight: 600; color: #64748b;">Amount</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach($finHistories as $hist)
                             <tr style="border-bottom: 1px solid #f1f5f9;">
-                                <td style="padding: 12px 24px; color: #0f172a;">{{ \Carbon\Carbon::parse($hist->created_at)->format('M d, Y h:i A') }}</td>
+                                <td style="padding: 12px 24px; color: #0f172a;">{{ \Carbon\Carbon::parse($hist->payment_date ?? $hist->created_at)->timezone(config('app.timezone', 'Asia/Manila'))->format('M d, Y h:i A') }}</td>
                                 <td style="padding: 12px 24px; font-weight: 600; color: #10b981;">₱{{ number_format($hist->amount_paid, 2) }}</td>
                             </tr>
                             @endforeach

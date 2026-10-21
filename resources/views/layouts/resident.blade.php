@@ -116,14 +116,37 @@
                     @endif
                 </div>
 
-                <div id="resLotBadge" style="background: var(--res-primary-soft); color: var(--res-primary); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;">
-                    @php $userLot = \Illuminate\Support\Facades\Auth::user()->lots->first(); @endphp
-                    @if($userLot)
-                        Block {{ $userLot->block }} Lot {{ $userLot->lot_number }}
-                    @else
+                @php
+                    $resLots = \Illuminate\Support\Facades\Auth::user()->lots;
+                    $currentLotId = session('resident_selected_lot_id', $resLots->first()?->id);
+                @endphp
+                @if($resLots->count() > 1)
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Property:</span>
+                        <select id="topbarLotSwitch" onchange="switchResidentLot(this.value)" style="background: var(--res-primary-soft); color: var(--res-primary); font-size: 12px; font-weight: 700; border: 1px solid rgba(5, 150, 105, 0.3); border-radius: 20px; padding: 4px 12px; cursor: pointer; outline: none;">
+                            @foreach($resLots as $l)
+                                <option value="{{ $l->id }}" {{ $currentLotId == $l->id ? 'selected' : '' }}>
+                                    Block {{ $l->block }} Lot {{ $l->lot_number }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <script>
+                        function switchResidentLot(lotId) {
+                            const url = new URL(window.location.href);
+                            url.searchParams.set('lot_id', lotId);
+                            window.location.href = url.toString();
+                        }
+                    </script>
+                @elseif($resLots->count() === 1)
+                    <div id="resLotBadge" style="background: var(--res-primary-soft); color: var(--res-primary); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;">
+                        Block {{ $resLots->first()->block }} Lot {{ $resLots->first()->lot_number }}
+                    </div>
+                @else
+                    <div id="resLotBadge" style="background: var(--res-primary-soft); color: var(--res-primary); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;">
                         No Assigned Lot
-                    @endif
-                </div>
+                    </div>
+                @endif
             </div>
         </header>
 

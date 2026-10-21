@@ -237,7 +237,7 @@ if (!function_exists('getValidBillingCycles')) {
     }
 }
 if (!function_exists('getElectricalBills')) {
-    function getElectricalBills($cycle = null, $includeHistory = true, $userId = null) {
+    function getElectricalBills($cycle = null, $includeHistory = true, $userId = null, $lotId = null) {
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
                 // Check if any electricity bills exist at all
@@ -255,21 +255,22 @@ if (!function_exists('getElectricalBills')) {
                 
                 $residents = $query->get();
                 
-                return $residents->map(function ($resident) use ($cycle, $includeHistory) {
-                    $lot = $resident->lots->first();
+                return $residents->map(function ($resident) use ($cycle, $includeHistory, $lotId) {
+                    $lot = ($lotId ? $resident->lots->firstWhere('id', $lotId) : null) ?? $resident->lots->first();
+                    $billsForLot = $resident->utilityBills->filter(fn($b) => !$lot || $b->lot_id == $lot->id);
                     
                     if ($cycle) {
                         $dt = \Carbon\Carbon::createFromFormat('Y-m', $cycle);
-                        $bill = $resident->utilityBills->first(function($b) use ($dt) {
+                        $bill = $billsForLot->first(function($b) use ($dt) {
                             $targetDate = $b->billing_period ? \Carbon\Carbon::parse($b->billing_period) : $b->created_at;
                             return $targetDate && $targetDate->year == $dt->year && $targetDate->month == $dt->month;
                         });
                     } else {
-                        $bill = $resident->utilityBills->sortByDesc(fn($b) => $b->billing_period ? \Carbon\Carbon::parse($b->billing_period)->timestamp : $b->created_at->timestamp)->first();
+                        $bill = $billsForLot->sortByDesc(fn($b) => $b->billing_period ? \Carbon\Carbon::parse($b->billing_period)->timestamp : $b->created_at->timestamp)->first();
                     }
                     
                     $allPayments = collect();
-                    foreach ($resident->utilityBills as $ub) {
+                    foreach ($billsForLot as $ub) {
                         if ($ub->type === 'electricity') {
                             foreach ($ub->payments as $p) {
                                 $allPayments->push([
@@ -287,8 +288,38 @@ if (!function_exists('getElectricalBills')) {
                     
                     $payments = $allPayments->sortByDesc('timestamp')->values()->toArray();
                     
-                    $billIndex = $bill ? $resident->utilityBills->search(fn($b) => $b->id === $bill->id) : false;
-                    $previousBill = $billIndex !== false ? $resident->utilityBills->get($billIndex + 1) : null;
+                    $billIndex = $bill ? $billsForLot->values()->search(fn($b) => $b->id === $bill->id) : false;
+                    $previousBill = $billIndex !== false ? $billsForLot->values()->get($billIndex + 1) : null;
+
+                    $tz = config('app.timezone', 'Asia/Manila');
+                    $elecRate = (float) (\App\Models\Setting::find('elec_rate')?->value ?? 10);
+                    $elecPenaltyRate = (float) (\App\Models\Setting::find('electricity_penalty')?->value ?? 5);
+
+                    $baseAmount = $bill ? (float) $bill->amount : 0.0;
+                    $previousBalance = $bill ? (float) $bill->previous_balance : 0.0;
+                    $amountBeforeDue = $baseAmount + $previousBalance;
+                    $totalPaid = $bill ? (float) $bill->payments->sum('amount_paid') : 0.0;
+
+                    $isPastDue = $bill && $bill->due_date && \Carbon\Carbon::parse($bill->due_date, $tz)->endOfDay()->isPast();
+                    $rawStatus = $bill ? strtolower((string) $bill->status) : 'unpaid';
+                    $isAtRisk = $bill ? (($bill->is_at_risk || $isPastDue) && $rawStatus !== 'paid') : false;
+
+                    $penaltyAmount = round($amountBeforeDue * ($elecPenaltyRate / 100), 2);
+                    $amountAfterDue = round($amountBeforeDue + $penaltyAmount, 2);
+                    $effectiveTotalDue = $isAtRisk ? $amountAfterDue : $amountBeforeDue;
+                    $remainingBalance = max(0.0, round($effectiveTotalDue - $totalPaid, 2));
+
+                    if (!$bill) {
+                        $effectiveStatus = 'unpaid';
+                    } elseif ($rawStatus === 'paid' || ($totalPaid > 0 && $effectiveTotalDue > 0 && $remainingBalance <= 0.01)) {
+                        $effectiveStatus = 'paid';
+                        $isAtRisk = false;
+                        $remainingBalance = 0.0;
+                    } elseif ($rawStatus === 'partially_paid' || $totalPaid > 0) {
+                        $effectiveStatus = 'partially_paid';
+                    } else {
+                        $effectiveStatus = $bill->status ?: 'unpaid';
+                    }
 
                     return [
                         'id' => $bill ? $bill->id : 'NEW-' . $resident->id,
@@ -299,7 +330,13 @@ if (!function_exists('getElectricalBills')) {
                         'lot_number' => $lot ? $lot->lot_number : null,
                         'resident' => $resident->name,
                         'provider_managed' => $lot ? $lot->provider_managed : false,
-                        'amount' => $bill ? ($bill->amount + $bill->previous_balance + (($bill->is_at_risk && strtolower($bill->status) !== 'paid') ? (($bill->amount + $bill->previous_balance) * 0.05) : 0)) : 0,
+                        'amount' => $effectiveTotalDue,
+                        'amount_before_due' => $amountBeforeDue,
+                        'amount_after_due' => $amountAfterDue,
+                        'penalty_rate' => $elecPenaltyRate,
+                        'penalty_amount' => $penaltyAmount,
+                        'applied_penalty' => $isAtRisk ? $penaltyAmount : 0.0,
+                        'remaining_balance' => $remainingBalance,
                         'usage' => ($bill ? $bill->usage_value : 0) . ' kWh',
                         'prev_reading' => $bill ? $bill->previous_reading : 0,
                         'prev_reading_date' => ($bill && $bill->previous_reading_date) ? \Carbon\Carbon::parse($bill->previous_reading_date)->format('M d, Y') : ($previousBill ? \Carbon\Carbon::parse($previousBill->created_at)->format('M d, Y') : 'N/A'),
@@ -307,19 +344,19 @@ if (!function_exists('getElectricalBills')) {
                         'curr_reading' => $bill ? $bill->current_reading : 0,
                         'curr_reading_date' => ($bill && $bill->current_reading_date) ? \Carbon\Carbon::parse($bill->current_reading_date)->format('M d, Y') : (($bill && $bill->created_at) ? \Carbon\Carbon::parse($bill->created_at)->format('M d, Y') : 'N/A'),
                         'curr_reading_date_raw' => ($bill && $bill->current_reading_date) ? \Carbon\Carbon::parse($bill->current_reading_date)->format('Y-m-d') : null,
-                        'previous_balance' => $bill ? (float)$bill->previous_balance : 0,
-                        'total_paid' => $bill ? (float)$bill->payments->sum('amount_paid') : 0,
+                        'previous_balance' => $previousBalance,
+                        'total_paid' => $totalPaid,
                         'usage_kwh' => $bill ? $bill->usage_value : 0,
-                        'rate' => \App\Models\Setting::find('elec_rate')?->value ?? 10,
-                        'base_amount' => $bill ? $bill->amount : 0,
-                        'status' => $bill ? $bill->status : 'unpaid',
+                        'rate' => $elecRate,
+                        'base_amount' => $baseAmount,
+                        'status' => $effectiveStatus,
                         'due' => ($bill && $bill->due_date) ? \Carbon\Carbon::parse($bill->due_date)->format('Y-m-d') : 'N/A',
                         'issued_date' => ($bill && $bill->created_at) ? \Carbon\Carbon::parse($bill->created_at)->format('Y-m-d') : 'N/A',
-                        'paid_date' => ($bill && strtolower($bill->status) === 'paid') ? $bill->updated_at->format('Y-m-d') : null,
+                        'paid_date' => ($bill && $effectiveStatus === 'paid') ? $bill->updated_at->format('Y-m-d') : null,
                         'method' => ($bill && $bill->payments->count() > 0) ? ($bill->payments->sortByDesc('created_at')->first()->method ?? 'Office') : null,
                         'usage_history' => ($lot && $includeHistory) ? getLotMonthlyChartData($lot->id, 'electricity') : [],
                         'amount_history' => ($lot && $includeHistory) ? getLotMonthlyAmountChartData($lot->id, 'electricity') : [],
-                        'at_risk' => $bill ? ($bill->is_at_risk && strtolower($bill->status) !== 'paid') : false,
+                        'at_risk' => $isAtRisk,
                         'payment_history' => $payments,
                         'payment_behavior' => $resident->payment_behavior,
                         'audit_log' => [['action' => 'Statement Generated', 'date' => \Carbon\Carbon::now()->format('Y-m-d h:i A'), 'user' => 'System']],
@@ -332,7 +369,7 @@ if (!function_exists('getElectricalBills')) {
 }
 
 if (!function_exists('getWaterBills')) {
-    function getWaterBills($cycle = null, $includeHistory = true, $userId = null) {
+    function getWaterBills($cycle = null, $includeHistory = true, $userId = null, $lotId = null) {
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
                 // Check if any water bills exist at all
@@ -350,21 +387,22 @@ if (!function_exists('getWaterBills')) {
                 
                 $residents = $query->get();
                 
-                return $residents->map(function ($resident) use ($cycle, $includeHistory) {
-                    $lot = $resident->lots->first();
+                return $residents->map(function ($resident) use ($cycle, $includeHistory, $lotId) {
+                    $lot = ($lotId ? $resident->lots->firstWhere('id', $lotId) : null) ?? $resident->lots->first();
+                    $billsForLot = $resident->utilityBills->filter(fn($b) => !$lot || $b->lot_id == $lot->id);
                     
                     if ($cycle) {
                         $dt = \Carbon\Carbon::createFromFormat('Y-m', $cycle);
-                        $bill = $resident->utilityBills->first(function($b) use ($dt) {
+                        $bill = $billsForLot->first(function($b) use ($dt) {
                             $targetDate = $b->billing_period ? \Carbon\Carbon::parse($b->billing_period) : $b->created_at;
                             return $targetDate && $targetDate->year == $dt->year && $targetDate->month == $dt->month;
                         });
                     } else {
-                        $bill = $resident->utilityBills->sortByDesc(fn($b) => $b->billing_period ? \Carbon\Carbon::parse($b->billing_period)->timestamp : $b->created_at->timestamp)->first();
+                        $bill = $billsForLot->sortByDesc(fn($b) => $b->billing_period ? \Carbon\Carbon::parse($b->billing_period)->timestamp : $b->created_at->timestamp)->first();
                     }
                     
                     $allPayments = collect();
-                    foreach ($resident->utilityBills as $ub) {
+                    foreach ($billsForLot as $ub) {
                         if ($ub->type === 'water') {
                             foreach ($ub->payments as $p) {
                                 $allPayments->push([
@@ -396,8 +434,37 @@ if (!function_exists('getWaterBills')) {
                         ? round(((float)$bill->amount - $minWaterRate) / $excessUsage, 2)
                         : $currentRate;
                     
-                    $billIndex = $bill ? $resident->utilityBills->search(fn($b) => $b->id === $bill->id) : false;
-                    $previousBill = $billIndex !== false ? $resident->utilityBills->get($billIndex + 1) : null;
+                    $billIndex = $bill ? $billsForLot->values()->search(fn($b) => $b->id === $bill->id) : false;
+                    $previousBill = $billIndex !== false ? $billsForLot->values()->get($billIndex + 1) : null;
+
+                    $tz = config('app.timezone', 'Asia/Manila');
+                    $waterPenaltyRate = (float) (\App\Models\Setting::find('water_penalty')?->value ?? 5);
+
+                    $baseAmount = $bill ? (float) $bill->amount : 0.0;
+                    $previousBalance = $bill ? (float) $bill->previous_balance : 0.0;
+                    $amountBeforeDue = $baseAmount + $previousBalance;
+                    $totalPaid = $bill ? (float) $bill->payments->sum('amount_paid') : 0.0;
+
+                    $isPastDue = $bill && $bill->due_date && \Carbon\Carbon::parse($bill->due_date, $tz)->endOfDay()->isPast();
+                    $rawStatus = $bill ? strtolower((string) $bill->status) : 'unpaid';
+                    $isAtRisk = $bill ? (($bill->is_at_risk || $isPastDue) && $rawStatus !== 'paid') : false;
+
+                    $penaltyAmount = round($amountBeforeDue * ($waterPenaltyRate / 100), 2);
+                    $amountAfterDue = round($amountBeforeDue + $penaltyAmount, 2);
+                    $effectiveTotalDue = $isAtRisk ? $amountAfterDue : $amountBeforeDue;
+                    $remainingBalance = max(0.0, round($effectiveTotalDue - $totalPaid, 2));
+
+                    if (!$bill) {
+                        $effectiveStatus = 'unpaid';
+                    } elseif ($rawStatus === 'paid' || ($totalPaid > 0 && $effectiveTotalDue > 0 && $remainingBalance <= 0.01)) {
+                        $effectiveStatus = 'paid';
+                        $isAtRisk = false;
+                        $remainingBalance = 0.0;
+                    } elseif ($rawStatus === 'partially_paid' || $totalPaid > 0) {
+                        $effectiveStatus = 'partially_paid';
+                    } else {
+                        $effectiveStatus = $bill->status ?: 'unpaid';
+                    }
 
                     return [
                         'id' => $bill ? $bill->id : 'NEW-' . $resident->id,
@@ -406,7 +473,13 @@ if (!function_exists('getWaterBills')) {
                         'lot' => $lot ? 'B' . $lot->block . ' L' . $lot->lot_number : 'N/A',
                         'block' => $lot ? $lot->block : 'N/A',
                         'resident' => $resident->name,
-                        'amount' => $bill ? ($bill->amount + $bill->previous_balance + (($bill->is_at_risk && strtolower($bill->status) !== 'paid') ? (($bill->amount + $bill->previous_balance) * 0.05) : 0)) : 0,
+                        'amount' => $effectiveTotalDue,
+                        'amount_before_due' => $amountBeforeDue,
+                        'amount_after_due' => $amountAfterDue,
+                        'penalty_rate' => $waterPenaltyRate,
+                        'penalty_amount' => $penaltyAmount,
+                        'applied_penalty' => $isAtRisk ? $penaltyAmount : 0.0,
+                        'remaining_balance' => $remainingBalance,
                         'usage' => ($bill ? $bill->usage_value : 0) . ' m³',
                         'usage_m3' => $bill ? $bill->usage_value : 0,
                         'prev_reading' => $bill ? $bill->previous_reading : 0,
@@ -415,21 +488,21 @@ if (!function_exists('getWaterBills')) {
                         'curr_reading' => $bill ? $bill->current_reading : 0,
                         'curr_reading_date' => ($bill && $bill->current_reading_date) ? \Carbon\Carbon::parse($bill->current_reading_date)->format('M d, Y') : (($bill && $bill->created_at) ? \Carbon\Carbon::parse($bill->created_at)->format('M d, Y') : 'N/A'),
                         'curr_reading_date_raw' => ($bill && $bill->current_reading_date) ? \Carbon\Carbon::parse($bill->current_reading_date)->format('Y-m-d') : null,
-                        'previous_balance' => $bill ? (float)$bill->previous_balance : 0,
-                        'total_paid' => $bill ? (float)$bill->payments->sum('amount_paid') : 0,
+                        'previous_balance' => $previousBalance,
+                        'total_paid' => $totalPaid,
                         'usage_cbm' => $bill ? $bill->usage_value : 0,
                         'min_m3' => $minWaterM3,
                         'min_rate' => $minWaterRate,
                         'excess_rate' => $appliedRate,
-                        'base_amount' => $bill ? $bill->amount : 0,
-                        'status' => $bill ? $bill->status : 'unpaid',
+                        'base_amount' => $baseAmount,
+                        'status' => $effectiveStatus,
                         'due' => ($bill && $bill->due_date) ? \Carbon\Carbon::parse($bill->due_date)->format('Y-m-d') : 'N/A',
                         'issued_date' => ($bill && $bill->created_at) ? \Carbon\Carbon::parse($bill->created_at)->format('Y-m-d') : 'N/A',
-                        'paid_date' => ($bill && strtolower($bill->status) === 'paid') ? $bill->updated_at->format('Y-m-d') : null,
+                        'paid_date' => ($bill && $effectiveStatus === 'paid') ? $bill->updated_at->format('Y-m-d') : null,
                         'method' => ($bill && $bill->payments->count() > 0) ? ($bill->payments->sortByDesc('created_at')->first()->method ?? 'Office') : null,
                         'usage_history' => ($lot && $includeHistory) ? getLotMonthlyChartData($lot->id, 'water') : [],
                         'amount_history' => ($lot && $includeHistory) ? getLotMonthlyAmountChartData($lot->id, 'water') : [],
-                        'at_risk' => $bill ? ($bill->is_at_risk && strtolower($bill->status) !== 'paid') : false,
+                        'at_risk' => $isAtRisk,
                         'payment_history' => $payments,
                         'payment_behavior' => $resident->payment_behavior,
                         'audit_log' => [['action' => 'Statement Generated', 'date' => \Carbon\Carbon::now()->format('Y-m-d h:i A'), 'user' => 'System']],
@@ -801,8 +874,7 @@ if (!function_exists('getUsers')) {
                     $role = $u->roles->first()->name ?? 'Resident';
                     $meta = 'N/A';
                     if ($role === 'Resident' && $u->lots->count() > 0) {
-                        $lot = $u->lots->first();
-                        $meta = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
+                        $meta = $u->lots->map(fn($l) => 'Block ' . $l->block . ', Lot ' . $l->lot_number)->implode(' | ');
                     } elseif ($role === 'Security Guard') {
                         $meta = 'Badge #' . rand(10, 99);
                     } elseif ($role === 'Finance Officer') {

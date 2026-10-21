@@ -34,7 +34,11 @@ return new class extends Migration
             'id_type', 'proof_of_id', 'pagibig_number', 'lot_link_warning', 'tct_no', 'pid', 'tax_dec_no',
             'lot_area', 'floor_area', 'description', 'created_at', 'updated_at', 'deleted_at',
         ],
-        'lots' => ['id', 'block', 'lot_number', 'status', 'provider_managed', 'created_at', 'updated_at'],
+        'lots' => [
+            'id', 'block', 'lot_number', 'status', 'provider_managed',
+            'lot_area', 'floor_area', 'description', 'tct_no', 'pid', 'tax_dec_no',
+            'created_at', 'updated_at',
+        ],
         'resident_lots' => ['resident_id', 'lot_id', 'created_at', 'updated_at'],
         'reservations' => [
             'id', 'user_id', 'lot_id', 'buyer_id', 'last_name', 'first_name', 'status',
@@ -127,6 +131,18 @@ return new class extends Migration
             Schema::table('incidents', function (Blueprint $table) {
                 $table->text('video_url')->nullable();
                 $table->text('admin_notes')->nullable();
+            });
+        }
+
+        if (Schema::hasTable('lots')
+            && ! Schema::hasColumn('lots', 'lot_area')) {
+            Schema::table('lots', function (Blueprint $table) {
+                $table->decimal('lot_area', 10, 2)->nullable();
+                $table->decimal('floor_area', 10, 2)->nullable();
+                $table->text('description')->nullable();
+                $table->string('tct_no')->nullable();
+                $table->string('pid')->nullable();
+                $table->string('tax_dec_no')->nullable();
             });
         }
 

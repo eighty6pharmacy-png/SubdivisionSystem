@@ -74,6 +74,8 @@ class PaymentRecorder
             $updates = [];
             if ($totalDue === null || ($totalPaid + $amount) >= $totalDue - 0.01) {
                 $updates['status'] = BillStatus::Paid->value;
+            } elseif (($totalPaid + $amount) > 0) {
+                $updates['status'] = BillStatus::PartiallyPaid->value;
             }
             if ($paymongoPaymentId !== null) {
                 $updates['paymongo_checkout_id'] = null;

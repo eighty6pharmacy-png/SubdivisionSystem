@@ -6,27 +6,45 @@
 <link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
 
 <div class="fade-in">
-    <div style="margin-bottom: 32px;">
-        <h1 style="font-size: 32px; font-weight: 800; color: #0f172a; margin: 0;">Welcome Home, {{ explode(' ', \Illuminate\Support\Facades\Auth::user()->name)[0] }}!</h1>
-        <p style="color: #64748b; margin-top: 8px;">Here’s a summary of your property and community activities at Althesa.</p>
+    <div style="margin-bottom: 32px; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <h1 style="font-size: 32px; font-weight: 800; color: #0f172a; margin: 0;">Welcome Home, {{ explode(' ', \Illuminate\Support\Facades\Auth::user()->name)[0] }}!</h1>
+            <p style="color: #64748b; margin-top: 8px;">Here’s a summary of your property and community activities at Althesa.</p>
+        </div>
+        @if(isset($lots) && $lots->count() > 1 && isset($selectedLot))
+            <div style="background: #fff; padding: 8px 16px; border-radius: 14px; border: 1px solid var(--bill-border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Active House / Lot:</span>
+                <span style="font-size: 14px; font-weight: 800; color: var(--res-primary);">Block {{ $selectedLot->block }} Lot {{ $selectedLot->lot_number }}</span>
+            </div>
+        @endif
     </div>
 
     <!-- Quick Stats for Resident -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-bottom: 32px;">
         @php
-            $elecBase = $elecBill['base_amount'] ?? 0;
-            $elecPrevBalance = $elecBill['previous_balance'] ?? 0;
+            $elecBase = (float) ($elecBill['base_amount'] ?? 0);
+            $elecPrevBalance = (float) ($elecBill['previous_balance'] ?? 0);
             $elecAmountBefore = $elecBase + $elecPrevBalance;
-            $elecPenalty = isset($elecBill['at_risk']) && $elecBill['at_risk'] ? ($elecAmountBefore * 0.05) : 0;
-            $elecTotalPaid = $elecBill['total_paid'] ?? 0;
-            $elecTotalOwed = max(0, $elecAmountBefore + $elecPenalty - $elecTotalPaid);
+            $elecPenaltyRate = (float) ($elecBill['penalty_rate'] ?? 5);
+            $elecPenalty = isset($elecBill['applied_penalty'])
+                ? (float) $elecBill['applied_penalty']
+                : ((isset($elecBill['at_risk']) && $elecBill['at_risk']) ? round($elecAmountBefore * ($elecPenaltyRate / 100), 2) : 0);
+            $elecTotalPaid = (float) ($elecBill['total_paid'] ?? 0);
+            $elecTotalOwed = isset($elecBill['remaining_balance'])
+                ? (float) $elecBill['remaining_balance']
+                : max(0, $elecAmountBefore + $elecPenalty - $elecTotalPaid);
             
-            $waterBase = $waterBill['base_amount'] ?? 0;
-            $waterPrevBalance = $waterBill['previous_balance'] ?? 0;
+            $waterBase = (float) ($waterBill['base_amount'] ?? 0);
+            $waterPrevBalance = (float) ($waterBill['previous_balance'] ?? 0);
             $waterAmountBefore = $waterBase + $waterPrevBalance;
-            $waterPenalty = isset($waterBill['at_risk']) && $waterBill['at_risk'] ? ($waterAmountBefore * 0.05) : 0;
-            $waterTotalPaid = $waterBill['total_paid'] ?? 0;
-            $waterTotalOwed = max(0, $waterAmountBefore + $waterPenalty - $waterTotalPaid);
+            $waterPenaltyRate = (float) ($waterBill['penalty_rate'] ?? 5);
+            $waterPenalty = isset($waterBill['applied_penalty'])
+                ? (float) $waterBill['applied_penalty']
+                : ((isset($waterBill['at_risk']) && $waterBill['at_risk']) ? round($waterAmountBefore * ($waterPenaltyRate / 100), 2) : 0);
+            $waterTotalPaid = (float) ($waterBill['total_paid'] ?? 0);
+            $waterTotalOwed = isset($waterBill['remaining_balance'])
+                ? (float) $waterBill['remaining_balance']
+                : max(0, $waterAmountBefore + $waterPenalty - $waterTotalPaid);
 
             $totalOwed = $elecTotalOwed + $waterTotalOwed;
             

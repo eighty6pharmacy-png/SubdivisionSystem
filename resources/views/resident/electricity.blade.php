@@ -14,14 +14,21 @@
     @endif
     <div style="margin-bottom: 32px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div>
-            <h1 style="font-size: 28px; font-weight: 800; color: #0f172a; margin: 0;">Electricity Billing</h1>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <h1 style="font-size: 28px; font-weight: 800; color: #0f172a; margin: 0;">Electricity Billing</h1>
+                @if(isset($lots) && $lots->count() > 1 && isset($selectedLot))
+                    <span style="background: var(--res-primary-soft); color: var(--res-primary); font-size: 13px; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">
+                        Block {{ $selectedLot->block }} Lot {{ $selectedLot->lot_number }}
+                    </span>
+                @endif
+            </div>
             <p style="color: #64748b; margin-top: 8px;">Monitor your electricity consumption and settle outstanding balances.</p>
         </div>
         <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
             @if(!empty($elecBill['db_id']))
                 <a href="/resident/bills/history/electricity/pdf/{{ $elecBill['db_id'] }}" target="_blank" class="btn btn-outline" style="border-radius: 12px; font-weight: 600; padding: 10px 18px; display: inline-flex; align-items: center; gap: 8px;">
                     <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    Print Statement
+                    {{ ($elecBill['status'] ?? '') === 'paid' ? 'Print Receipt' : 'Print Statement' }}
                 </a>
             @endif
             <a href="/resident/bills/history/electricity" class="btn btn-outline" style="border-radius: 12px; font-weight: 600; padding: 10px 20px; display: inline-flex; align-items: center; gap: 8px;">
@@ -31,22 +38,64 @@
         </div>
     </div>
 
+    @php
+        $elecIsOverdue = !empty($elecBill['at_risk']) && ($elecBill['status'] ?? '') !== 'paid';
+        $elecCurrentMonth = (float) ($elecBill['base_amount'] ?? 0);
+        $elecPrevBal = (float) ($elecBill['previous_balance'] ?? 0);
+        $elecBeforeDue = $elecCurrentMonth + $elecPrevBal;
+        $elecPenaltyRate = (float) ($elecBill['penalty_rate'] ?? (\App\Models\Setting::find('electricity_penalty')?->value ?? 5));
+        $elecPenalty = round($elecBeforeDue * ($elecPenaltyRate / 100), 2);
+        $elecAfterDue = round($elecBeforeDue + $elecPenalty, 2);
+        $elecEffectiveTotal = $elecIsOverdue ? $elecAfterDue : $elecBeforeDue;
+        $elecTotalPaid = (float) ($elecBill['total_paid'] ?? 0);
+        $elecRemaining = ($elecBill['status'] ?? '') === 'paid' ? 0.0 : max(0.0, round($elecEffectiveTotal - $elecTotalPaid, 2));
+        $elecIsPartial = ($elecBill['status'] ?? '') === 'partially_paid' || ($elecTotalPaid > 0 && ($elecBill['status'] ?? '') !== 'paid' && $elecRemaining > 0);
+        $elecHeaderAmount = $elecIsPartial ? $elecRemaining : $elecEffectiveTotal;
+    @endphp
+
     <!-- Current Bill Card -->
     <div class="analytic-card" style="padding: 28px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div>
-            <div style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Current Electricity Amount</div>
-            <div style="font-size: 32px; font-weight: 800; color: #0f172a; margin-top: 8px;">₱{{ number_format($elecBill['amount'], 2) }}</div>
-            <div style="font-size: 13px; color: {{ $elecBill['status'] === 'paid' ? '#10b981' : ($elecBill['status'] === 'no-bill' ? '#64748b' : '#ef4444') }}; font-weight: 600; margin-top: 4px;">
-                {{ $elecBill['status'] === 'paid' ? '✓ Paid on '.$elecBill['paid_date'] : ($elecBill['status'] === 'no-bill' ? 'ℹ No Pending Bill' : '⚠ Due: '.$elecBill['due']) }}
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">
+                    {{ $elecIsPartial ? 'Remaining Electricity Balance Due' : 'Current Electricity Amount' }}
+                </span>
+                @if(($elecBill['status'] ?? '') === 'paid')
+                    <span class="badge badge-success">Paid</span>
+                @elseif($elecIsPartial)
+                    <span class="badge" style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a;">Partially Paid</span>
+                @elseif(($elecBill['status'] ?? '') !== 'no-bill')
+                    <span class="badge badge-danger">{{ $elecIsOverdue ? 'Past Due' : 'Unpaid' }}</span>
+                @endif
+            </div>
+            <div style="font-size: 32px; font-weight: 800; color: #0f172a; margin-top: 8px;">₱{{ number_format($elecHeaderAmount, 2) }}</div>
+            @if($elecIsOverdue && $elecBeforeDue > 0)
+                <div style="font-size: 12px; color: #dc2626; font-weight: 700; margin-top: 4px;">
+                    Includes {{ $elecPenaltyRate }}% Late Penalty (+₱{{ number_format($elecPenalty, 2) }}) — Amount Before Due was ₱{{ number_format($elecBeforeDue, 2) }}
+                </div>
+            @endif
+            @if($elecTotalPaid > 0)
+                <div style="font-size: 13px; color: #059669; font-weight: 700; margin-top: 4px;">
+                    Amount Paid: ₱{{ number_format($elecTotalPaid, 2) }}
+                    @if($elecIsPartial)
+                        <span style="color: #64748b; font-weight: 600;">(of ₱{{ number_format($elecEffectiveTotal, 2) }} Total Bill)</span>
+                    @endif
+                </div>
+            @endif
+            <div style="font-size: 13px; color: {{ $elecBill['status'] === 'paid' ? '#10b981' : ($elecBill['status'] === 'no-bill' ? '#64748b' : ($elecIsPartial ? '#d97706' : '#ef4444')) }}; font-weight: 600; margin-top: 4px;">
+                {{ $elecBill['status'] === 'paid' ? '✓ Paid on '.$elecBill['paid_date'] : ($elecBill['status'] === 'no-bill' ? 'ℹ No Pending Bill' : '⚠ Due: '.$elecBill['due'].($elecIsOverdue ? ' (Past Due)' : '')) }}
             </div>
             
-            <div style="font-size: 12px; color: #64748b; margin-top: 8px;">Consumption: <strong>{{ $elecBill['usage'] }}</strong></div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 8px;">
+                Consumption: <strong>{{ $elecBill['usage'] }}</strong>
+                &bull; Current Month Charges: <strong>₱{{ number_format($elecCurrentMonth, 2) }}</strong>
+            </div>
         </div>
         <div style="display: flex; flex-direction: column; gap: 12px; align-items: flex-end;">
-            @if($elecBill['status'] === 'unpaid' || $elecBill['status'] === 'overdue')
+            @if(in_array($elecBill['status'], ['unpaid', 'partially_paid', 'overdue']))
                 <button onclick="payBill('{{ $elecBill['db_id'] }}')" id="payBtn" class="btn btn-primary" style="padding: 14px 24px; font-weight: 700; background: #0057B8; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
                     <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
-                    Pay Online (GCash, Maya, Card)
+                    {{ $elecIsPartial ? 'Pay Remaining Balance (₱'.number_format($elecRemaining, 2).')' : 'Pay Online (GCash, Maya, Card)' }}
                 </button>
             @elseif($elecBill['status'] === 'paid')
                 <div style="background: #f0fdf4; padding: 12px 24px; border-radius: 12px; border: 1px solid #bbf7d0; text-align: center;">
@@ -80,43 +129,56 @@
                 @endif
             </div>
         @else
-            <div style="display: flex; flex-wrap: nowrap; gap: 10px; overflow-x: auto; padding-bottom: 8px;">
-                <div style="flex: 1; min-width: 115px; background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 10px; padding-bottom: 8px;">
+                <div style="background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
                     <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Previous Reading</div>
                     <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $elecBill['prev_reading'] }}</div>
                     <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">{{ $elecBill['prev_reading_date'] }}</div>
                 </div>
-                <div style="flex: 1; min-width: 115px; background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div style="background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
                     <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Current Reading</div>
                     <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $elecBill['curr_reading'] }}</div>
                     <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">{{ $elecBill['curr_reading_date'] }}</div>
                 </div>
-                <div style="flex: 1; min-width: 115px; background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div style="background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
                     <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Base Rate</div>
                     <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($elecBill['rate'], 2) }}</div>
                 </div>
-                <div style="flex: 1; min-width: 115px; background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div style="background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
                     <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Consumption</div>
                     <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $elecBill['usage'] }}</div>
                 </div>
-                <div style="flex: 1; min-width: 130px; background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
-                    <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Amt Before Due</div>
-                    @php $baseTotal = $elecBill['base_amount'] + $elecBill['previous_balance']; @endphp
-                    <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($baseTotal, 2) }}</div>
+                <div style="background: #eff6ff; padding: 12px 10px; border-radius: 10px; border: 1px solid #bfdbfe;">
+                    <div style="font-size: 10px; color: #1d4ed8; font-weight: 700; text-transform: uppercase;">Current Month Charges</div>
+                    <div style="font-size: 16px; font-weight: 800; color: #1e40af; margin-top: 4px;">₱{{ number_format($elecCurrentMonth, 2) }}</div>
+                    <div style="font-size: 10px; color: #3b82f6; margin-top: 2px;">This Month Only</div>
                 </div>
-                <div style="flex: 1; min-width: 130px; background: #fef2f2; padding: 12px 10px; border-radius: 10px; border: 1px solid #fecaca;">
-                    <div style="font-size: 10px; color: #991b1b; font-weight: 700; text-transform: uppercase;">Amt After Due</div>
-                    @php $afterAmt = $baseTotal + ($baseTotal * 0.05); @endphp
-                    <div style="font-size: 16px; font-weight: 800; color: #ef4444; margin-top: 4px;">₱{{ number_format($afterAmt, 2) }}</div>
-                </div>
-                <div style="flex: 1; min-width: 115px; background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div style="background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
                     <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Prev Balance</div>
-                    <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($elecBill['previous_balance'], 2) }}</div>
+                    <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($elecPrevBal, 2) }}</div>
                 </div>
-                <div style="flex: 1; min-width: 115px; background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
-                    <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Penalty (5%)</div>
-                    @php $penalty = ($elecBill['base_amount'] + $elecBill['previous_balance']) * 0.05; @endphp
-                    <div style="font-size: 16px; font-weight: 800; color: #f59e0b; margin-top: 4px;">₱{{ number_format($penalty, 2) }}</div>
+                <div style="background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                    <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Amt Before Due</div>
+                    <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($elecBeforeDue, 2) }}</div>
+                </div>
+                <div style="background: #f8fafc; padding: 12px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                    <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;">Penalty ({{ $elecPenaltyRate }}%)</div>
+                    <div style="font-size: 16px; font-weight: 800; color: #f59e0b; margin-top: 4px;">₱{{ number_format($elecPenalty, 2) }}</div>
+                    <div style="font-size: 10px; color: {{ $elecIsOverdue ? '#dc2626' : '#94a3b8' }}; font-weight: 600; margin-top: 2px;">{{ $elecIsOverdue ? 'Applied (Past Due)' : 'If Paid After Due' }}</div>
+                </div>
+                <div style="background: #fef2f2; padding: 12px 10px; border-radius: 10px; border: 1px solid #fecaca;">
+                    <div style="font-size: 10px; color: #991b1b; font-weight: 700; text-transform: uppercase;">Amt After Due</div>
+                    <div style="font-size: 16px; font-weight: 800; color: #ef4444; margin-top: 4px;">₱{{ number_format($elecAfterDue, 2) }}</div>
+                    @if($elecIsOverdue)
+                        <div style="font-size: 10px; color: #dc2626; font-weight: 700; margin-top: 2px;">Active Total Due</div>
+                    @endif
+                </div>
+                <div style="background: #f0fdf4; padding: 12px 10px; border-radius: 10px; border: 1px solid #bbf7d0;">
+                    <div style="font-size: 10px; color: #065f46; font-weight: 700; text-transform: uppercase;">Amount Paid</div>
+                    <div style="font-size: 16px; font-weight: 800; color: #10b981; margin-top: 4px;">₱{{ number_format($elecTotalPaid, 2) }}</div>
+                    @if($elecIsPartial)
+                        <div style="font-size: 10px; color: #d97706; font-weight: 700; margin-top: 2px;">Bal: ₱{{ number_format($elecRemaining, 2) }}</div>
+                    @endif
                 </div>
             </div>
         @endif

@@ -159,4 +159,63 @@ class BuyerPortalSecurityAndLogicTest extends TestCase
 
         $this->assertNull($dp->fresh()->paymongo_checkout_id);
     }
+
+    public function test_buyer_receipt_displays_payment_date_and_time(): void
+    {
+        $lot = Lot::create(['block' => 5, 'lot_number' => 2, 'area' => 120, 'price' => 1200000, 'status' => 'Reserved']);
+        [$user, $buyer] = $this->createBuyerUser('buyerreceipt@example.com', $lot);
+
+        $res = Reservation::create([
+            'buyer_id' => $buyer->id,
+            'buyer_master_list_id' => $buyer->id,
+            'lot_id' => $lot->id,
+            'amount' => 20000,
+            'status' => ReservationStatus::Converted->value,
+            'reservation_date' => now(),
+        ]);
+
+        $dp = Downpayment::create([
+            'reservation_id' => $res->id,
+            'total_dp' => 100000,
+            'amount' => 0,
+            'balance' => 100000,
+            'monthly_amortization' => 10000,
+            'months_to_pay' => 10,
+            'due_date' => now()->addMonth()->toDateString(),
+            'status' => DownpaymentStatus::GoodStanding->value,
+        ]);
+
+        $paymentTimestamp = \Carbon\Carbon::create(2026, 10, 20, 14, 30, 0, 'Asia/Manila');
+        $history = app(\App\Services\PaymentRecorder::class)->recordDownpaymentPayment(
+            $dp,
+            10000,
+            'GCash',
+            'pay_test_receipt_123',
+            'TRN-TEST-1234',
+            $paymentTimestamp
+        );
+
+        // Verify history view includes "Payment Date & Time"
+        $histResponse = $this->actingAs($user)->get('/buyer/payments/downpayment/history');
+        $histResponse->assertStatus(200);
+        $histResponse->assertSee('Payment Date &amp; Time', false);
+        $histResponse->assertSee('October 20, 2026');
+        $histResponse->assertSee('02:30 PM');
+
+        // Verify PDF receipt view includes Payment Date & Time
+        $pdfResponse = $this->actingAs($user)->get("/buyer/payments/downpayment/receipt/{$history->id}");
+        $pdfResponse->assertStatus(200);
+        $pdfResponse->assertHeader('Content-Type', 'application/pdf');
+
+        $viewHtml = view('buyer.receipt_pdf', [
+            'hist' => $history,
+            'buyer' => $buyer,
+            'dp' => $dp->fresh(),
+        ])->render();
+
+        $this->assertStringContainsString('Payment Date &amp; Time:', $viewHtml);
+        $this->assertStringContainsString('October 20, 2026 02:30 PM', $viewHtml);
+        $this->assertStringContainsString('OFFICIAL DOWNPAYMENT RECEIPT', $viewHtml);
+        $this->assertStringContainsString('PAID', $viewHtml);
+    }
 }

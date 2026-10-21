@@ -218,7 +218,17 @@ class FinancingRecordController extends Controller
             'amount' => 'required|numeric|min:0.01|max:'.(float) $record->balance,
         ]);
 
-        $recorder->recordFinancingPayment($record, (float) $request->amount, 'Office Payment');
+        $rawDate = $request->input('payment_date');
+        $paidAt = now();
+        if ($rawDate) {
+            $parsed = \Carbon\Carbon::parse($rawDate);
+            if (strlen(trim($rawDate)) <= 10) {
+                $parsed->setTime(now()->hour, now()->minute, now()->second);
+            }
+            $paidAt = $parsed;
+        }
+
+        $recorder->recordFinancingPayment($record, (float) $request->amount, 'Office Payment', null, null, $paidAt);
 
         return back()->with('success', 'Payment Recorded');
     }

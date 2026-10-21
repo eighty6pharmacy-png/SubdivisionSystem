@@ -30,7 +30,7 @@
                 <table style="width: 100%; text-align: left; border-collapse: collapse; font-size: 14px;">
                     <thead>
                         <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
-                            <th style="padding: 16px 24px; font-size: 12px; font-weight: 800; color: #475569; text-transform: uppercase;">Payment Date</th>
+                            <th style="padding: 16px 24px; font-size: 12px; font-weight: 800; color: #475569; text-transform: uppercase;">Payment Date &amp; Time</th>
                             <th style="padding: 16px 24px; font-size: 12px; font-weight: 800; color: #475569; text-transform: uppercase;">Due Date</th>
                             <th style="padding: 16px 24px; font-size: 12px; font-weight: 800; color: #475569; text-transform: uppercase;">Transaction Reference</th>
                             <th style="padding: 16px 24px; font-size: 12px; font-weight: 800; color: #475569; text-transform: uppercase;">Payment Method</th>

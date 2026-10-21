@@ -123,13 +123,15 @@ class SyncPaymongoCheckouts
                         $exactAmount = isset($paidPayment['attributes']['amount']) ? ($paidPayment['attributes']['amount'] / 100) : $dp->monthly_amortization;
                         $method = PaymentRecorder::methodFromSource($paidPayment['attributes']['source']['type'] ?? '', 'Online Payment');
                         $trn = PaymentRecorder::onlineTrn($paidPayment['attributes']['payment_intent_id'] ?? null, $dp->id);
+                        $paidAt = isset($paidPayment['attributes']['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paidPayment['attributes']['paid_at'], config('app.timezone')) : now();
 
                         $this->recorder->recordDownpaymentPayment(
                             $dp,
                             (float) $exactAmount,
                             $method,
                             PaymentRecorder::paymongoPaymentId($paidPayment, $sessionAttributes),
-                            $trn
+                            $trn,
+                            $paidAt
                         );
                     } elseif (($sessionAttributes['status'] ?? '') === 'expired') {
                         $dp->update([
@@ -162,13 +164,15 @@ class SyncPaymongoCheckouts
                         $exactAmount = isset($paidPayment['attributes']['amount']) ? ($paidPayment['attributes']['amount'] / 100) : $fin->balance;
                         $method = PaymentRecorder::methodFromSource($paidPayment['attributes']['source']['type'] ?? '', 'Online Payment');
                         $trn = PaymentRecorder::onlineTrn($paidPayment['attributes']['payment_intent_id'] ?? null, $fin->id);
+                        $paidAt = isset($paidPayment['attributes']['paid_at']) ? \Carbon\Carbon::createFromTimestamp($paidPayment['attributes']['paid_at'], config('app.timezone')) : now();
 
                         $this->recorder->recordFinancingPayment(
                             $fin,
                             (float) $exactAmount,
                             $method,
                             PaymentRecorder::paymongoPaymentId($paidPayment, $sessionAttributes),
-                            $trn
+                            $trn,
+                            $paidAt
                         );
                     } elseif (($sessionAttributes['status'] ?? '') === 'expired') {
                         $fin->update([

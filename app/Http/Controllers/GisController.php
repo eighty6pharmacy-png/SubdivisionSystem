@@ -11,12 +11,13 @@ class GisController extends Controller
     {
         $lots = Lot::with(['users' => function($q) {
             $q->where('status', '!=', 'Archived');
-        }, 'buyer.user', 'utilityBills'])->get();
+        }, 'buyer.user', 'reservations', 'utilityBills'])->get();
         
         $lotData = [];
         foreach ($lots as $lot) {
             $user = $lot->users->first();
-            $hasActiveBuyer = BuyerMasterList::where('lot_id', $lot->id)->exists();
+            $hasActiveBuyer = BuyerMasterList::where('lot_id', $lot->id)->exists()
+                || $lot->reservations->where('status', '!=', \App\Enums\ReservationStatus::Cancelled->value)->isNotEmpty();
             $isNotConnected = $user === null && ! $hasActiveBuyer;
             $owner = $user ? $user->name : 'Unassigned';
             $userId = $user ? $user->id : null;
@@ -32,6 +33,12 @@ class GisController extends Controller
                 'block' => $lot->block,
                 'lot_number' => $lot->lot_number,
                 'status' => $lot->status,
+                'lot_area' => $lot->lot_area,
+                'floor_area' => $lot->floor_area,
+                'description' => $lot->description,
+                'tct_no' => $lot->tct_no,
+                'pid' => $lot->pid,
+                'tax_dec_no' => $lot->tax_dec_no,
                 'hasActiveBuyer' => $hasActiveBuyer,
                 'isNotConnected' => $isNotConnected,
                 'owner' => $owner,
