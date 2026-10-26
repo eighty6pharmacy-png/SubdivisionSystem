@@ -2203,14 +2203,14 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             })->first();
 
             // Electricity Baseline & Readings
-            $prev_elec = 0;
+            $prev_elec = 0.0;
             $curr_elec = null;
             $is_baseline_elec = false;
             $is_elec_billed = false;
             if ($elec_bill) {
-                $prev_elec = $elec_bill->previous_reading ?? 0;
-                $is_elec_billed = ($elec_bill->usage_value > 0 || (float)$elec_bill->amount > 0 || ($elec_bill->current_reading > 0 && $elec_bill->current_reading >= $elec_bill->previous_reading));
-                $curr_elec = $is_elec_billed ? $elec_bill->current_reading : null;
+                $prev_elec = (float)($elec_bill->previous_reading ?? 0);
+                $is_elec_billed = ((float)$elec_bill->usage_value > 0 || (float)$elec_bill->amount > 0 || ($elec_bill->current_reading !== null && (float)$elec_bill->current_reading > 0 && (float)$elec_bill->current_reading >= (float)$elec_bill->previous_reading));
+                $curr_elec = $is_elec_billed ? (float)$elec_bill->current_reading : null;
                 $priorElecBill = $elecBills->filter(function ($b) use ($dt) {
                     $c = \Carbon\Carbon::parse($b->billing_period ?: $b->created_at);
                     return $c->lt($dt);
@@ -2221,21 +2221,21 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             } else {
                 $latest_elec = $elecBills->first();
                 if ($latest_elec) {
-                    $prev_elec = $latest_elec->current_reading ?? $latest_elec->previous_reading ?? 0;
+                    $prev_elec = (float)($latest_elec->current_reading ?? $latest_elec->previous_reading ?? 0);
                 } else {
                     $is_baseline_elec = true;
                 }
             }
 
             // Water Baseline & Readings
-            $prev_water = 0;
+            $prev_water = 0.0;
             $curr_water = null;
             $is_baseline_water = false;
             $is_water_billed = false;
             if ($water_bill) {
-                $prev_water = $water_bill->previous_reading ?? 0;
-                $is_water_billed = ($water_bill->usage_value > 0 || (float)$water_bill->amount > 0 || ($water_bill->current_reading > 0 && $water_bill->current_reading >= $water_bill->previous_reading));
-                $curr_water = $is_water_billed ? $water_bill->current_reading : null;
+                $prev_water = (float)($water_bill->previous_reading ?? 0);
+                $is_water_billed = ((float)$water_bill->usage_value > 0 || (float)$water_bill->amount > 0 || ($water_bill->current_reading !== null && (float)$water_bill->current_reading > 0 && (float)$water_bill->current_reading >= (float)$water_bill->previous_reading));
+                $curr_water = $is_water_billed ? (float)$water_bill->current_reading : null;
                 $priorWaterBill = $waterBills->filter(function ($b) use ($dt) {
                     $c = \Carbon\Carbon::parse($b->billing_period ?: $b->created_at);
                     return $c->lt($dt);
@@ -2246,7 +2246,7 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             } else {
                 $latest_water = $waterBills->first();
                 if ($latest_water) {
-                    $prev_water = $latest_water->current_reading ?? $latest_water->previous_reading ?? 0;
+                    $prev_water = (float)($latest_water->current_reading ?? $latest_water->previous_reading ?? 0);
                 } else {
                     $is_baseline_water = true;
                 }
@@ -2330,8 +2330,8 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             return response()->json(['success' => false, 'message' => 'This bill has already been marked as Paid. Readings cannot be modified.'], 422);
         }
 
-        $prevReading = (int) $request->input('previous_reading', $bill->previous_reading ?? 0);
-        $currReading = (int) $request->input('current_reading', 0);
+        $prevReading = round((float) $request->input('previous_reading', $bill->previous_reading ?? 0), 2);
+        $currReading = round((float) $request->input('current_reading', 0), 2);
 
         if ($currReading < $prevReading) {
             return response()->json([
@@ -2340,7 +2340,7 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             ], 422);
         }
 
-        $usage = $currReading - $prevReading;
+        $usage = round($currReading - $prevReading, 2);
 
         // Rates & Min Tier Calculation
         if ($type === 'water') {
@@ -2351,11 +2351,11 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             if ($usage <= $minWaterM3) {
                 $amount = $minWaterRate;
             } else {
-                $amount = $minWaterRate + (($usage - $minWaterM3) * $rate);
+                $amount = round($minWaterRate + (($usage - $minWaterM3) * $rate), 2);
             }
         } else {
             $rate = (float) (\App\Models\Setting::find('elec_rate')?->value ?? 10);
-            $amount = $usage * $rate;
+            $amount = round($usage * $rate, 2);
         }
 
         // Update Bill preserving Admin Due Date
@@ -2380,7 +2380,7 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             if (!empty($user->contact_number)) {
                 $dueDateStr = $bill->due_date ? \Carbon\Carbon::parse($bill->due_date)->format('M d, Y') : $dt->copy()->addDays(30)->format('M d, Y');
                 $amtStr = number_format($amount, 2);
-                $totalDue = $amount + (float)$bill->previous_balance;
+                $totalDue = round($amount + (float)$bill->previous_balance, 2);
                 $totalStr = number_format($totalDue, 2);
 
                 $msg = "Althesa Subd: Your {$type} bill for {$dt->format('M Y')} is P{$amtStr}";
@@ -2401,7 +2401,7 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
                 'usage' => $usage,
                 'amount' => $amount,
                 'previous_balance' => (float)$bill->previous_balance,
-                'total_due' => $amount + (float)$bill->previous_balance,
+                'total_due' => round($amount + (float)$bill->previous_balance, 2),
                 'due_date' => $bill->due_date ? \Carbon\Carbon::parse($bill->due_date)->format('M d, Y') : null
             ]
         ]);
@@ -2809,10 +2809,10 @@ Route::post('/admin/api/billing/adjust-cycle', function (\Illuminate\Http\Reques
         // Recalculate amount if unpaid
         if ($bill->status !== 'paid') {
             if ($type === 'electricity') {
-                $bill->amount = $bill->usage_value * $effRate;
+                $bill->amount = round((float)$bill->usage_value * $effRate, 2);
             } else {
-                $usage = $bill->usage_value;
-                $bill->amount = $usage <= $effMinM3 ? $effMinRate : $effMinRate + (($usage - $effMinM3) * $effRate);
+                $usage = (float)$bill->usage_value;
+                $bill->amount = round($usage <= $effMinM3 ? $effMinRate : $effMinRate + (($usage - $effMinM3) * $effRate), 2);
             }
         }
 

@@ -162,7 +162,7 @@
         $unit = $bill->type === 'electricity' ? 'kWh' : 'm³';
         $dueDateFormatted = $bill->due_date ? \Carbon\Carbon::parse($bill->due_date)->format('M d, Y') : 'Due Date';
         
-        $rate = $bill->usage_value > 0 ? ($bill->amount / $bill->usage_value) : 0;
+        $rate = (float)$bill->usage_value > 0 ? ((float)$bill->amount / (float)$bill->usage_value) : (float)(\App\Models\Setting::find('elec_rate')?->value ?? 10.00);
         if ($bill->type === 'water') {
             $rate = (float)(\App\Models\Setting::find('water_rate')?->value ?? 15.00);
         }
@@ -232,15 +232,15 @@
             <table style="border:none; margin-bottom:0;">
                 <tr>
                     <td style="padding:2px 4px; border:none; width:50%;"><strong>Previous Reading:</strong><br><span style="font-size:9.5px;color:#000;">{{ $prevDate }}</span></td>
-                    <td style="padding:2px 4px; border:none;" class="text-right">{{ $bill->previous_reading }}</td>
+                    <td style="padding:2px 4px; border:none;" class="text-right">{{ number_format((float)$bill->previous_reading, 2) }}</td>
                 </tr>
                 <tr>
                     <td style="padding:2px 4px; border:none;"><strong>Current Reading:</strong><br><span style="font-size:9.5px;color:#000;">{{ $currDate }}</span></td>
-                    <td style="padding:2px 4px; border:none;" class="text-right">{{ $bill->current_reading ?? 'N/A' }}</td>
+                    <td style="padding:2px 4px; border:none;" class="text-right">{{ $bill->current_reading !== null ? number_format((float)$bill->current_reading, 2) : 'N/A' }}</td>
                 </tr>
                 <tr>
                     <td style="padding:2px 4px; border:none;"><strong>Consumption:</strong></td>
-                    <td style="padding:2px 4px; border:none;" class="text-right fw-bold">{{ $bill->usage_value }} {{ $unit }}</td>
+                    <td style="padding:2px 4px; border:none;" class="text-right fw-bold">{{ number_format((float)$bill->usage_value, 2) }} {{ $unit }}</td>
                 </tr>
             </table>
         </div>
@@ -269,12 +269,12 @@
                     }
                 @endphp
                 <tr>
-                    <td>Minimum Charge (First {{ $waterMinM3 }} {{ $unit }})</td>
+                    <td>Minimum Charge (First {{ number_format($waterMinM3, 2) }} {{ $unit }})</td>
                     <td class="text-right">₱{{ number_format($waterMinRate, 2) }}</td>
                 </tr>
                 @if($excessM3 > 0)
                 <tr>
-                    <td>Excess Consumption ({{ $excessM3 }} {{ $unit }} x ₱{{ number_format($waterExcessRate, 2) }}/{{ $unit }})</td>
+                    <td>Excess Consumption ({{ number_format($excessM3, 2) }} {{ $unit }} x ₱{{ number_format($waterExcessRate, 2) }}/{{ $unit }})</td>
                     <td class="text-right">₱{{ number_format($excessCharge, 2) }}</td>
                 </tr>
                 @endif
@@ -284,7 +284,7 @@
                 </tr>
             @else
                 <tr>
-                    <td><strong>Current Month Charges</strong> ({{ $bill->usage_value }} {{ $unit }} x ₱{{ number_format($rate, 2) }}/{{ $unit }})</td>
+                    <td><strong>Current Month Charges</strong> ({{ number_format((float)$bill->usage_value, 2) }} {{ $unit }} x ₱{{ number_format($rate, 2) }}/{{ $unit }})</td>
                     <td class="text-right"><strong>₱{{ number_format($currentCharges, 2) }}</strong></td>
                 </tr>
             @endif

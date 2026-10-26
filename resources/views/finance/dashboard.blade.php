@@ -91,7 +91,7 @@
             <div class="house-metrics">
                 <div class="metric house-prev-metric">
                     <span class="metric-label">Prev. Elec</span>
-                    <span class="metric-value">{{ $house['prev_elec'] }} kWh</span>
+                    <span class="metric-value">{{ number_format((float)($house['prev_elec'] ?? 0), 2) }} kWh</span>
                 </div>
             </div>
         </div>
@@ -268,12 +268,12 @@
                 const stat = data.elec_status.toLowerCase();
                 badge.className = `status-badge status-${stat} house-badge`;
                 badge.innerText = data.elec_status;
-                metric.innerHTML = `<span class="metric-label">Prev. Elec</span><span class="metric-value">${data.prev_elec} kWh</span>`;
+                metric.innerHTML = `<span class="metric-label">Prev. Elec</span><span class="metric-value">${Number(data.prev_elec || 0).toFixed(2)} kWh</span>`;
             } else {
                 const stat = data.water_status.toLowerCase();
                 badge.className = `status-badge status-${stat} house-badge`;
                 badge.innerText = data.water_status;
-                metric.innerHTML = `<span class="metric-label">Prev. Water</span><span class="metric-value">${data.prev_water} m³</span>`;
+                metric.innerHTML = `<span class="metric-label">Prev. Water</span><span class="metric-value">${Number(data.prev_water || 0).toFixed(2)} m³</span>`;
             }
         });
 
@@ -463,7 +463,7 @@
         
         const isElec = activeUtility === 'elec';
         const unit = isElec ? 'kWh' : 'm³';
-        document.getElementById('calcUsage').innerText = `${usage.toFixed(usage % 1 === 0 ? 0 : 2)} ${unit}`;
+        document.getElementById('calcUsage').innerText = `${usage.toFixed(2)} ${unit}`;
         
         let currentCharges = 0;
         const tierRow = document.getElementById('tierBreakdownRow');
@@ -476,7 +476,7 @@
             if (usage <= WATER_MIN_M3) {
                 currentCharges = WATER_MIN_RATE;
                 tierRow.style.display = 'flex';
-                document.getElementById('tierBreakdownLabel').innerText = `Base charge (up to ${WATER_MIN_M3} m³)`;
+                document.getElementById('tierBreakdownLabel').innerText = `Base charge (up to ${WATER_MIN_M3.toFixed(2)} m³)`;
                 document.getElementById('tierBreakdownValue').innerText = `₱${WATER_MIN_RATE.toFixed(2)}`;
                 document.getElementById('calcRate').innerText = `Base ₱${WATER_MIN_RATE.toFixed(2)} + ₱${WATER_RATE.toFixed(2)}/m³ excess`;
             } else {
@@ -484,7 +484,7 @@
                 const excessCost = excess * WATER_RATE;
                 currentCharges = WATER_MIN_RATE + excessCost;
                 tierRow.style.display = 'flex';
-                document.getElementById('tierBreakdownLabel').innerText = `Base (₱${WATER_MIN_RATE.toFixed(2)}) + Excess (${excess.toFixed(1)} m³ x ₱${WATER_RATE.toFixed(2)})`;
+                document.getElementById('tierBreakdownLabel').innerText = `Base (₱${WATER_MIN_RATE.toFixed(2)}) + Excess (${excess.toFixed(2)} m³ x ₱${WATER_RATE.toFixed(2)})`;
                 document.getElementById('tierBreakdownValue').innerText = `₱${currentCharges.toFixed(2)}`;
                 document.getElementById('calcRate').innerText = `Base ₱${WATER_MIN_RATE.toFixed(2)} + ₱${WATER_RATE.toFixed(2)}/m³ excess`;
             }
@@ -562,9 +562,12 @@
               if (body.success) {
                   const utilityName = isElec ? 'Electricity' : 'Water';
                   const verb = isUpdate ? 'Updated' : 'Generated';
+                  const houseBlock = currentHouseData.block;
+                  const houseLot = currentHouseData.lot;
+                  const amountFormatted = Number(body.bill?.amount || 0).toFixed(2);
                   
                   document.getElementById('successTitle').innerText = `Bill ${verb}`;
-                  document.getElementById('successMessage').innerText = `The ${utilityName} bill has been successfully ${verb.toLowerCase()} for Block ${currentHouseData.block}, Lot ${currentHouseData.lot}. Current charges: ₱${body.bill.amount.toFixed(2)}.`;
+                  document.getElementById('successMessage').innerText = `The ${utilityName} bill has been successfully ${verb.toLowerCase()} for Block ${houseBlock}, Lot ${houseLot}. Current charges: ₱${amountFormatted}.`;
                   
                   document.getElementById('successModalOverlay').classList.add('show');
                   document.getElementById('successModal').classList.add('show');
@@ -590,15 +593,15 @@
                   // Re-apply visually
                   switchUtility(activeUtility);
                   
-                  closeReadingPanel();
-                  
                   if (window.pushSystemNotification) {
                       window.pushSystemNotification(
                           `${utilityName} Billed`,
-                          `Block ${currentHouseData.block} Lot ${currentHouseData.lot} successfully billed.`,
+                          `Block ${houseBlock} Lot ${houseLot} successfully billed.`,
                           'Just now'
                       );
                   }
+
+                  closeReadingPanel();
               } else {
                   Swal.fire({
                       icon: 'error',

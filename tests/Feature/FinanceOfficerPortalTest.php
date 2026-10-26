@@ -246,4 +246,103 @@ class FinanceOfficerPortalTest extends TestCase
         $house = collect($houses)->firstWhere('lot', '2');
         $this->assertEquals('Billed', $house['elec_status']);
     }
+
+    public function test_decimal_readings_are_recorded_accurately_with_calculations_and_receipt(): void
+    {
+        $lot = Lot::create(['block' => '7', 'lot_number' => '1', 'provider_managed' => false]);
+        $resident = User::factory()->create();
+        $resident->assignRole('Resident');
+        $lot->users()->attach($resident);
+
+        Setting::updateOrCreate(['key' => 'elec_rate'], ['value' => 10]);
+        Setting::updateOrCreate(['key' => 'water_rate'], ['value' => 15]);
+        Setting::updateOrCreate(['key' => 'water_min_m3'], ['value' => 10]);
+        Setting::updateOrCreate(['key' => 'water_min_rate'], ['value' => 250]);
+
+        $elecBill = UtilityBill::create([
+            'type' => 'electricity',
+            'lot_id' => $lot->id,
+            'resident_id' => $resident->id,
+            'billing_period' => '2026-10-01',
+            'previous_reading' => 120.25,
+            'current_reading' => 0,
+            'usage_value' => 0,
+            'amount' => 0,
+            'status' => BillStatus::Unpaid->value,
+            'due_date' => '2026-11-15',
+        ]);
+
+        $waterBill = UtilityBill::create([
+            'type' => 'water',
+            'lot_id' => $lot->id,
+            'resident_id' => $resident->id,
+            'billing_period' => '2026-10-01',
+            'previous_reading' => 10.25,
+            'current_reading' => 0,
+            'usage_value' => 0,
+            'amount' => 0,
+            'status' => BillStatus::Unpaid->value,
+            'due_date' => '2026-11-15',
+        ]);
+
+        // Submit decimal reading for electricity: 120.25 -> 155.75 = 35.50 kWh * 10 = 355.00
+        $resElec = $this->actingAs($this->financeOfficer)->postJson('/finance/api/billing/reading', [
+            'type' => 'electricity',
+            'block' => '7',
+            'lot' => '1',
+            'previous_reading' => 120.25,
+            'current_reading' => 155.75,
+            'cycle' => '2026-10',
+        ]);
+
+        $resElec->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'bill' => [
+                    'previous_reading' => 120.25,
+                    'current_reading' => 155.75,
+                    'usage' => 35.50,
+                    'amount' => 355.00,
+                ]
+            ]);
+
+        $elecBill->refresh();
+        $this->assertEquals(120.25, (float)$elecBill->previous_reading);
+        $this->assertEquals(155.75, (float)$elecBill->current_reading);
+        $this->assertEquals(35.50, (float)$elecBill->usage_value);
+        $this->assertEquals(355.00, (float)$elecBill->amount);
+
+        // Submit decimal reading for water: 10.25 -> 24.85 = 14.60 m3
+        // Base (10 m3) = 250, Excess (4.60 m3) * 15 = 69.00 -> Total = 319.00
+        $resWater = $this->actingAs($this->financeOfficer)->postJson('/finance/api/billing/reading', [
+            'type' => 'water',
+            'block' => '7',
+            'lot' => '1',
+            'previous_reading' => 10.25,
+            'current_reading' => 24.85,
+            'cycle' => '2026-10',
+        ]);
+
+        $resWater->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'bill' => [
+                    'previous_reading' => 10.25,
+                    'current_reading' => 24.85,
+                    'usage' => 14.60,
+                    'amount' => 319.00,
+                ]
+            ]);
+
+        $waterBill->refresh();
+        $this->assertEquals(10.25, (float)$waterBill->previous_reading);
+        $this->assertEquals(24.85, (float)$waterBill->current_reading);
+        $this->assertEquals(14.60, (float)$waterBill->usage_value);
+        $this->assertEquals(319.00, (float)$waterBill->amount);
+
+        // Verify PDF receipt renders decimal readings
+        $pdfRes = $this->actingAs($resident)->get("/resident/bills/history/electricity/pdf/{$elecBill->id}");
+        $pdfRes->assertStatus(200);
+        $pdfRes->assertHeader('content-type', 'application/pdf');
+    }
 }
