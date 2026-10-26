@@ -77,7 +77,10 @@
                 </div>
                 <h3 style="font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 8px;">Appointment Confirmed!</h3>
                 <p style="font-size: 14px; color: #6b7280; max-width: 360px; margin: 0 auto 24px;">Thank you for scheduling a visit. Your appointment has been recorded and submitted for admin review.</p>
-                <a href="/" class="btn btn-outline">Back to Home</a>
+                <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                    <a href="/appointment" class="btn btn-primary">Book Another Appointment</a>
+                    <a href="/" class="btn btn-outline">Back to Home</a>
+                </div>
             </div>
         </div>
     </div>
@@ -356,9 +359,11 @@
                     }).then(async (res) => {
                         const payload = await res.json().catch(() => ({}));
                         if (!res.ok) {
-                            const message = payload.message
-                                || (payload.errors && Object.values(payload.errors).flat()[0])
-                                || 'Please check the form and try again.';
+                            const message = res.status === 429
+                                ? 'Too many attempts. Please wait a moment before trying again.'
+                                : (payload.message
+                                    || (payload.errors && Object.values(payload.errors).flat()[0])
+                                    || 'Please check the form and try again.');
                             showFormError('Could not book appointment', message);
                             resetSubmitButton();
                             return;

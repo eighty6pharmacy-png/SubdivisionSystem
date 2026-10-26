@@ -113,12 +113,14 @@ if (!function_exists('getMonthlyChartData')) {
 }
 
 if (!function_exists('getLotMonthlyChartData')) {
-    function getLotMonthlyChartData($lotId, $type) {
-        $bills = \App\Models\UtilityBill::where('lot_id', $lotId)
-            ->where('type', $type)
-            ->orderBy('created_at', 'desc')
-            ->limit(12)
-            ->get();
+    function getLotMonthlyChartData($lotId, $type, $bills = null) {
+        if ($bills === null) {
+            $bills = \App\Models\UtilityBill::where('lot_id', $lotId)
+                ->where('type', $type)
+                ->orderBy('created_at', 'desc')
+                ->limit(12)
+                ->get();
+        }
             
         $history = [];
         $latestDate = $bills->first() ? $bills->first()->created_at : now();
@@ -138,12 +140,14 @@ if (!function_exists('getLotMonthlyChartData')) {
 }
 
 if (!function_exists('getLotMonthlyAmountChartData')) {
-    function getLotMonthlyAmountChartData($lotId, $type) {
-        $bills = \App\Models\UtilityBill::where('lot_id', $lotId)
-            ->where('type', $type)
-            ->orderBy('created_at', 'desc')
-            ->limit(12)
-            ->get();
+    function getLotMonthlyAmountChartData($lotId, $type, $bills = null) {
+        if ($bills === null) {
+            $bills = \App\Models\UtilityBill::where('lot_id', $lotId)
+                ->where('type', $type)
+                ->orderBy('created_at', 'desc')
+                ->limit(12)
+                ->get();
+        }
             
         $history = [];
         $latestDate = $bills->first() ? $bills->first()->created_at : now();
@@ -241,7 +245,7 @@ if (!function_exists('getElectricalBills')) {
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
                 // Check if any electricity bills exist at all
-                if (\App\Models\UtilityBill::where('type', 'electricity')->count() === 0) {
+                if (!\App\Models\UtilityBill::where('type', 'electricity')->exists()) {
                     return [];
                 }
                 
@@ -254,8 +258,12 @@ if (!function_exists('getElectricalBills')) {
                 }
                 
                 $residents = $query->get();
+
+                $tz = config('app.timezone', 'Asia/Manila');
+                $elecRate = (float) (\App\Models\Setting::find('elec_rate')?->value ?? 10);
+                $elecPenaltyRate = (float) (\App\Models\Setting::find('electricity_penalty')?->value ?? 5);
                 
-                return $residents->map(function ($resident) use ($cycle, $includeHistory, $lotId) {
+                return $residents->map(function ($resident) use ($cycle, $includeHistory, $lotId, $tz, $elecRate, $elecPenaltyRate) {
                     $lot = ($lotId ? $resident->lots->firstWhere('id', $lotId) : null) ?? $resident->lots->first();
                     $billsForLot = $resident->utilityBills->filter(fn($b) => !$lot || $b->lot_id == $lot->id);
                     
@@ -291,10 +299,6 @@ if (!function_exists('getElectricalBills')) {
                     $billIndex = $bill ? $billsForLot->values()->search(fn($b) => $b->id === $bill->id) : false;
                     $previousBill = $billIndex !== false ? $billsForLot->values()->get($billIndex + 1) : null;
 
-                    $tz = config('app.timezone', 'Asia/Manila');
-                    $elecRate = (float) (\App\Models\Setting::find('elec_rate')?->value ?? 10);
-                    $elecPenaltyRate = (float) (\App\Models\Setting::find('electricity_penalty')?->value ?? 5);
-
                     $baseAmount = $bill ? (float) $bill->amount : 0.0;
                     $previousBalance = $bill ? (float) $bill->previous_balance : 0.0;
                     $amountBeforeDue = $baseAmount + $previousBalance;
@@ -320,6 +324,12 @@ if (!function_exists('getElectricalBills')) {
                     } else {
                         $effectiveStatus = $bill->status ?: 'unpaid';
                     }
+
+                    $recentLotBills = ($lot && $includeHistory) ? \App\Models\UtilityBill::where('lot_id', $lot->id)
+                        ->where('type', 'electricity')
+                        ->orderBy('created_at', 'desc')
+                        ->limit(12)
+                        ->get() : null;
 
                     return [
                         'id' => $bill ? $bill->id : 'NEW-' . $resident->id,
@@ -354,14 +364,22 @@ if (!function_exists('getElectricalBills')) {
                         'issued_date' => ($bill && $bill->created_at) ? \Carbon\Carbon::parse($bill->created_at)->format('Y-m-d') : 'N/A',
                         'paid_date' => ($bill && $effectiveStatus === 'paid') ? $bill->updated_at->format('Y-m-d') : null,
                         'method' => ($bill && $bill->payments->count() > 0) ? ($bill->payments->sortByDesc('created_at')->first()->method ?? 'Office') : null,
-                        'usage_history' => ($lot && $includeHistory) ? getLotMonthlyChartData($lot->id, 'electricity') : [],
-                        'amount_history' => ($lot && $includeHistory) ? getLotMonthlyAmountChartData($lot->id, 'electricity') : [],
+                        'usage_history' => ($lot && $includeHistory) ? getLotMonthlyChartData($lot->id, 'electricity', $recentLotBills) : [],
+                        'amount_history' => ($lot && $includeHistory) ? getLotMonthlyAmountChartData($lot->id, 'electricity', $recentLotBills) : [],
                         'at_risk' => $isAtRisk,
                         'payment_history' => $payments,
                         'payment_behavior' => $resident->payment_behavior,
                         'audit_log' => [['action' => 'Statement Generated', 'date' => \Carbon\Carbon::now()->format('Y-m-d h:i A'), 'user' => 'System']],
                     ];
-                })->toArray();
+                })->sort(function ($a, $b) {
+                    $ba = (string)($a['block'] ?? '');
+                    $bb = (string)($b['block'] ?? '');
+                    if ($ba === 'N/A' || $ba === '') return 1;
+                    if ($bb === 'N/A' || $bb === '') return -1;
+                    $cmp = strnatcasecmp($ba, $bb);
+                    if ($cmp !== 0) return $cmp;
+                    return strnatcasecmp((string)($a['lot_number'] ?? ''), (string)($b['lot_number'] ?? ''));
+                })->values()->toArray();
             }
         } catch (\Exception $e) {} 
         return [];
@@ -373,7 +391,7 @@ if (!function_exists('getWaterBills')) {
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
                 // Check if any water bills exist at all
-                if (\App\Models\UtilityBill::where('type', 'water')->count() === 0) {
+                if (!\App\Models\UtilityBill::where('type', 'water')->exists()) {
                     return [];
                 }
 
@@ -386,8 +404,20 @@ if (!function_exists('getWaterBills')) {
                 }
                 
                 $residents = $query->get();
+
+                $minWaterM3Setting = \App\Models\Setting::find('water_min_m3');
+                $minWaterM3 = $minWaterM3Setting ? (float)$minWaterM3Setting->value : 10;
                 
-                return $residents->map(function ($resident) use ($cycle, $includeHistory, $lotId) {
+                $minWaterRateSetting = \App\Models\Setting::find('water_min_rate');
+                $minWaterRate = $minWaterRateSetting ? (float)$minWaterRateSetting->value : 250;
+                
+                $currentRateSetting = \App\Models\Setting::find('water_rate');
+                $currentRate = $currentRateSetting ? (float)$currentRateSetting->value : 15;
+
+                $waterPenaltyRate = (float) (\App\Models\Setting::find('water_penalty')?->value ?? 5);
+                $tz = config('app.timezone', 'Asia/Manila');
+                
+                return $residents->map(function ($resident) use ($cycle, $includeHistory, $lotId, $minWaterM3, $minWaterRate, $currentRate, $waterPenaltyRate, $tz) {
                     $lot = ($lotId ? $resident->lots->firstWhere('id', $lotId) : null) ?? $resident->lots->first();
                     $billsForLot = $resident->utilityBills->filter(fn($b) => !$lot || $b->lot_id == $lot->id);
                     
@@ -420,15 +450,6 @@ if (!function_exists('getWaterBills')) {
                     
                     $payments = $allPayments->sortByDesc('timestamp')->values()->toArray();
                     
-                    $minWaterM3Setting = \App\Models\Setting::find('water_min_m3');
-                    $minWaterM3 = $minWaterM3Setting ? (float)$minWaterM3Setting->value : 10;
-                    
-                    $minWaterRateSetting = \App\Models\Setting::find('water_min_rate');
-                    $minWaterRate = $minWaterRateSetting ? (float)$minWaterRateSetting->value : 250;
-                    
-                    $currentRateSetting = \App\Models\Setting::find('water_rate');
-                    $currentRate = $currentRateSetting ? (float)$currentRateSetting->value : 15;
-                    
                     $excessUsage = $bill ? max(0, (float)$bill->usage_value - $minWaterM3) : 0;
                     $appliedRate = ($bill && $excessUsage > 0 && (float)$bill->amount > $minWaterRate)
                         ? round(((float)$bill->amount - $minWaterRate) / $excessUsage, 2)
@@ -436,9 +457,6 @@ if (!function_exists('getWaterBills')) {
                     
                     $billIndex = $bill ? $billsForLot->values()->search(fn($b) => $b->id === $bill->id) : false;
                     $previousBill = $billIndex !== false ? $billsForLot->values()->get($billIndex + 1) : null;
-
-                    $tz = config('app.timezone', 'Asia/Manila');
-                    $waterPenaltyRate = (float) (\App\Models\Setting::find('water_penalty')?->value ?? 5);
 
                     $baseAmount = $bill ? (float) $bill->amount : 0.0;
                     $previousBalance = $bill ? (float) $bill->previous_balance : 0.0;
@@ -466,12 +484,19 @@ if (!function_exists('getWaterBills')) {
                         $effectiveStatus = $bill->status ?: 'unpaid';
                     }
 
+                    $recentLotBills = ($lot && $includeHistory) ? \App\Models\UtilityBill::where('lot_id', $lot->id)
+                        ->where('type', 'water')
+                        ->orderBy('created_at', 'desc')
+                        ->limit(12)
+                        ->get() : null;
+
                     return [
                         'id' => $bill ? $bill->id : 'NEW-' . $resident->id,
                         'db_id' => $bill ? $bill->id : null,
                         'resident_id' => $resident->id,
                         'lot' => $lot ? 'B' . $lot->block . ' L' . $lot->lot_number : 'N/A',
                         'block' => $lot ? $lot->block : 'N/A',
+                        'lot_number' => $lot ? $lot->lot_number : null,
                         'resident' => $resident->name,
                         'amount' => $effectiveTotalDue,
                         'amount_before_due' => $amountBeforeDue,
@@ -500,14 +525,22 @@ if (!function_exists('getWaterBills')) {
                         'issued_date' => ($bill && $bill->created_at) ? \Carbon\Carbon::parse($bill->created_at)->format('Y-m-d') : 'N/A',
                         'paid_date' => ($bill && $effectiveStatus === 'paid') ? $bill->updated_at->format('Y-m-d') : null,
                         'method' => ($bill && $bill->payments->count() > 0) ? ($bill->payments->sortByDesc('created_at')->first()->method ?? 'Office') : null,
-                        'usage_history' => ($lot && $includeHistory) ? getLotMonthlyChartData($lot->id, 'water') : [],
-                        'amount_history' => ($lot && $includeHistory) ? getLotMonthlyAmountChartData($lot->id, 'water') : [],
+                        'usage_history' => ($lot && $includeHistory) ? getLotMonthlyChartData($lot->id, 'water', $recentLotBills) : [],
+                        'amount_history' => ($lot && $includeHistory) ? getLotMonthlyAmountChartData($lot->id, 'water', $recentLotBills) : [],
                         'at_risk' => $isAtRisk,
                         'payment_history' => $payments,
                         'payment_behavior' => $resident->payment_behavior,
                         'audit_log' => [['action' => 'Statement Generated', 'date' => \Carbon\Carbon::now()->format('Y-m-d h:i A'), 'user' => 'System']],
                     ];
-                })->toArray();
+                })->sort(function ($a, $b) {
+                    $ba = (string)($a['block'] ?? '');
+                    $bb = (string)($b['block'] ?? '');
+                    if ($ba === 'N/A' || $ba === '') return 1;
+                    if ($bb === 'N/A' || $bb === '') return -1;
+                    $cmp = strnatcasecmp($ba, $bb);
+                    if ($cmp !== 0) return $cmp;
+                    return strnatcasecmp((string)($a['lot_number'] ?? ''), (string)($b['lot_number'] ?? ''));
+                })->values()->toArray();
             }
         } catch (\Exception $e) {} 
         return [];
@@ -529,22 +562,27 @@ if (!function_exists('calculateBillingStats')) {
 
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('utility_bills')) {
-                $bills = \App\Models\UtilityBill::where('type', $type)->with('payments')->get();
-                foreach ($bills as $b) {
-                    foreach ($b->payments as $p) {
-                        $dt = \Carbon\Carbon::parse($p->payment_date);
-                        $year = $dt->format('Y');
-                        $month = $dt->format('M');
-                        if (isset($stats[$year][$month])) {
-                            $stats[$year][$month] += $p->amount_paid;
-                        }
-                        if ($dt->isToday()) {
-                            $stats['today_paid'] += $p->amount_paid;
-                        }
+                $payments = \Illuminate\Support\Facades\DB::table('payments')
+                    ->join('utility_bills', 'payments.utility_bill_id', '=', 'utility_bills.id')
+                    ->where('utility_bills.type', $type)
+                    ->whereNotNull('payments.payment_date')
+                    ->select('payments.payment_date', 'payments.amount_paid')
+                    ->get();
+
+                $todayStr = now()->toDateString();
+                foreach ($payments as $p) {
+                    $dt = \Carbon\Carbon::parse($p->payment_date);
+                    $year = $dt->format('Y');
+                    $month = $dt->format('M');
+                    if (isset($stats[$year][$month])) {
+                        $stats[$year][$month] += (float) $p->amount_paid;
+                    }
+                    if ($dt->toDateString() === $todayStr) {
+                        $stats['today_paid'] += (float) $p->amount_paid;
                     }
                 }
 
-                $users = \App\Models\User::role('Resident')->get();
+                $users = \App\Models\User::role('Resident')->select('id', 'payment_behavior')->get();
                 $total = $users->count();
                 if ($total > 0) {
                     $early = $users->where('payment_behavior', 'Early Payer')->count();

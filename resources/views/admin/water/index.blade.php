@@ -283,7 +283,7 @@
             <select id="blockFilter" class="filter-select">
                 <option value="all">All Blocks</option>
                 @php
-                    $uniqueBlocks = collect($bills)->pluck('block')->filter(function($b) { return $b !== 'N/A'; })->unique()->sort();
+                    $uniqueBlocks = collect($bills)->pluck('block')->filter(function($b) { return $b !== 'N/A'; })->unique()->sort(fn($a, $b) => strnatcasecmp((string)$a, (string)$b));
                 @endphp
                 @foreach($uniqueBlocks as $b)
                     <option value="{{ $b }}">Block {{ $b }}</option>

@@ -651,7 +651,7 @@ Route::post('/api/appointments', function (\Illuminate\Http\Request $request) {
     }
     
     return response()->json(['success' => true]);
-})->middleware('throttle:3,60');
+})->middleware('throttle:20,1');
 Route::put('/api/incidents/{id}/status', function (\Illuminate\Http\Request $request, $id) {
     $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
         'status' => ['required', \Illuminate\Validation\Rule::in(\App\Enums\IncidentStatus::values())],
@@ -1201,7 +1201,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         return redirect('/admin/users');
     });
     Route::get('/billing', function () {
-        $bills = getElectricalBills(request('cycle'));
+        $bills = getElectricalBills(request('cycle'), false);
         $lots = getLotStatus();
         $validCycles = getValidBillingCycles('electricity');
 
@@ -1220,7 +1220,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $yearly_stats = calculateBillingStats('water');
         $validCycles = getValidBillingCycles('water');
         return view('admin.water.index', [
-            'bills' => getWaterBills(request('cycle')),
+            'bills' => getWaterBills(request('cycle'), false),
             'stats' => $yearly_stats,
             'validCycles' => $validCycles
         ]);
@@ -2180,7 +2180,11 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             'utilityBills' => function ($q) {
                 $q->orderByRaw('COALESCE(billing_period, created_at) DESC');
             }
-        ])->orderBy('block')->orderBy('lot_number')->get();
+        ])->get()->sort(function ($a, $b) {
+            $cmp = strnatcasecmp((string) $a->block, (string) $b->block);
+            if ($cmp !== 0) return $cmp;
+            return strnatcasecmp((string) $a->lot_number, (string) $b->lot_number);
+        })->values();
 
         $houses = [];
         foreach ($lots as $lot) {
@@ -2202,9 +2206,11 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             $prev_elec = 0;
             $curr_elec = null;
             $is_baseline_elec = false;
+            $is_elec_billed = false;
             if ($elec_bill) {
                 $prev_elec = $elec_bill->previous_reading ?? 0;
-                $curr_elec = ($elec_bill->current_reading_date !== null || $elec_bill->usage_value > 0 || $elec_bill->amount > 0) ? $elec_bill->current_reading : null;
+                $is_elec_billed = ($elec_bill->usage_value > 0 || (float)$elec_bill->amount > 0 || ($elec_bill->current_reading > 0 && $elec_bill->current_reading >= $elec_bill->previous_reading));
+                $curr_elec = $is_elec_billed ? $elec_bill->current_reading : null;
                 $priorElecBill = $elecBills->filter(function ($b) use ($dt) {
                     $c = \Carbon\Carbon::parse($b->billing_period ?: $b->created_at);
                     return $c->lt($dt);
@@ -2225,9 +2231,11 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             $prev_water = 0;
             $curr_water = null;
             $is_baseline_water = false;
+            $is_water_billed = false;
             if ($water_bill) {
                 $prev_water = $water_bill->previous_reading ?? 0;
-                $curr_water = ($water_bill->current_reading_date !== null || $water_bill->usage_value > 0 || $water_bill->amount > 0) ? $water_bill->current_reading : null;
+                $is_water_billed = ($water_bill->usage_value > 0 || (float)$water_bill->amount > 0 || ($water_bill->current_reading > 0 && $water_bill->current_reading >= $water_bill->previous_reading));
+                $curr_water = $is_water_billed ? $water_bill->current_reading : null;
                 $priorWaterBill = $waterBills->filter(function ($b) use ($dt) {
                     $c = \Carbon\Carbon::parse($b->billing_period ?: $b->created_at);
                     return $c->lt($dt);
@@ -2244,24 +2252,9 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
                 }
             }
 
-            // Status resolution
-            $elec_status = 'Pending';
-            if ($elec_bill) {
-                if ($elec_bill->status === 'paid') {
-                    $elec_status = 'Paid';
-                } elseif ($elec_bill->current_reading_date !== null || $elec_bill->usage_value > 0 || $elec_bill->amount > 0) {
-                    $elec_status = 'Billed';
-                }
-            }
-
-            $water_status = 'Pending';
-            if ($water_bill) {
-                if ($water_bill->status === 'paid') {
-                    $water_status = 'Paid';
-                } elseif ($water_bill->current_reading_date !== null || $water_bill->usage_value > 0 || $water_bill->amount > 0) {
-                    $water_status = 'Billed';
-                }
-            }
+            // Status resolution - Finance Officer portal only tracks Pending vs Billed (payment tracking is admin-only)
+            $elec_status = ($elec_bill && $is_elec_billed) ? 'Billed' : 'Pending';
+            $water_status = ($water_bill && $is_water_billed) ? 'Billed' : 'Pending';
 
             $houses[] = [
                 'block' => $lot->block,
@@ -2280,6 +2273,12 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
                 'provider_managed' => (bool)$lot->provider_managed
             ];
         }
+
+        usort($houses, function ($a, $b) {
+            $cmp = strnatcasecmp((string) ($a['block'] ?? ''), (string) ($b['block'] ?? ''));
+            if ($cmp !== 0) return $cmp;
+            return strnatcasecmp((string) ($a['lot'] ?? ''), (string) ($b['lot'] ?? ''));
+        });
 
         return view('finance.dashboard', [
             'houses' => $houses,

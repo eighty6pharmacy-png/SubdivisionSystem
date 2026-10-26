@@ -78,7 +78,11 @@
         initGISMap('mapContainer', {
             interactive: true,
             showRouting: true,
-            endNode: endNode
+            endNode: endNode,
+            destinationName: ctx.destination || endNode,
+            visitorName: ctx.visitor_name || 'Guest',
+            showCalibration: false,
+            liveNavigation: true
         });
     });
 </script>

@@ -1,82 +1,431 @@
 .routing-viewport {
-        position: relative;
-        background: #f1f5f9;
-        height: calc(100vh - 80px);
-        width: 100%;
-    }
+    position: relative;
+    background: #f1f5f9;
+    height: calc(100vh - 80px);
+    width: 100%;
+}
 
-    #mapContainer {
-        width: 100%;
-        height: 100%;
-        z-index: 1;
-    }
+#mapContainer {
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
 
-    /* ===== FLOATING INFO BAR ===== */
+/* ===== FLOATING TOP DESTINATION BAR ===== */
+.route-info-bar {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    max-width: 540px;
+    margin: 0 auto;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    padding: 8px 12px;
+    border-radius: 14px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    box-sizing: border-box;
+}
+
+.dest-badge-icon {
+    width: 32px;
+    height: 32px;
+    background: #2563eb;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: white;
+    flex-shrink: 0;
+}
+
+.dest-text-group {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.route-info-bar .dest-name {
+    font-size: 14px;
+    font-weight: 800;
+    color: #0f172a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+}
+
+.route-info-bar .dest-sub {
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+    margin-top: 2px;
+}
+
+.route-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.btn-pin-pill {
+    background: #f0f9ff;
+    color: #0284c7;
+    border: 1px solid #bae6fd;
+    border-radius: 10px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s ease;
+}
+
+.btn-pin-pill:hover {
+    background: #e0f2fe;
+}
+
+.btn-directions-toggle {
+    background: #2563eb;
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+    transition: all 0.15s ease;
+}
+
+.btn-directions-toggle:hover {
+    background: #1d4ed8;
+}
+
+/* ===== LIVE NAVIGATION TURN-BY-TURN HUD (DROPDOWN) ===== */
+.live-nav-hud {
+    position: absolute;
+    top: 66px;
+    left: 12px;
+    right: 12px;
+    max-width: 540px;
+    margin: 0 auto;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    border-radius: 16px;
+    padding: 12px 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+}
+
+.nav-hud-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.hud-top-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.hud-tool-btn {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.hud-tool-btn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.nav-hud-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+.nav-hud-badge.inside {
+    background: #ecfdf5;
+    color: #047857;
+    border-color: #a7f3d0;
+}
+
+.nav-hud-badge.arrived {
+    background: #f0fdf4;
+    color: #15803d;
+    border-color: #86efac;
+}
+
+.nav-pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #2563eb;
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7);
+    animation: hudPulse 1.8s infinite;
+}
+
+.nav-hud-badge.inside .nav-pulse-dot {
+    background: #10b981;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+}
+
+.nav-hud-badge.arrived .nav-pulse-dot {
+    background: #16a34a;
+}
+
+@keyframes hudPulse {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(37, 99, 235, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+}
+
+.hud-recenter-btn {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.hud-recenter-btn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.nav-hud-metrics {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 8px 12px;
+    border: 1px solid #f1f5f9;
+}
+
+.nav-metric {
+    text-align: center;
+    flex: 1;
+}
+
+.nav-metric-label {
+    font-size: 9px;
+    font-weight: 800;
+    color: #94a3b8;
+    letter-spacing: 0.5px;
+}
+
+.nav-metric-val {
+    font-size: 18px;
+    font-weight: 900;
+    color: #0f172a;
+    line-height: 1.2;
+}
+
+.nav-metric-sep {
+    width: 1px;
+    height: 24px;
+    background: #e2e8f0;
+}
+
+.nav-hud-step {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1.4;
+    padding: 4px 2px;
+}
+
+.nav-hud-sub {
+    font-size: 10px;
+    color: #64748b;
+    font-weight: 500;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 6px;
+}
+
+/* ===== BLUE PULSING LIVE GPS MARKER ===== */
+.subdivision-live-marker-container {
+    background: transparent !important;
+    border: none !important;
+}
+
+.subdivision-live-beacon {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.subdivision-live-beacon .pulse-ring {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(37, 99, 235, 0.4);
+    animation: gpsBeaconPulse 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+.subdivision-live-beacon .center-dot {
+    position: relative;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #2563eb;
+    border: 2.5px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+    z-index: 2;
+}
+
+@keyframes gpsBeaconPulse {
+    0% { transform: scale(0.5); opacity: 1; }
+    80% { transform: scale(2.2); opacity: 0; }
+    100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* SVG Path Anti-Aliasing & Precision Smoothing */
+.leaflet-pane svg path {
+    shape-rendering: geometricPrecision;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+/* Collapsed State: Dropdown is completely hidden by default, gives 100% full screen map */
+.nav-ui-collapsed #liveNavHud {
+    display: none !important;
+}
+
+/* ===== FLOATING LEGEND ===== */
+.route-legend {
+    position: absolute;
+    bottom: 24px;
+    left: 24px;
+    z-index: 1000;
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: blur(12px);
+    padding: 10px 14px;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    border: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    user-select: none;
+}
+
+.legend-items {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 600;
+}
+
+@media (max-width: 640px) {
     .route-info-bar {
-        position: absolute;
-        top: 16px;
-        right: 16px;
-        z-index: 1000;
-        background: rgba(255,255,255,0.95);
-        backdrop-filter: blur(12px);
-        padding: 12px 24px;
-        border-radius: 16px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-        border: 1px solid #e2e8f0;
-        display: flex;
-        align-items: center;
-        gap: 16px;
+        top: 8px;
+        left: 8px;
+        right: 8px;
+        padding: 6px 10px;
+        gap: 6px;
     }
-
+    .dest-badge-icon {
+        width: 28px;
+        height: 28px;
+        font-size: 14px;
+    }
     .route-info-bar .dest-name {
-        font-size: 15px;
-        font-weight: 800;
-        color: #0f172a;
+        font-size: 12px;
     }
-
     .route-info-bar .dest-sub {
-        font-size: 11px;
-        color: #64748b;
-        font-weight: 600;
+        font-size: 10px;
     }
-
-    /* ===== FLOATING LEGEND ===== */
+    .btn-pin-pill {
+        padding: 5px 8px;
+        font-size: 10px;
+    }
+    .btn-directions-toggle {
+        padding: 5px 9px;
+        font-size: 11px;
+    }
+    .live-nav-hud {
+        top: 54px;
+        left: 8px;
+        right: 8px;
+        padding: 10px 14px;
+        gap: 8px;
+    }
+    .nav-metric-val {
+        font-size: 14px;
+    }
+    .nav-hud-step {
+        font-size: 11px;
+    }
     .route-legend {
-        position: absolute;
-        bottom: 24px;
-        left: 24px;
-        z-index: 1000;
-        background: rgba(255,255,255,0.95);
-        backdrop-filter: blur(12px);
-        padding: 14px 18px;
-        border-radius: 14px;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-        border: 1px solid #e2e8f0;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
+        bottom: 8px;
+        left: 8px;
+        padding: 6px 10px;
+        max-width: 190px;
     }
-
-    .legend-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 11px;
-        color: #64748b;
-        font-weight: 600;
-    }
-
-    @media (max-width: 640px) {
-        .route-info-bar {
-            width: calc(100% - 32px);
-            padding: 10px 16px;
-            top: 12px;
-        }
-        .route-info-bar .dest-name { font-size: 13px; }
-        .route-legend {
-            bottom: 12px;
-            left: 12px;
-            padding: 10px 14px;
-            gap: 6px;
-        }
-    }
+}

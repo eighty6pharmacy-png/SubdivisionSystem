@@ -23,10 +23,6 @@
             <span style="color: #065f46;">Billed:</span>
             <strong id="counterBilled" style="color: #065f46; font-size: 14px;">0</strong>
         </div>
-        <div style="background: #dbeafe; border: 1px solid #bfdbfe; border-radius: 8px; padding: 6px 14px; font-size: 12px; display: flex; align-items: center; gap: 6px;">
-            <span style="color: #1e40af;">Paid:</span>
-            <strong id="counterPaid" style="color: #1e40af; font-size: 14px;">0</strong>
-        </div>
     </div>
 </div>
 
@@ -42,7 +38,6 @@
             <button class="filter-btn active" data-status="all" onclick="setFilter('status', 'all')">All Statuses</button>
             <button class="filter-btn" data-status="pending" onclick="setFilter('status', 'pending')">Pending Only</button>
             <button class="filter-btn" data-status="billed" onclick="setFilter('status', 'billed')">Billed Only</button>
-            <button class="filter-btn" data-status="paid" onclick="setFilter('status', 'paid')">Paid Only</button>
         </div>
     </div>
     
@@ -65,7 +60,7 @@
         <select id="blockFilter" onchange="setFilter('block', this.value)" style="padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; color: var(--text-dark); background: var(--surface);">
             <option value="all">All Blocks</option>
             @php
-                $uniqueBlocks = collect($houses)->pluck('block')->unique()->sort();
+                $uniqueBlocks = collect($houses)->pluck('block')->unique()->sort(fn($a, $b) => strnatcasecmp((string)$a, (string)$b));
             @endphp
             @foreach($uniqueBlocks as $b)
                 <option value="{{ $b }}">Block {{ $b }}</option>
@@ -79,6 +74,7 @@
         <div class="house-card" 
              data-house="{{ json_encode($house) }}"
              data-block="{{ $house['block'] }}" 
+             data-lot="{{ $house['lot'] }}"
              data-elec-status="{{ strtolower($house['elec_status']) }}"
              data-water-status="{{ strtolower($house['water_status']) }}"
              data-provider="{{ $house['provider_managed'] ? '1' : '0' }}"
@@ -116,10 +112,6 @@
     </div>
 
     <div class="panel-body">
-        <div id="panelAlertPaid" style="display: none; padding: 12px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; margin-bottom: 16px; font-size: 13px; color: #1e40af;">
-            ✅ <strong>Bill Settled:</strong> This bill has already been paid in full. Readings are locked to preserve accounting integrity.
-        </div>
-
         <div id="panelAlertBaseline" style="display: none; padding: 12px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; margin-bottom: 16px; font-size: 13px; color: #1e40af;">
             ℹ️ <strong>Initial Meter Baseline:</strong> No prior reading recorded for this lot. Please input the starting physical meter reading as the Previous Reading.
         </div>
@@ -308,7 +300,6 @@
         let total = 0;
         let pending = 0;
         let billed = 0;
-        let paid = 0;
 
         cards.forEach(card => {
             const cardProvider = card.getAttribute('data-provider');
@@ -318,15 +309,13 @@
             }
             total++;
             const stat = (card.getAttribute(statusAttr) || '').toLowerCase();
-            if (stat === 'paid') paid++;
-            else if (stat === 'billed') billed++;
+            if (stat === 'billed') billed++;
             else pending++;
         });
 
         document.getElementById('counterTotal').innerText = total;
         document.getElementById('counterPending').innerText = pending;
         document.getElementById('counterBilled').innerText = billed;
-        document.getElementById('counterPaid').innerText = paid;
     }
 
     function applyFiltersAndSort() {
@@ -335,13 +324,16 @@
         
         const statusAttr = activeUtility === 'elec' ? 'data-elec-status' : 'data-water-status';
 
-        // Sort DOM nodes: Pending first, then Billed, then Paid. If same status, keep block/lot order.
+        // Sort DOM nodes formally: by Block, and then by Lot number from lowest to highest
         cards.sort((a, b) => {
-            const statA = a.getAttribute(statusAttr);
-            const statB = b.getAttribute(statusAttr);
-            if (statA === statB) return 0;
-            const rank = { 'pending': 1, 'billed': 2, 'paid': 3 };
-            return (rank[statA] || 99) - (rank[statB] || 99);
+            const blockA = a.getAttribute('data-block') || '';
+            const blockB = b.getAttribute('data-block') || '';
+            const cmpBlock = blockA.localeCompare(blockB, undefined, { numeric: true, sensitivity: 'base' });
+            if (cmpBlock !== 0) return cmpBlock;
+
+            const lotA = a.getAttribute('data-lot') || '';
+            const lotB = b.getAttribute('data-lot') || '';
+            return lotA.localeCompare(lotB, undefined, { numeric: true, sensitivity: 'base' });
         });
 
         // Re-append sorted nodes to grid
@@ -400,11 +392,9 @@
         const btnSubmit = document.getElementById('btnSubmitBill');
         const btnTogglePrev = document.getElementById('btnTogglePrevEdit');
         const notice = document.getElementById('prevEditNotice');
-        const alertPaid = document.getElementById('panelAlertPaid');
         const alertBaseline = document.getElementById('panelAlertBaseline');
 
         const status = isElec ? currentHouseData.elec_status : currentHouseData.water_status;
-        const isPaid = status === 'Paid';
         const isBilled = status === 'Billed';
         const isBaseline = isElec 
             ? (currentHouseData.is_baseline_elec || currentHouseData.prev_elec == 0) 
@@ -425,46 +415,31 @@
             lblCurr.innerText = 'Current Reading (m³)';
         }
 
-        if (isPaid) {
-            alertPaid.style.display = 'block';
+        valCurr.removeAttribute('readonly');
+        valCurr.classList.remove('readonly');
+        btnSubmit.disabled = false;
+        btnSubmit.style.opacity = '1';
+
+        if (isBilled && currVal !== null && currVal !== undefined && currVal !== '') {
+            btnSubmit.innerText = 'Update Bill';
+        } else {
+            btnSubmit.innerText = 'Generate Bill';
+        }
+
+        if (isBaseline) {
+            alertBaseline.style.display = 'block';
+            valPrev.removeAttribute('readonly');
+            valPrev.classList.remove('readonly');
+            btnTogglePrev.style.display = 'none';
+            notice.style.display = 'block';
+            notice.innerText = 'Input initial starting meter baseline';
+        } else {
             alertBaseline.style.display = 'none';
             valPrev.setAttribute('readonly', 'readonly');
             valPrev.classList.add('readonly');
-            valCurr.setAttribute('readonly', 'readonly');
-            valCurr.classList.add('readonly');
-            btnTogglePrev.style.display = 'none';
+            btnTogglePrev.style.display = 'inline-block';
+            btnTogglePrev.innerText = 'Unlock / Edit';
             notice.style.display = 'none';
-            btnSubmit.disabled = true;
-            btnSubmit.innerText = 'Bill Paid (Locked)';
-            btnSubmit.style.opacity = '0.5';
-        } else {
-            alertPaid.style.display = 'none';
-            valCurr.removeAttribute('readonly');
-            valCurr.classList.remove('readonly');
-            btnSubmit.disabled = false;
-            btnSubmit.style.opacity = '1';
-
-            if (isBilled && currVal !== null && currVal !== undefined && currVal !== '') {
-                btnSubmit.innerText = 'Update Bill';
-            } else {
-                btnSubmit.innerText = 'Generate Bill';
-            }
-
-            if (isBaseline) {
-                alertBaseline.style.display = 'block';
-                valPrev.removeAttribute('readonly');
-                valPrev.classList.remove('readonly');
-                btnTogglePrev.style.display = 'none';
-                notice.style.display = 'block';
-                notice.innerText = 'Input initial starting meter baseline';
-            } else {
-                alertBaseline.style.display = 'none';
-                valPrev.setAttribute('readonly', 'readonly');
-                valPrev.classList.add('readonly');
-                btnTogglePrev.style.display = 'inline-block';
-                btnTogglePrev.innerText = 'Unlock / Edit';
-                notice.style.display = 'none';
-            }
         }
         
         calculateBill();

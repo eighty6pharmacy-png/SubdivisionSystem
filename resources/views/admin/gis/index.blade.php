@@ -453,6 +453,7 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
+    <script src="{{ asset('js/gis-map.js') }}"></script>
     <script>
         let currentLayer = 'occupancy';
         let map;
@@ -519,14 +520,37 @@
                         closeOnZeroBearing: false,
                         position: 'topleft'
                     }
-                }).setView([13.6268, 123.1906], 18);
+                }).setView([13.545991366048902, 123.25622881776766], 18);
 
-                const [amenities, roads, houses, lotsData] = await Promise.all([
+                const [rawAmenities, rawBufferedRoads, rawHouses, lotsData, appSettings] = await Promise.all([
                     fetch('/gis-data/amenities.geojson').then(r => r.json()).catch(() => null),
                     fetch('/gis-data/buffered_road_design.geojson').then(r => r.json()).catch(() => null),
                     fetch('/gis-data/houses.geojson').then(r => r.json()).catch(() => ({})),
-                    fetch('/api/lots').then(r => r.ok ? r.json() : []).catch(() => [])
+                    fetch('/api/lots').then(r => r.ok ? r.json() : []).catch(() => []),
+                    fetch('/api/settings').then(r => r.ok ? r.json() : {}).catch(() => ({}))
                 ]);
+
+                const internalRawRoads = (typeof stripOuterEncirclingRoad === 'function' && rawBufferedRoads)
+                    ? stripOuterEncirclingRoad(rawBufferedRoads)
+                    : rawBufferedRoads;
+
+                const calib = typeof loadSavedCalibration === 'function' ? loadSavedCalibration(appSettings) : null;
+                const amenities = (calib && typeof transformGeoJSON === 'function' && rawAmenities) ? transformGeoJSON(rawAmenities, calib) : rawAmenities;
+                const roads = (calib && typeof transformGeoJSON === 'function' && internalRawRoads) ? transformGeoJSON(internalRawRoads, calib) : internalRawRoads;
+                const houses = (calib && typeof transformGeoJSON === 'function' && rawHouses) ? transformGeoJSON(rawHouses, calib) : rawHouses;
+
+                if (calib) {
+                    map.setBearing(0);
+                    const rotInp = document.getElementById('rotateZ');
+                    const rotVal = document.getElementById('rotVal');
+                    if (rotInp) rotInp.value = 0;
+                    if (rotVal) rotVal.innerText = '0°';
+                    if (calib.baseLayer === 'satellite') {
+                        L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 22, maxNativeZoom: 20 }).addTo(map);
+                    } else if (calib.baseLayer === 'street') {
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22, maxNativeZoom: 19 }).addTo(map);
+                    }
+                }
 
                 if (lotsData && Array.isArray(lotsData)) {
                     lotsData.forEach(lot => {
@@ -540,20 +564,28 @@
                 if (amenities) {
                     L.geoJSON(amenities, {
                         style: (feature) => {
-                            const name = feature.properties.name || feature.properties.NAME || 'Unknown';
+                            const name = feature.properties['Building name'] || feature.properties.name || feature.properties.NAME || 'Unknown';
                             let fillColor = '#e7e8eb';
                             if (name.toLowerCase().includes('guard')) fillColor = '#e11d48';
                             else if (name.toLowerCase().includes('open')) fillColor = '#eae0d5';
                             else if (name.toLowerCase().includes('basketball')) fillColor = '#d97706';
                             else if (name.toLowerCase().includes('grass')) fillColor = '#a7f3d0';
-                            else if (name.toLowerCase().includes('background')) fillColor = '#f6f5f5';
+                            else if (name.toLowerCase().includes('background') || name.toLowerCase().includes('bachground')) fillColor = '#f6f5f5';
 
-                            return { color: '#cbd5e1', weight: 1, fillColor: fillColor, fillOpacity: 1 };
+                            const isBg = name.toLowerCase().includes('background') || name.toLowerCase().includes('bachground') || name.toLowerCase().includes('grass');
+                            const showBg = !calib || calib.showBgFill !== false;
+
+                            return {
+                                color: '#cbd5e1',
+                                weight: isBg ? (showBg ? 0.5 : 0) : 1,
+                                fillColor: fillColor,
+                                fillOpacity: isBg ? (showBg ? 1 : 0) : 1
+                            };
                         }
                     }).addTo(map);
                 }
 
-                // Roads Layer
+                // Internal Buffered Roads Layer (from Entrance to inside subdivision; outer encircling road removed)
                 if (roads) {
                     L.geoJSON(roads, {
                         style: { color: '#94a3b8', weight: 1, fillColor: '#cbd5e1', fillOpacity: 1 }

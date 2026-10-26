@@ -261,10 +261,6 @@ class VisitorController extends Controller
             ->first();
 
         if ($visitor) {
-            if ($source === 'visitor' && $visitor->status !== 'Entered') {
-                return response()->json(['success' => false, 'message' => 'PIN not yet validated by the guard.']);
-            }
-
             try {
                 if ($visitor->validity !== 'Today') {
                     $validDate = \Carbon\Carbon::parse($visitor->validity)->startOfDay();
@@ -320,10 +316,6 @@ class VisitorController extends Controller
             ->first();
 
         if ($appointment) {
-            if ($source === 'visitor' && $appointment->status !== 'Completed') { // For appointments, 'Completed' means they have entered
-                return response()->json(['success' => false, 'message' => 'PIN not yet validated by the guard.']);
-            }
-
             try {
                 $appointmentDate = \Carbon\Carbon::parse($appointment->date)->startOfDay();
                 if (!$appointmentDate->equalTo($today)) {

@@ -137,10 +137,12 @@
         $isEntered = ($visitor->status === 'Entered');
         $isPending = ($visitor->status === 'Pending' || $visitor->status === 'Awaiting Admin Approval');
         $isRejected = ($visitor->status === 'Rejected');
+        // Step 5: Direct instant access to routing map for visitors without guard validation
+        $canViewMap = !$isRejected;
     @endphp
 
-    <!-- GATE PASS CARD (Shown while waiting for guard validation) -->
-    <div class="pass-container" id="passCardContainer" style="{{ $isEntered ? 'display: none;' : '' }}">
+    <!-- GATE PASS CARD (Can be toggled while viewing map) -->
+    <div class="pass-container" id="passCardContainer" style="{{ $canViewMap ? 'display: none;' : '' }}">
         <div class="pass-card">
             <div class="pass-header">
                 <h2>Althesa Residences</h2>
@@ -158,6 +160,9 @@
                         <div class="waiting-indicator">
                             <span class="pulse-dot"></span> Checking status automatically...
                         </div>
+                        <button type="button" onclick="showMapViewport()" class="btn btn-primary" style="width: 100%; margin-top: 14px; padding: 12px 18px; border-radius: 12px; font-weight: 800; border: none; cursor: pointer;">
+                            🗺️ View Live Route Map
+                        </button>
                     </div>
                 @elseif ($isRejected)
                     <div style="padding: 20px 0;">
@@ -204,45 +209,96 @@
                         </div>
                     </div>
 
-                    <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin: 0;" id="instructionText">
-                        Present this 6-digit PIN to the security guard upon arrival at the subdivision gate. Once validated, your navigation map will <strong>automatically unlock</strong>.
+                    <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin: 0 0 16px;" id="instructionText">
+                        Present this 6-digit PIN to the security guard upon arrival at the subdivision gate.
                     </p>
+                    <button type="button" onclick="showMapViewport()" class="btn btn-primary" style="width: 100%; padding: 12px 18px; border-radius: 12px; font-weight: 800; border: none; cursor: pointer;">
+                        🗺️ Back to Live Route Map
+                    </button>
                 @endif
             </div>
         </div>
     </div>
 
-    <!-- ROUTING MAP VIEW (Automatically unlocks once status is 'Entered') -->
-    <div class="routing-viewport" id="mapViewport" style="{{ $isEntered ? '' : 'display: none;' }}">
+    <!-- ROUTING MAP VIEW (Unlocked immediately for visitors) -->
+    <div class="routing-viewport nav-ui-collapsed" id="mapViewport" style="{{ $canViewMap ? '' : 'display: none;' }}">
         <!-- Floating Destination Info -->
         <div class="route-info-bar">
-            <div style="width: 38px; height: 38px; background: #2563eb; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: white;">📍</div>
-            <div>
+            <div class="dest-badge-icon">📍</div>
+            <div class="dest-text-group">
                 <div class="dest-name" id="uiDestName">{{ $destination }}</div>
-                <div class="dest-sub" id="uiHostName">Visitor: {{ $visitor->visitor_name }} (Host: {{ $hostName }})</div>
+                <div class="dest-sub" id="uiHostName">Visitor: {{ $visitor->visitor_name }} • PIN: <strong>{{ $visitor->pin ?? 'N/A' }}</strong></div>
+            </div>
+            <div class="route-bar-actions">
+                <button type="button" onclick="showPassCard()" class="btn-pin-pill" title="View Gate Pass & PIN">
+                    🎟️ PIN
+                </button>
+                <button type="button" id="btnCollapseUi" onclick="toggleNavUiCollapse()" class="btn-directions-toggle" title="Toggle directions HUD">
+                    <span id="collapseLabel">Directions</span> <span id="collapseIcon">▼</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Live Navigation Turn-by-Turn & Status HUD (Hidden by default, expands on toggle) -->
+        <div id="liveNavHud" class="live-nav-hud" style="display: none;">
+            <div class="nav-hud-top">
+                <div class="nav-hud-badge" id="hudNavBadge">
+                    <span class="nav-pulse-dot"></span> <span id="hudBadgeText">Connecting to GPS...</span>
+                </div>
+                <div class="hud-top-actions">
+                    <button type="button" id="btnToggleMapMode" onclick="toggleMapLayerMode()" class="hud-tool-btn" title="Toggle Satellite layer">
+                        🛰️ Satellite
+                    </button>
+                    <button type="button" id="hudRecenterBtn" class="hud-recenter-btn" title="Center map on your location">
+                        🎯 Recenter
+                    </button>
+                </div>
+            </div>
+            <div class="nav-hud-metrics">
+                <div class="nav-metric">
+                    <div class="nav-metric-label">DISTANCE</div>
+                    <div class="nav-metric-val" id="hudDistanceVal">--</div>
+                </div>
+                <div class="nav-metric-sep"></div>
+                <div class="nav-metric">
+                    <div class="nav-metric-label">EST. TIME</div>
+                    <div class="nav-metric-val" id="hudTimeVal">--</div>
+                </div>
+            </div>
+            <div class="nav-hud-step" id="hudStepInstruction">
+                Locating fastest route to {{ $destination }}...
+            </div>
+            <div class="nav-hud-sub" id="hudSimTip">
+                🛰️ Acquiring live GPS signal...
             </div>
         </div>
 
         <!-- Map Container -->
         <div id="mapContainer"></div>
 
-        <!-- Floating Legend -->
-        <div class="route-legend">
-            <div class="legend-row">
-                <div style="width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"></div>
-                Entrance Gate
+        <!-- Floating Legend (Collapsible, collapsed by default) -->
+        <div class="route-legend" id="routeLegend" onclick="toggleLegendCollapse()">
+            <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; gap: 8px;">
+                <span style="font-size: 11px; font-weight: 800; color: #0f172a;">🗺️ Legend</span>
+                <span id="legendChevron" style="font-size: 10px; color: #64748b;">▶</span>
             </div>
-            <div class="legend-row">
-                <div style="width: 12px; height: 12px; background: #2563eb; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"></div>
-                Your Destination ({{ $destination }})
-            </div>
-            <div class="legend-row">
-                <div style="width: 18px; height: 3px; background: #2563eb; border-radius: 2px; opacity: 0.8; border-bottom: 2px dashed #fff;"></div>
-                Suggested Route
-            </div>
-            <div class="legend-row">
-                <div style="width: 18px; height: 3px; background: #ef4444; border-radius: 2px; opacity: 0.8; border-bottom: 2px dashed #fff;"></div>
-                Alternative Route
+            <div class="legend-items" id="legendItems" style="display: none;">
+                <div class="legend-row">
+                    <div style="width: 12px; height: 12px; background: #2563eb; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 0 2px #2563eb;"></div>
+                    Your Location (Live GPS)
+                </div>
+                <div class="legend-row">
+                    <div style="width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"></div>
+                    Entrance Gate
+                </div>
+                <div class="legend-row">
+                    <div style="width: 12px; height: 12px; background: #ef4444; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"></div>
+                    Destination ({{ $destination }})
+                </div>
+                <div class="legend-row">
+                    <div style="width: 22px; height: 6px; background: #2563eb; border-radius: 3px; border: 1.5px solid #1d4ed8;"></div>
+                    Navigation Route (OSRM)
+                </div>
             </div>
         </div>
     </div>
@@ -277,6 +333,44 @@
         });
     }
 
+    let isUiCollapsed = true;
+    function toggleNavUiCollapse() {
+        isUiCollapsed = !isUiCollapsed;
+        const viewport = document.getElementById('mapViewport');
+        const hud = document.getElementById('liveNavHud');
+        const label = document.getElementById('collapseLabel');
+        const icon = document.getElementById('collapseIcon');
+
+        if (viewport) {
+            viewport.classList.toggle('nav-ui-collapsed', isUiCollapsed);
+        }
+        if (hud) {
+            hud.style.display = isUiCollapsed ? 'none' : 'flex';
+        }
+        if (label) {
+            label.textContent = isUiCollapsed ? 'Directions' : 'Hide';
+        }
+        if (icon) {
+            icon.textContent = isUiCollapsed ? '▼' : '▲';
+        }
+    }
+
+    function toggleLegendCollapse() {
+        const items = document.getElementById('legendItems');
+        const chev = document.getElementById('legendChevron');
+        if (items) {
+            const isHidden = items.style.display === 'none';
+            items.style.display = isHidden ? 'flex' : 'none';
+            if (chev) chev.textContent = isHidden ? '▼' : '▶';
+        }
+    }
+
+    function toggleMapLayerMode() {
+        if (window.toggleGISBaseLayer) {
+            window.toggleGISBaseLayer();
+        }
+    }
+
     function launchRoutingMap() {
         if (mapInitialized) return;
         mapInitialized = true;
@@ -292,11 +386,16 @@
         if (passCardContainer) passCardContainer.style.display = 'none';
         if (mapViewport) mapViewport.style.display = 'block';
 
-        // Initialize GIS Dijkstra map
+        // Initialize GIS Dijkstra map with Live Hybrid Navigation
         initGISMap('mapContainer', {
             interactive: true,
             showRouting: true,
-            endNode: endNode
+            endNode: endNode,
+            destinationName: "{{ $destination ?? '' }}",
+            visitorName: "{{ $visitor?->visitor_name ?? '' }}",
+            hostName: "{{ $hostName ?? '' }}",
+            showCalibration: false,
+            liveNavigation: true
         });
     }
 
@@ -314,26 +413,36 @@
                     if (statusPill) {
                         statusPill.style.background = '#dcfce7';
                         statusPill.style.color = '#166534';
-                        statusPill.innerHTML = '✅ Gate Entry Verified! Loading Map...';
+                        statusPill.innerHTML = '✅ Gate Entry Verified!';
                     }
-
-                    setTimeout(() => {
-                        launchRoutingMap();
-                    }, 800);
                 } else if (data.status === 'Approved' && currentStatus === 'Pending') {
-                    // Page was pending, now approved! Reload to show PIN card
+                    currentStatus = 'Approved';
                     location.reload();
                 }
             })
             .catch(err => console.warn('Status check warning:', err));
     }
 
+    function showPassCard() {
+        const passCardContainer = document.getElementById('passCardContainer');
+        const mapViewport = document.getElementById('mapViewport');
+        if (mapViewport) mapViewport.style.display = 'none';
+        if (passCardContainer) passCardContainer.style.display = 'flex';
+    }
+
+    function showMapViewport() {
+        const passCardContainer = document.getElementById('passCardContainer');
+        const mapViewport = document.getElementById('mapViewport');
+        if (passCardContainer) passCardContainer.style.display = 'none';
+        if (mapViewport) mapViewport.style.display = 'block';
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
-        if (currentStatus === 'Entered') {
+        if (currentStatus !== 'Rejected') {
             launchRoutingMap();
-        } else if (accessToken && currentStatus !== 'Rejected') {
-            // Poll every 3 seconds while waiting for guard validation
-            pollInterval = setInterval(checkLiveStatus, 3000);
+        }
+        if (accessToken && currentStatus === 'Pending') {
+            pollInterval = setInterval(checkLiveStatus, 5000);
         }
     });
 </script>

@@ -35,9 +35,14 @@ class SyncPaymongoCheckouts
 
     private function fetchCheckoutSession(string $checkoutId): ?array
     {
-        $response = \Illuminate\Support\Facades\Http::withHeaders([
+        $secretKey = config('services.paymongo.secret_key');
+        if (empty($secretKey)) {
+            return null;
+        }
+
+        $response = \Illuminate\Support\Facades\Http::timeout(3)->withHeaders([
             'accept' => 'application/json',
-            'authorization' => 'Basic ' . base64_encode(config('services.paymongo.secret_key') . ':')
+            'authorization' => 'Basic ' . base64_encode($secretKey . ':')
         ])->get('https://api.paymongo.com/v1/checkout_sessions/' . $checkoutId);
 
         return $response->successful() ? $response->json() : null;
@@ -60,6 +65,15 @@ class SyncPaymongoCheckouts
             if (!$bill->resident_id) {
                 $bill->update(['resident_id' => $user->id]);
             }
+
+            $cacheKey = 'paymongo_sync_bill_' . $bill->paymongo_checkout_id;
+            if (!app()->environment('testing') && \Illuminate\Support\Facades\Cache::has($cacheKey)) {
+                continue;
+            }
+            if (!app()->environment('testing')) {
+                \Illuminate\Support\Facades\Cache::put($cacheKey, true, 30);
+            }
+
             try {
                 $sessionData = $this->fetchCheckoutSession($bill->paymongo_checkout_id);
                 
@@ -112,6 +126,14 @@ class SyncPaymongoCheckouts
           ->get();
 
         foreach ($pendingDps as $dp) {
+            $cacheKey = 'paymongo_sync_dp_' . $dp->paymongo_checkout_id;
+            if (!app()->environment('testing') && \Illuminate\Support\Facades\Cache::has($cacheKey)) {
+                continue;
+            }
+            if (!app()->environment('testing')) {
+                \Illuminate\Support\Facades\Cache::put($cacheKey, true, 30);
+            }
+
             try {
                 $sessionData = $this->fetchCheckoutSession($dp->paymongo_checkout_id);
 
@@ -153,6 +175,14 @@ class SyncPaymongoCheckouts
             ->first();
 
         if ($fin) {
+            $cacheKey = 'paymongo_sync_fin_' . $fin->paymongo_checkout_id;
+            if (!app()->environment('testing') && \Illuminate\Support\Facades\Cache::has($cacheKey)) {
+                return;
+            }
+            if (!app()->environment('testing')) {
+                \Illuminate\Support\Facades\Cache::put($cacheKey, true, 30);
+            }
+
             try {
                 $sessionData = $this->fetchCheckoutSession($fin->paymongo_checkout_id);
 
