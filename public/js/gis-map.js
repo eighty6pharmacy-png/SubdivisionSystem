@@ -122,84 +122,163 @@ gisCalibrationStyle.innerHTML = `
 document.head.appendChild(gisCalibrationStyle);
 
 // ============================================================================
-// REAL-WORLD REFERENCE ANCHORS (Google Maps & Subdivision Map)
+// REAL-WORLD REFERENCE ANCHORS (Google Maps & Subdivision Front-Road Centerlines)
 // Full IEEE-754 double precision — NEVER rounded off!
 // ============================================================================
 const REF_COS_LAT = Math.cos((13.5458 * Math.PI) / 180);
 
 const SUBDIVISION_REF = {
-    // Local GeoJSON coordinates on our subdivision map (near 0,0)
+    // Local GeoJSON coordinate of the Subdivision Entrance Road (Main Gate)
     localEntrance: {
-        lng: -0.001032551906946,
-        lat: -0.002300754670812
+        lng: -0.0010908483152571864,
+        lat: -0.0023152983534520453
     },
-    // Block 14 Lot 17 exact middle of house (2D polygon area centroid)
-    localB14L17: {
-        lng: -0.0011153448833976154,
-        lat: -0.0014918650353166133
+    // Block 11 Lot 24 exact Front-Road centerline (middle of front house & road width)
+    localB11L24: {
+        lng: -0.001908377245807,
+        lat: -0.001679753258945
     },
-    // Block 17 Lot 12 exact middle of house (2D polygon area centroid)
+    // Block 17 Lot 12 exact Front-Road centerline (middle of front house & road width)
     localB17L12: {
-        lng: 0.00011743603410626537,
-        lat: -0.0016110878826628673
+        lng: 0.000046863333262,
+        lat: -0.001584657839152
     },
     // Real-World GPS coordinates on Google Maps (Zone 1, Tagbong, Pili, Camarines Sur)
     realEntrance: {
-        lat: 13.545991366048902,
-        lng: 123.25622881776766
+        lat: 13.545990203879006,
+        lng: 123.25622351397625
     },
-    realB14L17: {
-        lat: 13.545568095820727,
-        lng: 123.25693719624071
+    realB11L24: {
+        lat: 13.5463071,
+        lng: 123.2572407
     },
     realB17L12: {
-        lat: 13.54460960919332,
-        lng: 123.25607347510733
+        lat: 13.544580,
+        lng: 123.256132
     }
 };
 
-const PIN_PALETTE = ['#10b981', '#f97316', '#a855f7', '#06b6d4', '#ec4899', '#eab308', '#3b82f6', '#ef4444'];
+const PIN_PALETTE = ['#10b981', '#f97316', '#06b6d4', '#eab308', '#ec4899', '#3b82f6', '#ef4444', '#a855f7'];
 
-// The 3 Default Alignment Points ON GOOGLE MAPS (Real-World GPS Targets)
+// All 8 On-Site Field Front-Road Ground-Truth Coordinates Measured in Althesa Village
+// Positioned on the FRONT ROAD (middle of road width in front of the house/corner), NOT house interior!
 const DEFAULT_GOOGLE_POINTS = [
     {
         id: 'pin_entrance',
         type: 'entrance',
-        label: 'Pin 1: Entrance Gate (Anchor)',
-        lat: 13.545991366048902,
-        lng: 123.25622881776766,
-        latStr: '13.545991366048902',
-        lngStr: '123.25622881776766',
+        label: 'Pin 1: Entrance Road (Main Gate)',
+        localLng: -0.0010908483152571864,
+        localLat: -0.0023152983534520453,
+        lat: 13.545990203879006,
+        lng: 123.25622351397625,
+        latStr: '13.545990203879006',
+        lngStr: '123.25622351397625',
         color: '#10b981' // Green
     },
     {
-        id: 'pin_b14_l17',
+        id: 'pin_b11_l24',
+        type: 'house',
+        block: 11,
+        lot: 24,
+        label: 'Pin 2: B11 L24 Front Road',
+        localLng: -0.001908377245807,
+        localLat: -0.001679753258945,
+        lat: 13.5463071,
+        lng: 123.2572407,
+        latStr: '13.5463071',
+        lngStr: '123.2572407',
+        color: '#f97316' // Orange
+    },
+    {
+        id: 'pin_b17_l2',
+        type: 'house',
+        block: 17,
+        lot: 2,
+        label: 'Pin 3: B17 L2 Front Road',
+        localLng: -0.000164838351231,
+        localLat: -0.002178142030027,
+        lat: 13.545166,
+        lng: 123.255778,
+        latStr: '13.545166',
+        lngStr: '123.255778',
+        color: '#06b6d4' // Cyan
+    },
+    {
+        id: 'pin_b2_l20',
+        type: 'house',
+        block: 2,
+        lot: 20,
+        label: 'Pin 4: B2 L20 Front Road',
+        localLng: -0.00085107818293,
+        localLat: -0.001989597340581,
+        lat: 13.545618,
+        lng: 123.256359,
+        latStr: '13.545618',
+        lngStr: '123.256359',
+        color: '#eab308' // Yellow
+    },
+    {
+        id: 'pin_b14_l5',
         type: 'house',
         block: 14,
-        lot: 17,
-        label: 'Pin 2: Block 14 Lot 17',
-        lat: 13.545568095820727,
-        lng: 123.25693719624071,
-        latStr: '13.545568095820727',
-        lngStr: '123.25693719624071',
-        color: '#f97316' // Orange
+        lot: 5,
+        label: 'Pin 5: B14 L5 Front Road',
+        localLng: -0.001519070601766,
+        localLat: -0.001305633938415,
+        lat: 13.5457494,
+        lng: 123.2573201,
+        latStr: '13.5457494',
+        lngStr: '123.2573201',
+        color: '#ec4899' // Pink
+    },
+    {
+        id: 'pin_b12_l16',
+        type: 'house',
+        block: 12,
+        lot: 16,
+        customRoadPoint: true,
+        label: 'Pin 6: B12 L16 Corner Road (B11 L11-12)',
+        localLng: -0.00072658905474,
+        localLat: -0.000583679430655,
+        lat: 13.5446878,
+        lng: 123.2574593,
+        latStr: '13.5446878',
+        lngStr: '123.2574593',
+        color: '#3b82f6' // Blue
+    },
+    {
+        id: 'pin_b8_l19',
+        type: 'house',
+        block: 8,
+        lot: 19,
+        customRoadPoint: true,
+        label: 'Pin 7: B8 L19 Side / Main Straight Road',
+        localLng: -0.000404283495089,
+        localLat: -0.000459889989941,
+        lat: 13.5443830,
+        lng: 123.2573396,
+        latStr: '13.5443830',
+        lngStr: '123.2573396',
+        color: '#ef4444' // Red
     },
     {
         id: 'pin_b17_l12',
         type: 'house',
         block: 17,
         lot: 12,
-        label: 'Pin 3: Block 17 Lot 12',
-        lat: 13.54460960919332,
-        lng: 123.25607347510733,
-        latStr: '13.54460960919332',
-        lngStr: '123.25607347510733',
+        label: 'Pin 8: B17 L12 Front Road',
+        localLng: 0.000046863333262,
+        localLat: -0.001584657839152,
+        lat: 13.544580,
+        lng: 123.256132,
+        latStr: '13.544580',
+        lngStr: '123.256132',
         color: '#a855f7' // Purple
     }
 ];
 
 /**
- * Computes the exact 2D polygon area centroid (middle of the house) in full double precision
+ * Computes the exact 2D polygon area centroid in full double precision
  */
 function computePolygonMiddle(ring) {
     if (!Array.isArray(ring) || ring.length === 0) return null;
@@ -237,6 +316,27 @@ function computePolygonMiddle(ring) {
 }
 
 /**
+ * Resolves the exact local FRONT-ROAD centerline coordinate for a reference point
+ * (middle of the road width in front of the house/corner, NEVER inside the house!)
+ */
+function resolveLocalFrontRoadCoord(pt, idx, localFrontRoads = {}) {
+    if (!pt) return SUBDIVISION_REF.localEntrance;
+    if (idx === 0 || pt.type === 'entrance') {
+        return SUBDIVISION_REF.localEntrance;
+    }
+    if (pt.customRoadPoint && Number.isFinite(Number(pt.localLng)) && Number.isFinite(Number(pt.localLat))) {
+        return { lng: Number(pt.localLng), lat: Number(pt.localLat) };
+    }
+    if (pt.block !== undefined && pt.lot !== undefined && localFrontRoads[`B${pt.block} L${pt.lot}`]) {
+        return localFrontRoads[`B${pt.block} L${pt.lot}`];
+    }
+    if (Number.isFinite(Number(pt.localLng)) && Number.isFinite(Number(pt.localLat))) {
+        return { lng: Number(pt.localLng), lat: Number(pt.localLat) };
+    }
+    return SUBDIVISION_REF.localB11L24;
+}
+
+/**
  * Surgically removes ONLY the outer road encircling the subdivision (ring 0 and ring 1[131..283])
  * from buffered_road_design.geojson while preserving the entire road from the Entrance Gate
  * all the way inside the subdivision (including all 12 internal block holes).
@@ -262,62 +362,72 @@ function stripOuterEncirclingRoad(bufferedGeoJSON) {
 }
 
 /**
- * Solves the exact transformation (Closed-form 3-Point Affine or 2-Point Similarity)
- * using the first 2 or 3 Alignment Points (Entrance Gate + Dynamic House Points).
- * Any additional points (Point 4+) are strictly for survey records and IGNORED by the solver.
- * Yields EXACT 0.0000000 mm error on all reference targets!
+ * Solves the exact transformation (N-Point Least-Squares Affine across ALL Front-Road Alignment Points,
+ * or 2-Point Similarity if only 2 points exist).
+ * Uses the FRONT-ROAD centerline coordinates (middle of the road in front of the house/corner).
  * Full 64-bit IEEE-754 precision — NEVER rounded off!
  */
 function solveSimilarityFromAlignmentPoints(
     ptsList = DEFAULT_GOOGLE_POINTS,
-    localMiddles = {},
+    localFrontRoads = {},
     flipX = false,
     flipY = false
 ) {
     if (!Array.isArray(ptsList) || ptsList.length < 2) return null;
 
-    const p1 = ptsList[0];
-    const loc1 = SUBDIVISION_REF.localEntrance;
-    const real1 = { lat: Number(p1.lat), lng: Number(p1.lng) };
+    const alignPts = ptsList.filter(p => p && p.type !== 'record' && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)));
+    const activePts = alignPts.length >= 2 ? alignPts : ptsList.slice(0, 2);
 
-    // Point 2 (Dynamic House)
-    const p2 = ptsList[1];
-    let loc2 = (p2 && p2.block !== undefined && p2.lot !== undefined && localMiddles[`B${p2.block} L${p2.lot}`])
-        ? localMiddles[`B${p2.block} L${p2.lot}`]
-        : SUBDIVISION_REF.localB14L17;
-    const real2 = { lat: Number(p2.lat), lng: Number(p2.lng) };
+    const locOrigin = SUBDIVISION_REF.localEntrance;
+    const refLat = Number(activePts[0].lat) || SUBDIVISION_REF.realEntrance.lat;
+    const cosLat = Math.cos((refLat * Math.PI) / 180);
 
-    const cosLat = Math.cos((real1.lat * Math.PI) / 180);
+    // Build paired local (rawDx, rawDy) and real-world (E, N) vectors for all active front-road points
+    const pairs = activePts.map((pt, idx) => {
+        const loc = resolveLocalFrontRoadCoord(pt, idx, localFrontRoads);
+        const dx = (loc.lng - locOrigin.lng) * (flipX ? -1 : 1);
+        const dy = (loc.lat - locOrigin.lat) * (flipY ? -1 : 1);
+        const E = Number(pt.lng) * cosLat;
+        const N = Number(pt.lat);
+        return { dx, dy, E, N };
+    });
 
-    const dx2 = (loc2.lng - loc1.lng) * (flipX ? -1 : 1);
-    const dy2 = (loc2.lat - loc1.lat) * (flipY ? -1 : 1);
-    const dE2 = (real2.lng - real1.lng) * cosLat;
-    const dN2 = real2.lat - real1.lat;
+    if (pairs.length >= 3) {
+        const n = pairs.length;
+        let sdx = 0, sdy = 0, sE = 0, sN = 0;
+        for (let i = 0; i < n; i++) {
+            sdx += pairs[i].dx;
+            sdy += pairs[i].dy;
+            sE += pairs[i].E;
+            sN += pairs[i].N;
+        }
+        const cdx = sdx / n, cdy = sdy / n, cE = sE / n, cN = sN / n;
 
-    // Check if 3 valid alignment points are present
-    let p3 = ptsList.length >= 3 ? ptsList[2] : null;
-    let loc3 = null;
-    let real3 = null;
-    if (p3 && Number.isFinite(Number(p3.lat)) && Number.isFinite(Number(p3.lng))) {
-        loc3 = (p3.block !== undefined && p3.lot !== undefined && localMiddles[`B${p3.block} L${p3.lot}`])
-            ? localMiddles[`B${p3.block} L${p3.lot}`]
-            : SUBDIVISION_REF.localB17L12;
-        real3 = { lat: Number(p3.lat), lng: Number(p3.lng) };
-    }
+        let Sxx = 0, Syy = 0, Sxy = 0;
+        let SxE = 0, SyE = 0, SxN = 0, SyN = 0;
+        for (let i = 0; i < n; i++) {
+            const x = pairs[i].dx - cdx;
+            const y = pairs[i].dy - cdy;
+            const u = pairs[i].E - cE;
+            const v = pairs[i].N - cN;
+            Sxx += x * x;
+            Syy += y * y;
+            Sxy += x * y;
+            SxE += x * u;
+            SyE += y * u;
+            SxN += x * v;
+            SyN += y * v;
+        }
 
-    if (loc3 && real3) {
-        const dx3 = (loc3.lng - loc1.lng) * (flipX ? -1 : 1);
-        const dy3 = (loc3.lat - loc1.lat) * (flipY ? -1 : 1);
-        const dE3 = (real3.lng - real1.lng) * cosLat;
-        const dN3 = real3.lat - real1.lat;
+        const det = Sxx * Syy - Sxy * Sxy;
+        if (Math.abs(det) > 1e-16) {
+            const A = (SxE * Syy - SyE * Sxy) / det;
+            const B = (Sxx * SyE - Sxy * SxE) / det;
+            const C = (SxN * Syy - SyN * Sxy) / det;
+            const D = (Sxx * SyN - Sxy * SxN) / det;
 
-        const det = dx2 * dy3 - dx3 * dy2;
-        if (Math.abs(det) > 1e-12) {
-            // Exact closed-form 3-point affine solution (0.000 mm error on all 3 points!)
-            const A = (dE2 * dy3 - dE3 * dy2) / det;
-            const B = (dx2 * dE3 - dx3 * dE2) / det;
-            const C = (dN2 * dy3 - dN3 * dy2) / det;
-            const D = (dx2 * dN3 - dx3 * dN2) / det;
+            const anchorLng = (cE - A * cdx - B * cdy) / cosLat;
+            const anchorLat = cN - C * cdx - D * cdy;
 
             const scaleX = Math.hypot(A, C);
             const scaleY = Math.hypot(B, D);
@@ -327,9 +437,9 @@ function solveSimilarityFromAlignmentPoints(
             while (rotationDeg < -180) rotationDeg += 360;
 
             return {
-                calibVersion: 7,
-                anchorLat: real1.lat,
-                anchorLng: real1.lng,
+                calibVersion: 9,
+                anchorLat: anchorLat,
+                anchorLng: anchorLng,
                 rotationDeg: rotationDeg,
                 scale: (scaleX + scaleY) / 2,
                 scaleX: scaleX,
@@ -339,14 +449,18 @@ function solveSimilarityFromAlignmentPoints(
                 useAffine: true,
                 affine: { A, B, C, D },
                 googlePoints: JSON.parse(JSON.stringify(ptsList)),
-                opacity: 0.78,
+                opacity: 0.92,
                 showBgFill: true,
-                baseLayer: 'satellite'
+                baseLayer: 'street'
             };
         }
     }
 
-    // 2-point similarity solution (0.000 mm error on Points 1 & 2)
+    // 2-point similarity fallback
+    const dx2 = pairs[1].dx - pairs[0].dx;
+    const dy2 = pairs[1].dy - pairs[0].dy;
+    const dE2 = pairs[1].E - pairs[0].E;
+    const dN2 = pairs[1].N - pairs[0].N;
     const d2 = dx2 * dx2 + dy2 * dy2;
     if (d2 === 0) return null;
     const a = (dE2 * dx2 + dN2 * dy2) / d2;
@@ -358,9 +472,9 @@ function solveSimilarityFromAlignmentPoints(
     while (rotationDeg < -180) rotationDeg += 360;
 
     return {
-        calibVersion: 7,
-        anchorLat: real1.lat,
-        anchorLng: real1.lng,
+        calibVersion: 9,
+        anchorLat: Number(activePts[0].lat),
+        anchorLng: Number(activePts[0].lng),
         rotationDeg: rotationDeg,
         scale: scale,
         scaleX: scale,
@@ -369,18 +483,35 @@ function solveSimilarityFromAlignmentPoints(
         flipY: Boolean(flipY),
         useAffine: false,
         googlePoints: JSON.parse(JSON.stringify(ptsList)),
-        opacity: 0.78,
+        opacity: 0.92,
         showBgFill: true,
-        baseLayer: 'satellite'
+        baseLayer: 'street'
     };
 }
 
-const DEFAULT_CALIBRATION = solveSimilarityFromAlignmentPoints(
-    DEFAULT_GOOGLE_POINTS,
-    {},
-    false,
-    false
-);
+// Default 8-Point Front-Road Ground-Truth Calibration (Least-Squares Affine Fit across all 8 road points)
+const DEFAULT_CALIBRATION = {
+    calibVersion: 9,
+    anchorLat: 13.545990203879006,
+    anchorLng: 123.25622351397625,
+    rotationDeg: 125.31910332697669,
+    scale: 1.005492902042514,
+    scaleX: 1.0198247666117957,
+    scaleY: 0.9911610374732323,
+    flipX: false,
+    flipY: false,
+    useAffine: true,
+    affine: {
+        A: -0.5895909920359387,
+        B: 0.8083493751609164,
+        C: -0.8321207945390973,
+        D: -0.573560362894903
+    },
+    googlePoints: JSON.parse(JSON.stringify(DEFAULT_GOOGLE_POINTS)),
+    opacity: 0.92,
+    showBgFill: true,
+    baseLayer: 'street'
+};
 
 function loadSavedCalibration(serverSettings = {}) {
     let saved = null;
@@ -389,7 +520,7 @@ function loadSavedCalibration(serverSettings = {}) {
             const parsed = typeof serverSettings.gis_calibration === 'string'
                 ? JSON.parse(serverSettings.gis_calibration)
                 : serverSettings.gis_calibration;
-            if (parsed && parsed.calibVersion === 7) {
+            if (parsed && parsed.calibVersion === 9) {
                 saved = parsed;
             }
         } catch (e) {
@@ -398,10 +529,10 @@ function loadSavedCalibration(serverSettings = {}) {
     }
     if (!saved) {
         try {
-            const localRaw = localStorage.getItem('subdivision_gis_calibration_v7');
+            const localRaw = localStorage.getItem('subdivision_gis_calibration_v9');
             if (localRaw) {
                 const parsedLocal = JSON.parse(localRaw);
-                if (parsedLocal && parsedLocal.calibVersion === 7) {
+                if (parsedLocal && parsedLocal.calibVersion === 9) {
                     saved = parsedLocal;
                 }
             }
@@ -516,7 +647,7 @@ async function initGISMap(mapElementId, options = {}) {
     // Ensure ONLY the outer encircling road is stripped while keeping the entrance-to-inside road polygon
     const internalBufferedRoads = stripOuterEncirclingRoad(rawBufferedRoads);
 
-    // Precompute exact 2D polygon middle (area centroid) of EVERY house in local GeoJSON (full IEEE-754 double precision)
+    // Precompute exact 2D polygon middle (area centroid) AND exact Front-Road Centerline point for EVERY house
     const localHouseMiddles = {};
     if (rawHouses && Array.isArray(rawHouses.features)) {
         rawHouses.features.forEach(f => {
@@ -535,6 +666,41 @@ async function initGISMap(mapElementId, options = {}) {
                         lat: mid.lat
                     };
                 }
+            }
+        });
+    }
+
+    // Precompute exact Front-Road Centerline Coordinate (middle of road width in front of each house)
+    // using the road-side endpoint of each house's connector in roads.geojson
+    const localHouseFrontRoad = {};
+    const rawConnectors = (rawNetwork && Array.isArray(rawNetwork.features))
+        ? rawNetwork.features.filter(f => !f.properties || f.properties.name === null)
+        : [];
+    if (rawHouseNodes && Array.isArray(rawHouseNodes.features)) {
+        rawHouseNodes.features.forEach(hn => {
+            const b = hn.properties && hn.properties.block_num;
+            const l = hn.properties && hn.properties.lot_number;
+            if (b === undefined || l === undefined || !hn.geometry || !Array.isArray(hn.geometry.coordinates)) return;
+            const [hx, hy] = hn.geometry.coordinates;
+            let minD = Infinity;
+            let roadPt = null;
+            rawConnectors.forEach(c => {
+                if (!c.geometry || !c.geometry.coordinates) return;
+                const line = c.geometry.type === 'MultiLineString' ? c.geometry.coordinates[0] : c.geometry.coordinates;
+                if (!line || line.length < 2) return;
+                const p0 = line[0], p1 = line[line.length - 1];
+                const d0 = Math.hypot(p0[0] - hx, p0[1] - hy);
+                const d1 = Math.hypot(p1[0] - hx, p1[1] - hy);
+                if (d0 < minD) { minD = d0; roadPt = p1; }
+                if (d1 < minD) { minD = d1; roadPt = p0; }
+            });
+            if (roadPt) {
+                localHouseFrontRoad[`B${b} L${l}`] = {
+                    block: Number(b),
+                    lot: Number(l),
+                    lng: roadPt[0],
+                    lat: roadPt[1]
+                };
             }
         });
     }
@@ -590,21 +756,22 @@ async function initGISMap(mapElementId, options = {}) {
         },
     }).setView([calib.anchorLat, calib.anchorLng], 18);
 
-    // Real-World Base Tile Layers (Auto-detects Retina / High-DPI screens for razor-sharp clarity)
-    const isRetinaScreen = (typeof window !== 'undefined' && window.devicePixelRatio && window.devicePixelRatio >= 1.2);
-    const googleScale = isRetinaScreen ? '&scale=2' : '';
-
-    const googleStreetLayer = L.tileLayer(`https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}${googleScale}`, {
+    // Real-World Base Tile Layers (Always use crisp high-DPI retina tiles up to maxNativeZoom: 22 so Google Maps never gets blurry)
+    const googleStreetLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&scale=2', {
         maxZoom: 22,
-        maxNativeZoom: 20,
-        tileSize: 256, // Squeezes 512x512 retina tiles into 256 CSS px on mobile = RAZOR SHARP!
+        maxNativeZoom: 22, // Google supports native crisp vector tiles up to zoom 22!
+        tileSize: 256,
+        zoomOffset: 0,
+        detectRetina: true,
         attribution: '&copy; Google Maps'
     });
 
-    const googleHybridLayer = L.tileLayer(`https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}${googleScale}`, {
+    const googleHybridLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&scale=2', {
         maxZoom: 22,
-        maxNativeZoom: 20,
+        maxNativeZoom: 22,
         tileSize: 256,
+        zoomOffset: 0,
+        detectRetina: true,
         attribution: '&copy; Google Satellite'
     });
 
@@ -675,14 +842,14 @@ async function initGISMap(mapElementId, options = {}) {
     let dragSubdivisionMode = false;
 
     function getStyles() {
-        const polyOpacity = calib.opacity !== undefined ? Number(calib.opacity) : 0.78;
+        const polyOpacity = calib.opacity !== undefined ? Number(calib.opacity) : 1.0;
         return {
             roadDesign: {
-                stroke: false,
-                weight: 0,
-                color: 'transparent',
-                fillColor: '#cbd5e1',
-                fillOpacity: polyOpacity
+                stroke: true,
+                weight: 0.8,
+                color: '#bfc8d4',
+                fillColor: '#aab9c9', // Uniform grey road color matching outside Google Maps highway
+                fillOpacity: 1.0
             },
             house: (feature) => {
                 const b = feature.properties.block_num;
@@ -690,8 +857,8 @@ async function initGISMap(mapElementId, options = {}) {
                 const key = `B${b} L${l}`;
                 const dbLot = window.globalDbLots ? window.globalDbLots[key] : null;
 
-                let fillColor = '#e7e8eb';
-                let color = '#94a3b8';
+                let fillColor = '#f8fafc';
+                let color = '#cbd5e1';
                 let weight = 0.65;
 
                 if (dbLot && config.adminView) {
@@ -702,17 +869,19 @@ async function initGISMap(mapElementId, options = {}) {
                     else if (dbLot.status === 'Under Construction') { fillColor = '#ef4444'; color = '#dc2626'; }
                 }
 
-                // Highlight dynamic alignment houses (Pin 2 and Pin 3)
-                const p2 = calib.googlePoints && calib.googlePoints[1];
-                const p3 = calib.googlePoints && calib.googlePoints[2];
-                if (p2 && p2.block !== undefined && p2.lot !== undefined && Number(b) === Number(p2.block) && Number(l) === Number(p2.lot)) {
-                    fillColor = '#fed7aa';
-                    color = p2.color || '#f97316';
-                    weight = 2.5;
-                } else if (p3 && p3.block !== undefined && p3.lot !== undefined && Number(b) === Number(p3.block) && Number(l) === Number(p3.lot)) {
-                    fillColor = '#e9d5ff';
-                    color = p3.color || '#a855f7';
-                    weight = 2.5;
+                // Highlight alignment reference houses ONLY in admin calibration mode (never on visitor pin link page)
+                if (config.showCalibration) {
+                    const pts = Array.isArray(calib.googlePoints) ? calib.googlePoints : [];
+                    for (let idx = 1; idx < pts.length; idx++) {
+                        const pt = pts[idx];
+                        if (pt && pt.type !== 'record' && pt.block !== undefined && pt.lot !== undefined && Number(b) === Number(pt.block) && Number(l) === Number(pt.lot)) {
+                            const c = pt.color || PIN_PALETTE[idx % PIN_PALETTE.length];
+                            fillColor = c + '33';
+                            color = c;
+                            weight = 2.2;
+                            break;
+                        }
+                    }
                 }
 
                 return {
@@ -739,12 +908,18 @@ async function initGISMap(mapElementId, options = {}) {
                 }
 
                 let fillColor = '#e7e8eb';
-                if (lower.includes('guard')) fillColor = '#e11d48';
-                else if (lower.includes('open')) fillColor = '#eae0d5';
-                else if (lower.includes('basketball')) fillColor = '#d97706';
+                let borderColor = '#94a3b8';
+                if (lower.includes('guard')) {
+                    fillColor = '#f8fafc';
+                    borderColor = '#cbd5e1';
+                } else if (lower.includes('open')) {
+                    fillColor = '#eae0d5';
+                } else if (lower.includes('basketball')) {
+                    fillColor = '#d97706';
+                }
 
                 return {
-                    color: '#94a3b8',
+                    color: borderColor,
                     weight: 1,
                     fillColor: fillColor,
                     fillOpacity: polyOpacity
@@ -834,13 +1009,16 @@ async function initGISMap(mapElementId, options = {}) {
                     const b = feature.properties.block_num;
                     const l = feature.properties.lot_number;
                     const houseId = `B${b} L${l}`;
-                    const p2 = calib.googlePoints && calib.googlePoints[1];
-                    const p3 = calib.googlePoints && calib.googlePoints[2];
                     let refTag = '';
-                    if (p2 && p2.block !== undefined && p2.lot !== undefined && Number(b) === Number(p2.block) && Number(l) === Number(p2.lot)) {
-                        refTag = ' (🎯 Matches Pin 2)';
-                    } else if (p3 && p3.block !== undefined && p3.lot !== undefined && Number(b) === Number(p3.block) && Number(l) === Number(p3.lot)) {
-                        refTag = ' (🎯 Matches Pin 3)';
+                    if (config.showCalibration) {
+                        const pts = Array.isArray(calib.googlePoints) ? calib.googlePoints : [];
+                        for (let idx = 1; idx < pts.length; idx++) {
+                            const pt = pts[idx];
+                            if (pt && pt.type !== 'record' && pt.block !== undefined && pt.lot !== undefined && Number(b) === Number(pt.block) && Number(l) === Number(pt.lot)) {
+                                refTag = ` (🎯 Front Road Pin ${idx + 1})`;
+                                break;
+                            }
+                        }
                     }
                     layer.bindTooltip(`Block ${b}, Lot ${l}${refTag}`);
 
@@ -883,52 +1061,39 @@ async function initGISMap(mapElementId, options = {}) {
             map.fitBounds(houseLayer.getBounds(), { padding: [30, 30] });
         }
 
-        // Draw exact middle dots on the subdivision layer for the 3 active alignment landmarks
+        // Draw exact FRONT-ROAD dots on the subdivision road centerline for ALL active alignment landmarks (all 8 points!)
         if (config.showCalibration) {
-            const p1 = calib.googlePoints && calib.googlePoints[0];
-            const p2 = calib.googlePoints && calib.googlePoints[1];
-            const p3 = calib.googlePoints && calib.googlePoints[2];
-
+            const pts = Array.isArray(calib.googlePoints) ? calib.googlePoints : [];
             const landmarks = [];
-            landmarks.push({
-                label: 'Subdivision Entrance Gate (Matches Pin 1)',
-                local: SUBDIVISION_REF.localEntrance,
-                color: (p1 && p1.color) || '#10b981'
+
+            pts.forEach((pt, idx) => {
+                if (!pt || pt.type === 'record') return;
+                const color = pt.color || PIN_PALETTE[idx % PIN_PALETTE.length];
+                const loc = resolveLocalFrontRoadCoord(pt, idx, localHouseFrontRoad);
+                let label = pt.label || `Pin ${idx + 1}`;
+                if (idx === 0 || pt.type === 'entrance') {
+                    label = `Subdivision Entrance Road (Matches Pin 1)`;
+                } else if (pt.block !== undefined && pt.lot !== undefined) {
+                    label = `Subdivision B${pt.block} L${pt.lot} Front Road (Matches Pin ${idx + 1})`;
+                }
+                landmarks.push({
+                    label,
+                    local: loc,
+                    color
+                });
             });
-
-            if (p2) {
-                const b = p2.block !== undefined ? p2.block : 14;
-                const l = p2.lot !== undefined ? p2.lot : 17;
-                const loc = localHouseMiddles[`B${b} L${l}`] || SUBDIVISION_REF.localB14L17;
-                landmarks.push({
-                    label: `Subdivision Block ${b} Lot ${l} (Matches Pin 2)`,
-                    local: loc,
-                    color: p2.color || '#f97316'
-                });
-            }
-
-            if (p3) {
-                const b = p3.block !== undefined ? p3.block : 17;
-                const l = p3.lot !== undefined ? p3.lot : 12;
-                const loc = localHouseMiddles[`B${b} L${l}`] || SUBDIVISION_REF.localB17L12;
-                landmarks.push({
-                    label: `Subdivision Block ${b} Lot ${l} (Matches Pin 3)`,
-                    local: loc,
-                    color: p3.color || '#a855f7'
-                });
-            }
 
             landmarks.forEach(lm => {
                 const transformed = transformCoordPair([lm.local.lng, lm.local.lat], calib);
                 const dot = L.circleMarker([transformed[1], transformed[0]], {
-                    radius: 5,
+                    radius: 5.5,
                     fillColor: '#ffffff',
                     color: lm.color,
                     weight: 2.5,
                     fillOpacity: 1,
                     interactive: true
                 }).addTo(gisLayerGroup);
-                dot.bindTooltip(`🏠 <b>${lm.label}</b><br><span style="font-family:monospace; font-size:10px;">${transformed[1]}, ${transformed[0]}</span>`, { direction: 'top' });
+                dot.bindTooltip(`🛣️ <b>${lm.label}</b><br><span style="font-family:monospace; font-size:10px;">${transformed[1]}, ${transformed[0]}</span>`, { direction: 'top' });
             });
 
             if (dragSubdivisionMode) {
@@ -1042,7 +1207,16 @@ async function initGISMap(mapElementId, options = {}) {
             return { point: proj, dist: map.distance(pt, proj) };
         }
 
-        L.geoJSON(network, {
+        // Filter network to ONLY the 18 named street centerlines (exclude the 323 house-centroid connectors!)
+        // This guarantees the solid blue route stays 100% in the middle of the road with zero spaghetti hooks into houses.
+        const streetOnlyNetwork = {
+            type: 'FeatureCollection',
+            features: (network && Array.isArray(network.features))
+                ? network.features.filter(f => f.properties && f.properties.name !== null)
+                : []
+        };
+
+        L.geoJSON(streetOnlyNetwork, {
             onEachFeature: (feature) => {
                 const addCoordsToGraph = (coords) => {
                     if (coords.length === 0) return;
@@ -1096,7 +1270,7 @@ async function initGISMap(mapElementId, options = {}) {
             });
         });
 
-        function injectSnappedNode(lat, lng, prefix, targetGraph) {
+        function snapPointToRoad(lat, lng, prefix, targetGraph) {
             const pt = [lat, lng];
             let minDist = Infinity;
             let closestSegment = null;
@@ -1112,23 +1286,28 @@ async function initGISMap(mapElementId, options = {}) {
             });
 
             if (closestSegment) {
-                const newId = `${prefix}_${closestProj[0].toFixed(6)},${closestProj[1].toFixed(6)}`;
-                coordinatesMap.set(newId, closestProj);
-                if (!targetGraph.nodes.has(newId)) targetGraph.addNode(newId);
+                const roadNodeId = `${prefix}_road_${closestProj[0].toFixed(6)},${closestProj[1].toFixed(6)}`;
+                coordinatesMap.set(roadNodeId, closestProj);
+                if (!targetGraph.nodes.has(roadNodeId)) targetGraph.addNode(roadNodeId);
 
                 const dist1 = map.distance(closestSegment.p1, closestProj);
                 const dist2 = map.distance(closestProj, closestSegment.p2);
 
-                targetGraph.addEdge(closestSegment.id1, newId, dist1);
-                targetGraph.addEdge(newId, closestSegment.id2, dist2);
+                targetGraph.addEdge(closestSegment.id1, roadNodeId, dist1);
+                targetGraph.addEdge(roadNodeId, closestSegment.id2, dist2);
 
-                const targetId = `${prefix}_target`;
-                coordinatesMap.set(targetId, pt);
-                targetGraph.addNode(targetId);
-                targetGraph.addEdge(targetId, newId, minDist);
-                return targetId;
+                return {
+                    nodeId: roadNodeId,
+                    point: closestProj,
+                    dist: minDist
+                };
             }
             return null;
+        }
+
+        function injectSnappedNode(lat, lng, prefix, targetGraph) {
+            const snap = snapPointToRoad(lat, lng, prefix, targetGraph);
+            return snap ? snap.nodeId : null;
         }
 
         // Live Moving GPS & OSRM Outside Highway Hybrid Controller
@@ -1231,12 +1410,12 @@ async function initGISMap(mapElementId, options = {}) {
             // Immediate initial route preview from Entrance Gate to Destination House while GPS locks on
             if (staticPathIds && staticPathIds.length > 0) {
                 const initLatLngs = staticPathIds.map(id => coordinatesMap.get(id)).filter(Boolean);
-                initLatLngs.push([destCoord.lat, destCoord.lng]);
                 let initDist = 0;
                 for (let i = 0; i < initLatLngs.length - 1; i++) {
                     initDist += map.distance(initLatLngs[i], initLatLngs[i + 1]);
                 }
 
+                // Solid blue line strictly on the middle of the road
                 L.polyline(initLatLngs, {
                     color: '#1d4ed8', weight: 8, opacity: 0.85, lineCap: 'round', lineJoin: 'round', interactive: false
                 }).addTo(routingLayerGroup);
@@ -1244,10 +1423,22 @@ async function initGISMap(mapElementId, options = {}) {
                     color: '#2563eb', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round', interactive: false
                 }).addTo(routingLayerGroup);
 
-                L.circleMarker(entranceCoord, {
-                    radius: 7, fillColor: '#10b981', color: '#ffffff', weight: 2.5, fillOpacity: 1
-                }).addTo(routingLayerGroup).bindTooltip('🚪 Althesa Entrance Gate');
+                // Dotted off-road walking line from road centerline to house (Google Maps style)
+                const lastRoadPt = initLatLngs[initLatLngs.length - 1];
+                if (lastRoadPt) {
+                    const offRoadDist = map.distance(lastRoadPt, [destCoord.lat, destCoord.lng]);
+                    initDist += offRoadDist;
+                    if (offRoadDist > 1.5) {
+                        L.polyline([lastRoadPt, [destCoord.lat, destCoord.lng]], {
+                            color: '#ef4444', weight: 3.5, opacity: 0.9, dashArray: '3, 7', lineCap: 'round', interactive: false
+                        }).addTo(routingLayerGroup);
+                        L.circleMarker(lastRoadPt, {
+                            radius: 3.5, fillColor: '#ffffff', color: '#ef4444', weight: 2, fillOpacity: 1
+                        }).addTo(routingLayerGroup);
+                    }
+                }
 
+                // Destination Marker
                 L.circleMarker([destCoord.lat, destCoord.lng], {
                     radius: 9, fillColor: '#ef4444', color: '#ffffff', weight: 3, fillOpacity: 1
                 }).addTo(routingLayerGroup).bindTooltip(`📍 Destination (${destinationName})`);
@@ -1279,8 +1470,27 @@ async function initGISMap(mapElementId, options = {}) {
                         const data = await res.json();
                         if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
                             const r = data.routes[0];
+                            const rawLatLngs = r.geometry.coordinates.map(c => [c[1], c[0]]);
+                            // Align OSRM's OpenStreetMap road centerline to Google Maps' road centerline at the subdivision entrance
+                            let alignedLatLngs = rawLatLngs;
+                            if (rawLatLngs.length > 0) {
+                                const lastPt = rawLatLngs[rawLatLngs.length - 1];
+                                const dLatEnd = endLat - lastPt[0];
+                                const dLngEnd = endLng - lastPt[1];
+                                const firstPt = rawLatLngs[0];
+                                const totalSpan = map.distance(firstPt, lastPt);
+                                alignedLatLngs = rawLatLngs.map((pt, idx) => {
+                                    if (idx === rawLatLngs.length - 1) return [endLat, endLng];
+                                    const distToEnd = map.distance(pt, lastPt);
+                                    // Smoothly keep highway approach centered on Google Maps road and pin user start if far away
+                                    const wEnd = Math.exp(-distToEnd / 450);
+                                    const wStart = totalSpan > 35 ? Math.min(1, map.distance(pt, firstPt) / 25) : 1;
+                                    const w = wEnd * wStart;
+                                    return [pt[0] + dLatEnd * w, pt[1] + dLngEnd * w];
+                                });
+                            }
                             cachedOSRM = {
-                                latlngs: r.geometry.coordinates.map(c => [c[1], c[0]]),
+                                latlngs: alignedLatLngs,
                                 distance: r.distance,
                                 duration: r.duration
                             };
@@ -1318,14 +1528,79 @@ async function initGISMap(mapElementId, options = {}) {
                 return false;
             }
 
-            async function handlePosition(lat, lng, accuracy) {
+            // Point of View (POV) Directional Guide (Compass & Moving Bearing)
+            let currentHeading = null;
+            let lastCoordForHeading = null;
+
+            function calculateBearing(lat1, lon1, lat2, lon2) {
+                const toRad = Math.PI / 180;
+                const dLon = (lon2 - lon1) * toRad;
+                const y = Math.sin(dLon) * Math.cos(lat2 * toRad);
+                const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) -
+                          Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLon);
+                return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+            }
+
+            function updateHeadingCone(h) {
+                if (h == null || isNaN(h)) return;
+                currentHeading = (h % 360 + 360) % 360;
+                const cone = document.getElementById('userHeadingCone');
+                if (cone) {
+                    cone.style.transform = `rotate(${currentHeading}deg)`;
+                }
+            }
+
+            function onDeviceOrientation(e) {
+                let h = null;
+                if (e.webkitCompassHeading !== undefined && e.webkitCompassHeading !== null) {
+                    h = e.webkitCompassHeading;
+                } else if (e.alpha !== null && e.alpha !== undefined) {
+                    h = 360 - e.alpha;
+                }
+                if (h !== null && !isNaN(h)) updateHeadingCone(h);
+            }
+            if (window.DeviceOrientationEvent) {
+                window.addEventListener('deviceorientation', onDeviceOrientation, false);
+            }
+
+            async function handlePosition(lat, lng, accuracy, headingVal) {
                 userPos = { lat, lng, accuracy };
+
+                // Update heading from GPS or motion bearing
+                if (headingVal !== null && headingVal !== undefined && !isNaN(headingVal)) {
+                    updateHeadingCone(headingVal);
+                } else if (lastCoordForHeading) {
+                    const d = map.distance([lastCoordForHeading.lat, lastCoordForHeading.lng], [lat, lng]);
+                    if (d > 2.0) {
+                        const b = calculateBearing(lastCoordForHeading.lat, lastCoordForHeading.lng, lat, lng);
+                        updateHeadingCone(b);
+                        lastCoordForHeading = { lat, lng };
+                    }
+                } else {
+                    lastCoordForHeading = { lat, lng };
+                }
 
                 const beaconIcon = L.divIcon({
                     className: 'subdivision-live-marker-container',
-                    html: '<div class="subdivision-live-beacon"><div class="pulse-ring"></div><div class="center-dot"></div></div>',
-                    iconSize: [28, 28],
-                    iconAnchor: [14, 14]
+                    html: `
+                        <div class="subdivision-live-beacon">
+                            <div class="user-heading-cone" id="userHeadingCone" style="transform: rotate(${currentHeading || 0}deg);">
+                                <svg width="60" height="60" viewBox="0 0 60 60" style="display:block;">
+                                    <defs>
+                                        <radialGradient id="userBeamGlow" cx="50%" cy="50%" r="50%">
+                                            <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.6" />
+                                            <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.0" />
+                                        </radialGradient>
+                                    </defs>
+                                    <path d="M 30 30 L 12 2 A 32 32 0 0 1 48 2 Z" fill="url(#userBeamGlow)" />
+                                </svg>
+                            </div>
+                            <div class="pulse-ring"></div>
+                            <div class="center-dot"></div>
+                        </div>
+                    `,
+                    iconSize: [60, 60],
+                    iconAnchor: [30, 30]
                 });
 
                 if (!liveGpsMarker) {
@@ -1353,9 +1628,9 @@ async function initGISMap(mapElementId, options = {}) {
                     map.panTo([lat, lng], { animate: true });
                 }
 
-                // Destination distance check (< 15m)
+                // Destination distance check (< 12m)
                 const distToDest = map.distance([lat, lng], [destCoord.lat, destCoord.lng]);
-                if (distToDest < 15) {
+                if (distToDest < 12) {
                     osrmLayerGroup.clearLayers();
                     routingLayerGroup.clearLayers();
 
@@ -1376,50 +1651,63 @@ async function initGISMap(mapElementId, options = {}) {
                 const inside = checkIfInside(lat, lng);
 
                 if (!inside) {
-                    // OUTSIDE HIGHWAY ROUTING (OSRM to Gate + Internal Dijkstra from Gate to Destination)
+                    // OUTSIDE HIGHWAY ROUTING (OSRM to Highway-Subdivision Junction + Internal Dijkstra to Destination)
                     if (badgeEl) {
                         badgeEl.className = 'nav-hud-badge';
                         badgeTextEl.textContent = '🚗 Highway Navigation';
                     }
 
-                    const osrm = await fetchOSRM(lat, lng, entranceCoord[0], entranceCoord[1]);
+                    // Compute highway-junction-to-destination Dijkstra path along internal road network centerline
+                    // Main Road starts at local [-0.00108116845, -0.00247300864] where it meets the exact centerline of Tagbong Pili Camarines Sur Rd
+                    const mainRoadJunc = transformCoordPair([-0.00108116845, -0.00247300864], calib);
+                    const highwayEntryCoord = [mainRoadJunc[1], mainRoadJunc[0]];
 
-                    // Compute gate-to-destination Dijkstra path
                     let tempGraph = baseGraph.clone();
-                    let gateNodeId = injectSnappedNode(entranceCoord[0], entranceCoord[1], 'nav_gate', tempGraph);
-                    let destNodeId = injectSnappedNode(destCoord.lat, destCoord.lng, 'nav_dest', tempGraph);
-                    const pathIds = tempGraph.dijkstra(gateNodeId, destNodeId);
+                    const gateSnap = snapPointToRoad(highwayEntryCoord[0], highwayEntryCoord[1], 'gate', tempGraph);
+                    const destSnap = snapPointToRoad(destCoord.lat, destCoord.lng, 'dest', tempGraph);
+                    const pathIds = (gateSnap && destSnap) ? tempGraph.dijkstra(gateSnap.nodeId, destSnap.nodeId) : [];
 
-                    let internalDist = 0;
-                    const internalLatLngs = [];
+                    let internalRoadDist = 0;
+                    const internalRoadLatLngs = [];
                     if (pathIds && pathIds.length > 0) {
                         pathIds.forEach(id => {
                             const pt = coordinatesMap.get(id);
-                            if (pt) internalLatLngs.push(pt);
+                            if (pt) internalRoadLatLngs.push(pt);
                         });
-                    }
-                    internalLatLngs.push([destCoord.lat, destCoord.lng]);
-
-                    for (let i = 0; i < internalLatLngs.length - 1; i++) {
-                        internalDist += map.distance(internalLatLngs[i], internalLatLngs[i + 1]);
+                    } else if (gateSnap && destSnap) {
+                        internalRoadLatLngs.push(gateSnap.point, destSnap.point);
                     }
 
-                    // MERGE INTO ONE CONTINUOUS, SEAMLESS ROUTE (No cuts, no gaps, no dashes)
+                    const osrmTarget = internalRoadLatLngs.length > 0 ? internalRoadLatLngs[0] : highwayEntryCoord;
+                    const osrm = await fetchOSRM(lat, lng, osrmTarget[0], osrmTarget[1]);
+
+                    for (let i = 0; i < internalRoadLatLngs.length - 1; i++) {
+                        internalRoadDist += map.distance(internalRoadLatLngs[i], internalRoadLatLngs[i + 1]);
+                    }
+                    const dOffDist = destSnap ? destSnap.dist : 0;
+                    const totalInternalDist = internalRoadDist + dOffDist;
+
+                    // MERGE INTO ONE CONTINUOUS SEAMLESS ROAD ROUTE (Middle of outside road -> Middle of subdivision road)
                     const fullRouteLatLngs = [];
                     if (osrm && Array.isArray(osrm.latlngs)) {
                         osrm.latlngs.forEach(pt => fullRouteLatLngs.push(pt));
                     }
-                    fullRouteLatLngs.push([entranceCoord[0], entranceCoord[1]]);
-                    internalLatLngs.forEach(pt => fullRouteLatLngs.push(pt));
+                    internalRoadLatLngs.forEach((pt, idx) => {
+                        if (idx === 0 && fullRouteLatLngs.length > 0) {
+                            const prev = fullRouteLatLngs[fullRouteLatLngs.length - 1];
+                            if (map.distance(prev, pt) < 0.5) return;
+                        }
+                        fullRouteLatLngs.push(pt);
+                    });
 
                     routingLayerGroup.clearLayers();
                     osrmLayerGroup.clearLayers();
 
-                    // Formal Google Maps / OSRM navigation dual-layer line
+                    // Formal Google Maps / OSRM navigation dual-layer solid line on road
                     L.polyline(fullRouteLatLngs, {
                         color: '#1d4ed8',
                         weight: 8,
-                        opacity: 0.9,
+                        opacity: 0.95,
                         lineCap: 'round',
                         lineJoin: 'round',
                         interactive: false
@@ -1434,18 +1722,29 @@ async function initGISMap(mapElementId, options = {}) {
                         interactive: false
                     }).addTo(routingLayerGroup);
 
-                    // Gate Marker
-                    L.circleMarker(entranceCoord, {
-                        radius: 7, fillColor: '#10b981', color: '#ffffff', weight: 2.5, fillOpacity: 1
-                    }).addTo(routingLayerGroup).bindTooltip('🚪 Althesa Entrance Gate');
+                    // Off-road walking dotted line to destination house (Google Maps style)
+                    if (destSnap && destSnap.dist > 1.8) {
+                        L.polyline([destSnap.point, [destCoord.lat, destCoord.lng]], {
+                            color: '#ef4444',
+                            weight: 3.5,
+                            opacity: 0.9,
+                            dashArray: '3, 7',
+                            lineCap: 'round',
+                            interactive: false
+                        }).addTo(routingLayerGroup);
+
+                        L.circleMarker(destSnap.point, {
+                            radius: 3.5, fillColor: '#ffffff', color: '#ef4444', weight: 2, fillOpacity: 1
+                        }).addTo(routingLayerGroup);
+                    }
 
                     // Dest Marker
                     L.circleMarker([destCoord.lat, destCoord.lng], {
                         radius: 9, fillColor: '#ef4444', color: '#ffffff', weight: 3, fillOpacity: 1
                     }).addTo(routingLayerGroup).bindTooltip('📍 Destination (' + destinationName + ')');
 
-                    const totalDist = (osrm ? osrm.distance : map.distance([lat, lng], entranceCoord)) + internalDist;
-                    const totalTime = (osrm ? osrm.duration : 60) + (internalDist / 4.16);
+                    const totalDist = (osrm ? osrm.distance : map.distance([lat, lng], entranceCoord)) + totalInternalDist;
+                    const totalTime = (osrm ? osrm.duration : 60) + (totalInternalDist / 4.16);
 
                     if (distValEl) distValEl.textContent = fmtDist(totalDist);
                     if (timeValEl) timeValEl.textContent = fmtTime(totalTime);
@@ -1457,7 +1756,7 @@ async function initGISMap(mapElementId, options = {}) {
                     }
 
                 } else {
-                    // INSIDE SUBDIVISION NAVIGATION (Direct live Dijkstra straight from live snapped GPS to house!)
+                    // INSIDE SUBDIVISION NAVIGATION (Google Maps Architecture: Clean Road Polyline + Dotted Walking Guides)
                     osrmLayerGroup.clearLayers();
                     routingLayerGroup.clearLayers();
 
@@ -1467,50 +1766,91 @@ async function initGISMap(mapElementId, options = {}) {
                     }
 
                     let liveGraph = baseGraph.clone();
-                    let userNodeId = injectSnappedNode(lat, lng, 'live_u', liveGraph);
-                    let destNodeId = injectSnappedNode(destCoord.lat, destCoord.lng, 'live_d', liveGraph);
+                    const userSnap = snapPointToRoad(lat, lng, 'u', liveGraph);
+                    const destSnap = snapPointToRoad(destCoord.lat, destCoord.lng, 'd', liveGraph);
 
-                    const livePathIds = liveGraph.dijkstra(userNodeId, destNodeId);
+                    const livePathIds = (userSnap && destSnap) ? liveGraph.dijkstra(userSnap.nodeId, destSnap.nodeId) : [];
 
-                    let liveLatLngs = [];
-                    let remainingDist = 0;
-
+                    const roadLatLngs = [];
                     if (livePathIds && livePathIds.length > 0) {
                         livePathIds.forEach(id => {
                             const pt = coordinatesMap.get(id);
-                            if (pt) liveLatLngs.push(pt);
+                            if (pt) roadLatLngs.push(pt);
                         });
-                        liveLatLngs.push([destCoord.lat, destCoord.lng]);
-
-                        for (let i = 0; i < liveLatLngs.length - 1; i++) {
-                            remainingDist += map.distance(liveLatLngs[i], liveLatLngs[i + 1]);
-                        }
-                    } else {
-                        // Fallback direct line if off-road
-                        remainingDist = distToDest;
-                        liveLatLngs = [[lat, lng], [destCoord.lat, destCoord.lng]];
+                    } else if (userSnap && destSnap) {
+                        roadLatLngs.push(userSnap.point, destSnap.point);
                     }
 
-                    // Formal Google Maps / OSRM navigation dual-layer line
-                    L.polyline(liveLatLngs, {
-                        color: '#1d4ed8',
-                        weight: 8,
-                        opacity: 0.9,
-                        lineCap: 'round',
-                        lineJoin: 'round',
-                        interactive: false
-                    }).addTo(routingLayerGroup);
+                    let roadDist = 0;
+                    for (let i = 0; i < roadLatLngs.length - 1; i++) {
+                        roadDist += map.distance(roadLatLngs[i], roadLatLngs[i + 1]);
+                    }
+                    const uOffDist = userSnap ? userSnap.dist : 0;
+                    const dOffDist = destSnap ? destSnap.dist : 0;
+                    const remainingDist = roadDist + uOffDist + dOffDist;
 
-                    L.polyline(liveLatLngs, {
-                        color: '#2563eb',
-                        weight: 5,
-                        opacity: 1,
-                        lineCap: 'round',
-                        lineJoin: 'round',
-                        interactive: false
-                    }).addTo(routingLayerGroup);
+                    // 1. Solid Navigation Route ONLY along the road network (No loops or spaghetti)
+                    if (roadLatLngs.length > 0) {
+                        L.polyline(roadLatLngs, {
+                            color: '#1d4ed8',
+                            weight: 8,
+                            opacity: 0.95,
+                            lineCap: 'round',
+                            lineJoin: 'round',
+                            interactive: false
+                        }).addTo(routingLayerGroup);
 
-                    // Dest Marker
+                        L.polyline(roadLatLngs, {
+                            color: '#2563eb',
+                            weight: 5,
+                            opacity: 1,
+                            lineCap: 'round',
+                            lineJoin: 'round',
+                            interactive: false
+                        }).addTo(routingLayerGroup);
+                    }
+
+                    // 2. Off-Road Walking Dotted Line from User to Road (Google Maps style)
+                    if (userSnap && userSnap.dist > 1.8) {
+                        L.polyline([[lat, lng], userSnap.point], {
+                            color: '#2563eb',
+                            weight: 3.5,
+                            opacity: 0.9,
+                            dashArray: '3, 7',
+                            lineCap: 'round',
+                            interactive: false
+                        }).addTo(routingLayerGroup);
+
+                        L.circleMarker(userSnap.point, {
+                            radius: 3.5,
+                            fillColor: '#ffffff',
+                            color: '#2563eb',
+                            weight: 2,
+                            fillOpacity: 1
+                        }).addTo(routingLayerGroup);
+                    }
+
+                    // 3. Off-Road Walking Dotted Line from Road to Destination House (Google Maps style)
+                    if (destSnap && destSnap.dist > 1.8) {
+                        L.polyline([destSnap.point, [destCoord.lat, destCoord.lng]], {
+                            color: '#ef4444',
+                            weight: 3.5,
+                            opacity: 0.9,
+                            dashArray: '3, 7',
+                            lineCap: 'round',
+                            interactive: false
+                        }).addTo(routingLayerGroup);
+
+                        L.circleMarker(destSnap.point, {
+                            radius: 3.5,
+                            fillColor: '#ffffff',
+                            color: '#ef4444',
+                            weight: 2,
+                            fillOpacity: 1
+                        }).addTo(routingLayerGroup);
+                    }
+
+                    // 4. Destination Marker at House
                     L.circleMarker([destCoord.lat, destCoord.lng], {
                         radius: 9, fillColor: '#ef4444', color: '#ffffff', weight: 3, fillOpacity: 1
                     }).addTo(routingLayerGroup).bindTooltip('📍 Destination (' + destinationName + ')');
@@ -1549,7 +1889,7 @@ async function initGISMap(mapElementId, options = {}) {
             if (navigator.geolocation) {
                 watchId = navigator.geolocation.watchPosition(
                     (pos) => {
-                        handlePosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+                        handlePosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, pos.coords.heading);
                     },
                     (err) => {
                         console.warn('Geolocation notice:', err.message);
@@ -1578,6 +1918,9 @@ async function initGISMap(mapElementId, options = {}) {
                     }
                     if (recenterBtn) {
                         recenterBtn.removeEventListener('click', onRecenterClick);
+                    }
+                    if (window.DeviceOrientationEvent) {
+                        window.removeEventListener('deviceorientation', onDeviceOrientation, false);
                     }
                     map.off('dragstart', onMapDragStart);
                     osrmLayerGroup.clearLayers();
@@ -1642,22 +1985,25 @@ async function initGISMap(mapElementId, options = {}) {
                         destinationName: config.destinationName || config.endNode
                     });
                 } else {
-                    // Static fallback rendering for guard dashboard
+                    // Static fallback rendering for guard dashboard (Solid line on road + dotted off-road to house)
                     if (altPathNodeIds.length > 0) {
-                        const altLatlngs = altPathNodeIds.map(id => coordinatesMap.get(id));
-                        altLatlngs.push([destCoord.lat, destCoord.lng]);
+                        const altLatlngs = altPathNodeIds.map(id => coordinatesMap.get(id)).filter(Boolean);
                         L.polyline(altLatlngs, styles.altRoute).addTo(routingLayerGroup);
                     }
 
                     if (pathNodeIds.length > 0) {
-                        const latlngs = pathNodeIds.map(id => coordinatesMap.get(id));
-                        latlngs.push([destCoord.lat, destCoord.lng]);
-
+                        const latlngs = pathNodeIds.map(id => coordinatesMap.get(id)).filter(Boolean);
                         const routeLine = L.polyline(latlngs, styles.route).addTo(routingLayerGroup);
 
-                        L.circleMarker(coordinatesMap.get(startNodeId), {
-                            radius: 6, fillColor: '#10b981', color: '#fff', weight: 2, fillOpacity: 1
-                        }).addTo(routingLayerGroup).bindTooltip('Entrance Gate');
+                        const lastRoadPt = latlngs[latlngs.length - 1];
+                        if (lastRoadPt && map.distance(lastRoadPt, [destCoord.lat, destCoord.lng]) > 1.5) {
+                            L.polyline([lastRoadPt, [destCoord.lat, destCoord.lng]], {
+                                color: '#2563eb', weight: 3.5, opacity: 0.9, dashArray: '3, 7', lineCap: 'round', interactive: false
+                            }).addTo(routingLayerGroup);
+                            L.circleMarker(lastRoadPt, {
+                                radius: 3.5, fillColor: '#ffffff', color: '#2563eb', weight: 2, fillOpacity: 1
+                            }).addTo(routingLayerGroup);
+                        }
 
                         L.circleMarker([destCoord.lat, destCoord.lng], {
                             radius: 8, fillColor: '#2563eb', color: '#fff', weight: 3, fillOpacity: 1
@@ -1671,7 +2017,7 @@ async function initGISMap(mapElementId, options = {}) {
             }
         }
 
-        // Case 2: Interactive house-to-house routing
+        // Case 2: Interactive house-to-house routing (Solid line on road + dotted off-road to houses)
         if (config.interactiveRouting && routeStartHouse && routeEndHouse) {
             let startCoord = null;
             let endCoord = null;
@@ -1694,19 +2040,26 @@ async function initGISMap(mapElementId, options = {}) {
 
             const altPathNodeIds = tempGraph.alternativePath(sNode, eNode);
             if (altPathNodeIds.length > 0) {
-                const altLatlngs = altPathNodeIds.map(id => coordinatesMap.get(id));
-                altLatlngs.unshift([startCoord.lat, startCoord.lng]);
-                altLatlngs.push([endCoord.lat, endCoord.lng]);
+                const altLatlngs = altPathNodeIds.map(id => coordinatesMap.get(id)).filter(Boolean);
                 L.polyline(altLatlngs, styles.altRoute).addTo(routingLayerGroup);
             }
 
             const pathNodeIds = tempGraph.dijkstra(sNode, eNode);
             if (pathNodeIds.length > 0) {
-                const latlngs = pathNodeIds.map(id => coordinatesMap.get(id));
-                latlngs.unshift([startCoord.lat, startCoord.lng]);
-                latlngs.push([endCoord.lat, endCoord.lng]);
-
+                const latlngs = pathNodeIds.map(id => coordinatesMap.get(id)).filter(Boolean);
                 L.polyline(latlngs, styles.route).addTo(routingLayerGroup);
+
+                if (latlngs[0] && map.distance([startCoord.lat, startCoord.lng], latlngs[0]) > 1.5) {
+                    L.polyline([[startCoord.lat, startCoord.lng], latlngs[0]], {
+                        color: '#10b981', weight: 3.5, opacity: 0.9, dashArray: '3, 7', lineCap: 'round', interactive: false
+                    }).addTo(routingLayerGroup);
+                }
+                const lastPt = latlngs[latlngs.length - 1];
+                if (lastPt && map.distance(lastPt, [endCoord.lat, endCoord.lng]) > 1.5) {
+                    L.polyline([lastPt, [endCoord.lat, endCoord.lng]], {
+                        color: '#2563eb', weight: 3.5, opacity: 0.9, dashArray: '3, 7', lineCap: 'round', interactive: false
+                    }).addTo(routingLayerGroup);
+                }
 
                 L.circleMarker([startCoord.lat, startCoord.lng], {
                     radius: 6, fillColor: '#10b981', color: '#fff', weight: 2, fillOpacity: 1
@@ -1725,17 +2078,16 @@ async function initGISMap(mapElementId, options = {}) {
         if (!config.showCalibration) return;
 
         const pts = Array.isArray(calib.googlePoints) ? calib.googlePoints : [];
-        const polyCoords = [];
 
         pts.forEach((pt, idx) => {
-            const isAlignmentPin = idx < 3;
+            const isAlignmentPin = pt.type !== 'record';
             const color = pt.color || PIN_PALETTE[idx % PIN_PALETTE.length];
             const latStr = pt.latStr !== undefined ? pt.latStr : String(pt.lat);
             const lngStr = pt.lngStr !== undefined ? pt.lngStr : String(pt.lng);
 
             // Google Maps Outer target ring
             const marker = L.circleMarker([pt.lat, pt.lng], {
-                radius: isAlignmentPin ? 9 : 7,
+                radius: isAlignmentPin ? 8.5 : 6.5,
                 fillColor: color,
                 color: '#ffffff',
                 weight: isAlignmentPin ? 2.5 : 1.5,
@@ -1752,13 +2104,15 @@ async function initGISMap(mapElementId, options = {}) {
                 interactive: false
             }).addTo(refMarkersGroup);
 
-            let labelText = pt.label;
-            if (idx === 0) labelText = `Pin 1: Entrance Gate (Anchor)`;
-            else if (idx === 1) labelText = `Pin 2: Block ${pt.block !== undefined ? pt.block : 14} Lot ${pt.lot !== undefined ? pt.lot : 17}`;
-            else if (idx === 2) labelText = `Pin 3: Block ${pt.block !== undefined ? pt.block : 17} Lot ${pt.lot !== undefined ? pt.lot : 12}`;
+            let labelText = pt.label || `Pin ${idx + 1}`;
+            if (idx === 0 || pt.type === 'entrance') {
+                labelText = `Pin 1: Entrance Road (Main Gate)`;
+            } else if (pt.block !== undefined && pt.lot !== undefined && !pt.label) {
+                labelText = `Pin ${idx + 1}: B${pt.block} L${pt.lot} Front Road`;
+            }
 
             marker.bindTooltip(
-                `📍 <b>${labelText}</b><br><span style="font-family:monospace; font-size:10px;">${latStr}, ${lngStr}</span><br><span style="font-size:9px; color:#64748b;">${isAlignmentPin ? '🎯 Alignment Pin (Click to edit)' : '📝 Record Pin (Click to edit)'}</span>`,
+                `📍 <b>${labelText}</b><br><span style="font-family:monospace; font-size:10px;">${latStr}, ${lngStr}</span><br><span style="font-size:9px; color:#64748b;">${isAlignmentPin ? '🎯 Front-Road Alignment Pin (Click to edit)' : '📝 Record Pin (Click to edit)'}</span>`,
                 { direction: 'top', offset: [0, -6] }
             );
 
@@ -1768,23 +2122,7 @@ async function initGISMap(mapElementId, options = {}) {
                     window.__onSelectGooglePinForEdit(pt.id);
                 }
             });
-
-            // Only connect the first 3 alignment points with dashed line
-            if (isAlignmentPin) {
-                polyCoords.push([pt.lat, pt.lng]);
-            }
         });
-
-        if (polyCoords.length >= 2) {
-            const closed = polyCoords.length >= 3 ? [...polyCoords, polyCoords[0]] : polyCoords;
-            L.polyline(closed, {
-                color: '#facc15',
-                weight: 2,
-                dashArray: '5, 6',
-                opacity: 0.85,
-                interactive: false
-            }).addTo(refMarkersGroup);
-        }
     }
 
     // Build On-Screen Calibration & Reference Points Manager Panel inside the Map Container
@@ -1808,46 +2146,46 @@ async function initGISMap(mapElementId, options = {}) {
                     <div class="gis-calib-row" style="display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:5px; margin-top:8px;">
                         <button type="button" class="gis-calib-btn" id="btnCalibUndo" title="Undo last change (Ctrl+Z)" disabled style="opacity:0.5;">↩️ Undo (0)</button>
                         <button type="button" class="gis-calib-btn" id="btnCalibRedo" title="Redo (Ctrl+Y)" disabled style="opacity:0.5;">↪️ Redo</button>
-                        <button type="button" class="gis-calib-btn" id="btnCalibResetDefault" title="Reset to Default 3 Alignment Points & Default Transform">🔄 Default</button>
+                        <button type="button" class="gis-calib-btn" id="btnCalibResetDefault" title="Reset to Default 8 Front-Road Alignment Points">🔄 Default (8 Pts)</button>
                     </div>
 
                     <!-- Google Maps Reference Pins Manager (Add / Edit / Delete - Full Precision, No Rounding) -->
                     <div class="gis-calib-row" style="background:rgba(30,41,59,0.75); border:1px solid #334155; border-radius:10px; padding:8px;">
                         <div class="gis-calib-label" style="margin-bottom:6px;">
-                            <span style="color:#38bdf8;">📍 Google Maps Reference Pins</span>
-                            <span style="font-size:10px; color:#94a3b8;">Pins 1–3 = Alignment</span>
+                            <span style="color:#38bdf8;">📍 Front-Road Reference Pins</span>
+                            <span style="font-size:10px; color:#94a3b8;">All 8 Road Points Active</span>
                         </div>
-                        <div id="googlePointsList" style="display:flex; flex-direction:column; gap:5px; max-height:165px; overflow-y:auto; margin-bottom:8px;"></div>
+                        <div id="googlePointsList" style="display:flex; flex-direction:column; gap:5px; max-height:185px; overflow-y:auto; margin-bottom:8px;"></div>
 
                         <!-- Add / Edit Google Maps Pin Form -->
                         <div style="border-top:1px solid #334155; padding-top:7px;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                                <span id="lblGooglePinMode" style="font-size:10px; font-weight:700; color:#94a3b8;">➕ Add Record Pin (Survey Only)</span>
+                                <span id="lblGooglePinMode" style="font-size:10px; font-weight:700; color:#94a3b8;">➕ Add Road Pin</span>
                                 <div style="display:flex; gap:3px;">
-                                    <button type="button" class="gis-calib-btn" id="btnPickHouseOnMap" style="display:none; padding:2px 6px; font-size:10px;" title="Click any house on the map to select Block & Lot">🏠 Pick House</button>
+                                    <button type="button" class="gis-calib-btn" id="btnPickHouseOnMap" style="display:none; padding:2px 6px; font-size:10px;" title="Click any house on the map to select its Front Road">🏠 Pick House</button>
                                     <button type="button" class="gis-calib-btn" id="btnClickMapForPin" style="padding:2px 6px; font-size:10px;" title="Click anywhere on the satellite view to capture exact GPS">🖱️ Map Click</button>
                                 </div>
                             </div>
-                            <!-- Dynamic Block & Lot for Alignment Houses (Pins 2 & 3) -->
+                            <!-- Dynamic Block & Lot for Front-Road Alignment Pins -->
                             <div id="rowDynamicBlockLot" style="display:none; grid-template-columns:1fr 1fr; gap:4px; margin-bottom:5px;">
                                 <div>
-                                    <span style="font-size:9.5px; color:#94a3b8; display:block; margin-bottom:2px;">Block #</span>
+                                    <span style="font-size:9.5px; color:#94a3b8; display:block; margin-bottom:2px;">Block # (Front Road)</span>
                                     <input type="number" id="inpGooglePinBlock" min="1" placeholder="Block #" style="width:100%; box-sizing:border-box; background:#0f172a; color:#f8fafc; border:1px solid #475569; border-radius:6px; padding:4px 6px; font-size:11px;">
                                 </div>
                                 <div>
-                                    <span style="font-size:9.5px; color:#94a3b8; display:block; margin-bottom:2px;">Lot #</span>
+                                    <span style="font-size:9.5px; color:#94a3b8; display:block; margin-bottom:2px;">Lot # (Front Road)</span>
                                     <input type="number" id="inpGooglePinLot" min="1" placeholder="Lot #" style="width:100%; box-sizing:border-box; background:#0f172a; color:#f8fafc; border:1px solid #475569; border-radius:6px; padding:4px 6px; font-size:11px;">
                                 </div>
                             </div>
                             <div id="rowPinLabel" style="margin-bottom:5px;">
-                                <input type="text" id="inpGooglePinLabel" placeholder="Pin Name / Landmark (e.g. Record Pin 4)" style="width:100%; box-sizing:border-box; background:#0f172a; color:#f8fafc; border:1px solid #475569; border-radius:6px; padding:4px 6px; font-size:11px;">
+                                <input type="text" id="inpGooglePinLabel" placeholder="Pin Name / Landmark" style="width:100%; box-sizing:border-box; background:#0f172a; color:#f8fafc; border:1px solid #475569; border-radius:6px; padding:4px 6px; font-size:11px;">
                             </div>
                             <div style="display:flex; gap:4px; margin-bottom:5px;">
                                 <input type="text" id="inpGooglePinGPS" placeholder="Exact lat, lng (no rounding)" style="flex:1; background:#0f172a; color:#f8fafc; border:1px solid #475569; border-radius:6px; padding:4px 6px; font-size:11px; font-family:monospace;">
                                 <button type="button" class="gis-calib-btn" id="btnUseMyLiveGPS" title="Get live GPS from device (full precision)" style="padding:4px 6px; font-size:10px;">📍 My GPS</button>
                             </div>
                             <div style="display:flex; gap:5px;">
-                                <button type="button" class="gis-calib-btn primary" id="btnSubmitGooglePin" style="flex:1; padding:5px;">➕ Add Record Pin</button>
+                                <button type="button" class="gis-calib-btn primary" id="btnSubmitGooglePin" style="flex:1; padding:5px;">➕ Add Pin</button>
                                 <button type="button" class="gis-calib-btn" id="btnCancelEditGooglePin" style="display:none; padding:5px 8px;">Cancel</button>
                             </div>
                         </div>
@@ -1861,10 +2199,10 @@ async function initGISMap(mapElementId, options = {}) {
                         </div>
                         <div style="display:grid; grid-template-columns:1.45fr 1fr; gap:6px;">
                             <button type="button" class="gis-calib-btn" id="btnToggleDragSub" style="padding:7px 8px;">✋ Drag & Stretch: OFF</button>
-                            <button type="button" class="gis-calib-btn primary" id="btnSnapToPins" title="Automatically align subdivision using Pins 1, 2, and 3">🎯 Align to Points (1-3)</button>
+                            <button type="button" class="gis-calib-btn primary" id="btnSnapToPins" title="Automatically align subdivision using all 8 Front-Road Points">🎯 Align All 8 Road Pts</button>
                         </div>
                         <div style="font-size:10px; color:#94a3b8; margin-top:4px; line-height:1.3;">
-                            💡 Drag inside to move subdivision, or drag handles. Reference pins stay locked on Google Maps!
+                            💡 All 8 points sit on the middle of the front road (never inside houses).
                         </div>
                     </div>
 
@@ -2049,7 +2387,7 @@ async function initGISMap(mapElementId, options = {}) {
             btnUndo.addEventListener('click', performUndo);
             btnRedo.addEventListener('click', performRedo);
 
-            // Reset to Default Alignment & Default 3 Google Points (Entrance, B14 L17, B17 L12)
+            // Reset to Default Alignment & Default 8 Front-Road Google Points
             btnResetDefault.addEventListener('click', () => {
                 pushUndoSnapshot();
                 calib = JSON.parse(JSON.stringify(DEFAULT_CALIBRATION));
@@ -2060,7 +2398,7 @@ async function initGISMap(mapElementId, options = {}) {
                 renderGooglePointsListUI();
                 renderCalibrationReferencePins();
                 syncUIWithCalib(true);
-                showStatusMsg('🔄 Reverted to Default 3 Google Points & Alignment!', '#34d399', 3000);
+                showStatusMsg('🔄 Reverted to Default 8 Front-Road Points & Alignment!', '#34d399', 3000);
             });
 
             // Global Ctrl+Z (Undo) and Ctrl+Y / Ctrl+Shift+Z (Redo) keyboard shortcuts
@@ -2149,7 +2487,7 @@ async function initGISMap(mapElementId, options = {}) {
                         btnPickHouseOnMap.classList.add('success');
                         btnPickHouseOnMap.textContent = '🏠 Click House...';
                     }
-                    showStatusMsg('🏠 Click on any house polygon on the map to set Block & Lot', '#38bdf8', 0);
+                    showStatusMsg('🏠 Click on any house polygon on the map to select its Front Road', '#38bdf8', 0);
                 } else {
                     if (btnPickHouseOnMap) {
                         btnPickHouseOnMap.classList.remove('success');
@@ -2170,9 +2508,9 @@ async function initGISMap(mapElementId, options = {}) {
             window.__onPickHouseForRefPoint = function (b, l) {
                 if (inpGooglePinBlock) inpGooglePinBlock.value = b;
                 if (inpGooglePinLot) inpGooglePinLot.value = l;
-                inpGooglePinLabel.value = `Pin: Block ${b} Lot ${l}`;
+                inpGooglePinLabel.value = `B${b} L${l} Front Road`;
                 setPickHouseMode(false);
-                showStatusMsg(`🏠 Selected: Block ${b} Lot ${l}`, '#34d399', 3000);
+                showStatusMsg(`🛣️ Selected Front Road of Block ${b} Lot ${l}`, '#34d399', 3000);
             };
 
             function cancelGooglePinEditMode() {
@@ -2181,9 +2519,9 @@ async function initGISMap(mapElementId, options = {}) {
                 if (rowDynamicBlockLot) rowDynamicBlockLot.style.display = 'none';
                 if (btnPickHouseOnMap) btnPickHouseOnMap.style.display = 'none';
                 if (rowPinLabel) rowPinLabel.style.display = 'block';
-                lblGooglePinMode.textContent = '➕ Add Record Pin (Survey Only)';
+                lblGooglePinMode.textContent = '➕ Add Road Pin';
                 lblGooglePinMode.style.color = '#94a3b8';
-                btnSubmitGooglePin.textContent = '➕ Add Record Pin';
+                btnSubmitGooglePin.textContent = '➕ Add Pin';
                 btnCancelEditGooglePin.style.display = 'none';
                 inpGooglePinLabel.value = '';
                 inpGooglePinGPS.value = '';
@@ -2203,30 +2541,28 @@ async function initGISMap(mapElementId, options = {}) {
                 inpGooglePinGPS.value = `${pt.latStr !== undefined ? pt.latStr : pt.lat}, ${pt.lngStr !== undefined ? pt.lngStr : pt.lng}`;
                 btnCancelEditGooglePin.style.display = 'inline-block';
 
-                if (idx === 0) {
-                    // Pin 1: Entrance Gate Anchor
+                if (idx === 0 || pt.type === 'entrance') {
+                    // Pin 1: Entrance Road Anchor
                     if (rowDynamicBlockLot) rowDynamicBlockLot.style.display = 'none';
                     if (btnPickHouseOnMap) btnPickHouseOnMap.style.display = 'none';
                     if (rowPinLabel) rowPinLabel.style.display = 'block';
-                    inpGooglePinLabel.value = pt.label || 'Pin 1: Entrance Gate (Anchor)';
-                    lblGooglePinMode.textContent = '✏️ Editing Pin 1 (Entrance Gate Anchor)';
+                    inpGooglePinLabel.value = pt.label || 'Pin 1: Entrance Road (Main Gate)';
+                    lblGooglePinMode.textContent = '✏️ Editing Pin 1 (Entrance Road)';
                     lblGooglePinMode.style.color = '#10b981';
-                    btnSubmitGooglePin.textContent = '💾 Update Entrance Pin & Align';
-                } else if (idx === 1 || idx === 2) {
-                    // Pin 2 or 3: Dynamic House Alignment Pin
+                    btnSubmitGooglePin.textContent = '💾 Update Entrance & Align';
+                } else if (pt.type !== 'record') {
+                    // Front-Road Alignment Pin (Pins 2..8)
                     if (rowDynamicBlockLot) rowDynamicBlockLot.style.display = 'grid';
                     if (btnPickHouseOnMap) btnPickHouseOnMap.style.display = 'inline-block';
-                    if (rowPinLabel) rowPinLabel.style.display = 'none';
-                    const defaultB = idx === 1 ? 14 : 17;
-                    const defaultL = idx === 1 ? 17 : 12;
-                    if (inpGooglePinBlock) inpGooglePinBlock.value = pt.block !== undefined ? pt.block : defaultB;
-                    if (inpGooglePinLot) inpGooglePinLot.value = pt.lot !== undefined ? pt.lot : defaultL;
-                    inpGooglePinLabel.value = pt.label || `Pin ${idx + 1}: Block ${pt.block || defaultB} Lot ${pt.lot || defaultL}`;
-                    lblGooglePinMode.textContent = `✏️ Editing Alignment Pin ${idx + 1} (Block & Lot)`;
-                    lblGooglePinMode.style.color = idx === 1 ? '#f97316' : '#a855f7';
+                    if (rowPinLabel) rowPinLabel.style.display = 'block';
+                    if (inpGooglePinBlock) inpGooglePinBlock.value = pt.block !== undefined ? pt.block : 11;
+                    if (inpGooglePinLot) inpGooglePinLot.value = pt.lot !== undefined ? pt.lot : 24;
+                    inpGooglePinLabel.value = pt.label || `Pin ${idx + 1}: B${pt.block} L${pt.lot} Front Road`;
+                    lblGooglePinMode.textContent = `✏️ Editing Front-Road Pin ${idx + 1}`;
+                    lblGooglePinMode.style.color = pt.color || '#38bdf8';
                     btnSubmitGooglePin.textContent = `💾 Update Pin ${idx + 1} & Align`;
                 } else {
-                    // Survey Record Pin (Pins 4+)
+                    // Survey Record Pin
                     if (rowDynamicBlockLot) rowDynamicBlockLot.style.display = 'none';
                     if (btnPickHouseOnMap) btnPickHouseOnMap.style.display = 'none';
                     if (rowPinLabel) rowPinLabel.style.display = 'block';
@@ -2238,7 +2574,7 @@ async function initGISMap(mapElementId, options = {}) {
                 inpGooglePinGPS.focus();
             };
 
-            // Render Google Maps Reference Pins List (Alignment Pins 1-3 vs Survey Record Pins)
+            // Render Google Maps Reference Pins List (All 8 Front-Road Alignment Pins)
             function renderGooglePointsListUI() {
                 if (!googlePointsListEl) return;
                 googlePointsListEl.innerHTML = '';
@@ -2250,42 +2586,18 @@ async function initGISMap(mapElementId, options = {}) {
                 }
 
                 pts.forEach((pt, idx) => {
-                    const isAlignmentPin = idx < 3;
+                    const isAlignmentPin = pt.type !== 'record';
                     const color = pt.color || PIN_PALETTE[idx % PIN_PALETTE.length];
                     const latStr = pt.latStr !== undefined ? pt.latStr : String(pt.lat);
                     const lngStr = pt.lngStr !== undefined ? pt.lngStr : String(pt.lng);
 
-                    let titleText = pt.label;
-                    let badgeText = '';
-                    let badgeColor = '';
-                    if (idx === 0) {
-                        titleText = `Pin 1: Entrance Gate (Anchor)`;
-                        badgeText = 'GATE ANCHOR';
+                    let titleText = pt.label || `Pin ${idx + 1}`;
+                    let badgeText = isAlignmentPin ? `ROAD PIN ${idx + 1}` : `SURVEY`;
+                    let badgeColor = isAlignmentPin ? color : '#64748b';
+                    if (idx === 0 || pt.type === 'entrance') {
+                        titleText = pt.label || `Pin 1: Entrance Road (Main Gate)`;
+                        badgeText = 'ENTRANCE ROAD';
                         badgeColor = '#10b981';
-                    } else if (idx === 1) {
-                        const b = pt.block !== undefined ? pt.block : 14;
-                        const l = pt.lot !== undefined ? pt.lot : 17;
-                        titleText = `Pin 2: Block ${b} Lot ${l}`;
-                        badgeText = 'ALIGN PIN 2';
-                        badgeColor = '#f97316';
-                    } else if (idx === 2) {
-                        const b = pt.block !== undefined ? pt.block : 17;
-                        const l = pt.lot !== undefined ? pt.lot : 12;
-                        titleText = `Pin 3: Block ${b} Lot ${l}`;
-                        badgeText = 'ALIGN PIN 3';
-                        badgeColor = '#a855f7';
-                    } else {
-                        titleText = pt.label || `Record Pin ${idx + 1}`;
-                        badgeText = `SURVEY PIN ${idx + 1}`;
-                        badgeColor = '#64748b';
-                    }
-
-                    // Divider before first record pin
-                    if (idx === 3) {
-                        const divider = document.createElement('div');
-                        divider.style.cssText = 'border-top:1px dashed #475569; margin:4px 0 2px 0; padding-top:3px; font-size:9.5px; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; display:flex; justify-content:space-between;';
-                        divider.innerHTML = `<span>📝 Survey Record Pins (No Map Shift)</span><span>${pts.length - 3} pin${pts.length - 3 > 1 ? 's' : ''}</span>`;
-                        googlePointsListEl.appendChild(divider);
                     }
 
                     const item = document.createElement('div');
@@ -2303,7 +2615,7 @@ async function initGISMap(mapElementId, options = {}) {
                         </div>
                         <div style="display:flex; gap:4px; flex-shrink:0;">
                             <button type="button" class="gis-calib-btn" data-edit-pin="${pt.id}" style="padding:3px 6px; font-size:10px;" title="Edit coordinates or Block & Lot">✏️</button>
-                            ${isAlignmentPin ? '' : `<button type="button" class="gis-calib-btn" data-del-pin="${pt.id}" style="padding:3px 6px; font-size:10px; color:#fca5a5;" title="Delete record pin">🗑️</button>`}
+                            ${idx < 8 ? '' : `<button type="button" class="gis-calib-btn" data-del-pin="${pt.id}" style="padding:3px 6px; font-size:10px; color:#fca5a5;" title="Delete pin">🗑️</button>`}
                         </div>
                     `;
                     googlePointsListEl.appendChild(item);
@@ -2316,7 +2628,7 @@ async function initGISMap(mapElementId, options = {}) {
                     });
                 });
 
-                // Wire Delete buttons (for record pins only)
+                // Wire Delete buttons
                 googlePointsListEl.querySelectorAll('[data-del-pin]').forEach(btn => {
                     btn.addEventListener('click', () => {
                         const id = btn.getAttribute('data-del-pin');
@@ -2325,26 +2637,26 @@ async function initGISMap(mapElementId, options = {}) {
                         if (editingPointId === id) cancelGooglePinEditMode();
                         renderGooglePointsListUI();
                         renderCalibrationReferencePins();
-                        localStorage.setItem('subdivision_gis_calibration_v7', JSON.stringify(calib));
-                        showStatusMsg('🗑️ Record pin deleted (Ctrl+Z to undo)', '#fbbf24', 3000);
+                        localStorage.setItem('subdivision_gis_calibration_v9', JSON.stringify(calib));
+                        showStatusMsg('🗑️ Pin deleted (Ctrl+Z to undo)', '#fbbf24', 3000);
                     });
                 });
             }
 
-            // High-Precision Alignment Calculator using ONLY the first 3 Alignment Points
+            // High-Precision Alignment Calculator using ALL Front-Road Alignment Points (all 8 points!)
             function alignToFirst3Points(showFeedback = true) {
                 if (!Array.isArray(calib.googlePoints) || calib.googlePoints.length < 2) {
-                    if (showFeedback) showStatusMsg('⚠️ Need at least Pin 1 (Entrance) and Pin 2 (House) on Google Maps!', '#fbbf24', 3500);
+                    if (showFeedback) showStatusMsg('⚠️ Need at least 2 Front-Road Alignment Points!', '#fbbf24', 3500);
                     return false;
                 }
                 const solved = solveSimilarityFromAlignmentPoints(
                     calib.googlePoints,
-                    localHouseMiddles,
+                    localHouseFrontRoad,
                     calib.flipX,
                     calib.flipY
                 );
                 if (!solved) {
-                    if (showFeedback) showStatusMsg('⚠️ Could not calculate alignment from points!', '#ef4444', 3500);
+                    if (showFeedback) showStatusMsg('⚠️ Could not calculate alignment from road points!', '#ef4444', 3500);
                     return false;
                 }
                 calib.anchorLat = solved.anchorLat;
@@ -2357,12 +2669,9 @@ async function initGISMap(mapElementId, options = {}) {
                 calib.affine = solved.affine;
                 syncUIWithCalib(false);
 
-                const pt2 = calib.googlePoints[1];
-                const pt3 = calib.googlePoints[2];
-                const desc2 = `B${pt2 ? (pt2.block !== undefined ? pt2.block : 14) : 14} L${pt2 ? (pt2.lot !== undefined ? pt2.lot : 17) : 17}`;
-                const desc3 = pt3 ? ` & B${pt3.block !== undefined ? pt3.block : 17} L${pt3.lot !== undefined ? pt3.lot : 12}` : '';
+                const activeCount = calib.googlePoints.filter(p => p && p.type !== 'record').length;
                 if (showFeedback) {
-                    showStatusMsg(`🎯 Aligned to Entrance + ${desc2}${desc3}! (0.000m error)`, '#34d399', 3500);
+                    showStatusMsg(`🎯 Aligned Subdivision to all ${activeCount} Front-Road Points!`, '#34d399', 3500);
                 }
                 return true;
             }
@@ -2391,34 +2700,40 @@ async function initGISMap(mapElementId, options = {}) {
                 if (editingPointId) {
                     const idx = calib.googlePoints.findIndex(p => p.id === editingPointId);
                     if (idx !== -1) {
-                        if (idx === 0) {
-                            // Updating Entrance Gate Anchor (Pin 1)
-                            calib.googlePoints[idx] = Object.assign({}, calib.googlePoints[idx], {
+                        const existing = calib.googlePoints[idx];
+                        if (idx === 0 || existing.type === 'entrance') {
+                            // Updating Entrance Road Anchor (Pin 1)
+                            calib.googlePoints[idx] = Object.assign({}, existing, {
                                 type: 'entrance',
-                                label: 'Pin 1: Entrance Gate (Anchor)',
+                                label: inpGooglePinLabel.value.trim() || 'Pin 1: Entrance Road (Main Gate)',
                                 lat,
                                 lng,
                                 latStr,
                                 lngStr
                             });
                             alignToFirst3Points(false);
-                            showStatusMsg('✅ Entrance Pin updated & Subdivision Aligned!', '#34d399', 3500);
-                        } else if (idx === 1 || idx === 2) {
-                            // Updating Dynamic House Pin (Pin 2 or Pin 3)
+                            showStatusMsg('✅ Entrance Road Pin updated & Subdivision Aligned!', '#34d399', 3500);
+                        } else if (existing.type !== 'record') {
+                            // Updating Front-Road Alignment Pin (Pins 2..8)
                             const blockVal = parseInt(inpGooglePinBlock ? inpGooglePinBlock.value : '', 10);
                             const lotVal = parseInt(inpGooglePinLot ? inpGooglePinLot.value : '', 10);
-                            const finalBlock = Number.isInteger(blockVal) && blockVal > 0 ? blockVal : (idx === 1 ? 14 : 17);
-                            const finalLot = Number.isInteger(lotVal) && lotVal > 0 ? lotVal : (idx === 1 ? 17 : 12);
+                            const finalBlock = Number.isInteger(blockVal) && blockVal > 0 ? blockVal : (existing.block || 11);
+                            const finalLot = Number.isInteger(lotVal) && lotVal > 0 ? lotVal : (existing.lot || 24);
+                            const blockChanged = (finalBlock !== existing.block || finalLot !== existing.lot);
 
-                            if (!localHouseMiddles[`B${finalBlock} L${finalLot}`]) {
-                                showStatusMsg(`⚠️ Warning: Block ${finalBlock} Lot ${finalLot} not found in subdivision houses!`, '#fbbf24', 4000);
+                            const roadLoc = localHouseFrontRoad[`B${finalBlock} L${finalLot}`];
+                            if (!roadLoc) {
+                                showStatusMsg(`⚠️ Warning: Block ${finalBlock} Lot ${finalLot} not found in subdivision!`, '#fbbf24', 4000);
                             }
 
-                            const label = `Pin ${idx + 1}: Block ${finalBlock} Lot ${finalLot}`;
-                            calib.googlePoints[idx] = Object.assign({}, calib.googlePoints[idx], {
+                            const label = inpGooglePinLabel.value.trim() || `Pin ${idx + 1}: B${finalBlock} L${finalLot} Front Road`;
+                            calib.googlePoints[idx] = Object.assign({}, existing, {
                                 type: 'house',
                                 block: finalBlock,
                                 lot: finalLot,
+                                customRoadPoint: blockChanged ? false : existing.customRoadPoint,
+                                localLng: (!blockChanged && existing.customRoadPoint) ? existing.localLng : (roadLoc ? roadLoc.lng : existing.localLng),
+                                localLat: (!blockChanged && existing.customRoadPoint) ? existing.localLat : (roadLoc ? roadLoc.lat : existing.localLat),
                                 label: label,
                                 lat,
                                 lng,
@@ -2426,11 +2741,11 @@ async function initGISMap(mapElementId, options = {}) {
                                 lngStr
                             });
                             alignToFirst3Points(false);
-                            showStatusMsg(`✅ Pin ${idx + 1} updated to Block ${finalBlock} Lot ${finalLot} & Subdivision Aligned!`, '#34d399', 4000);
+                            showStatusMsg(`✅ Pin ${idx + 1} updated & Subdivision Aligned to all 8 Front-Road Points!`, '#34d399', 4000);
                         } else {
-                            // Updating Survey Record Pin (idx >= 3) - strictly record, NO realignment
+                            // Updating Survey Record Pin
                             const label = inpGooglePinLabel.value.trim() || `Record Pin ${idx + 1}`;
-                            calib.googlePoints[idx] = Object.assign({}, calib.googlePoints[idx], {
+                            calib.googlePoints[idx] = Object.assign({}, existing, {
                                 type: 'record',
                                 label,
                                 lat,
@@ -2438,11 +2753,11 @@ async function initGISMap(mapElementId, options = {}) {
                                 latStr,
                                 lngStr
                             });
-                            showStatusMsg(`✅ Record Pin ${idx + 1} updated! (Survey record only)`, '#38bdf8', 3500);
+                            showStatusMsg(`✅ Record Pin ${idx + 1} updated!`, '#38bdf8', 3500);
                         }
                     }
                 } else {
-                    // Adding a new pin -> Always a Survey Record Pin! (Pin 4+)
+                    // Adding a new pin
                     const label = inpGooglePinLabel.value.trim() || `Record Pin ${calib.googlePoints.length + 1}`;
                     const color = PIN_PALETTE[calib.googlePoints.length % PIN_PALETTE.length];
                     calib.googlePoints.push({
@@ -2455,18 +2770,18 @@ async function initGISMap(mapElementId, options = {}) {
                         lngStr,
                         color
                     });
-                    showStatusMsg(`✅ Survey Record Pin added! (Survey record only)`, '#38bdf8', 3500);
+                    showStatusMsg(`✅ Pin added!`, '#38bdf8', 3500);
                 }
 
                 cancelGooglePinEditMode();
                 renderGooglePointsListUI();
                 renderCalibrationReferencePins();
                 renderAllGISLayers();
-                localStorage.setItem('subdivision_gis_calibration_v7', JSON.stringify(calib));
+                localStorage.setItem('subdivision_gis_calibration_v9', JSON.stringify(calib));
             });
 
             function syncUIWithCalib(redrawRefPins = false) {
-                calib.calibVersion = 7;
+                calib.calibVersion = 9;
                 if (calib.scaleX === undefined) calib.scaleX = calib.scale || 1.0;
                 if (calib.scaleY === undefined) calib.scaleY = calib.scale || 1.0;
 
@@ -2490,7 +2805,7 @@ async function initGISMap(mapElementId, options = {}) {
                 if (chkBgFill) chkBgFill.checked = calib.showBgFill !== false;
                 lblAnchor.textContent = `${calib.anchorLat}, ${calib.anchorLng}`;
 
-                localStorage.setItem('subdivision_gis_calibration_v7', JSON.stringify(calib));
+                localStorage.setItem('subdivision_gis_calibration_v9', JSON.stringify(calib));
                 if (redrawRefPins) renderCalibrationReferencePins();
                 renderAllGISLayers();
             }
@@ -2733,7 +3048,7 @@ async function initGISMap(mapElementId, options = {}) {
             panel.querySelectorAll('[data-basemap]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     setBaseTileMode(btn.getAttribute('data-basemap'));
-                    localStorage.setItem('subdivision_gis_calibration_v7', JSON.stringify(calib));
+                    localStorage.setItem('subdivision_gis_calibration_v9', JSON.stringify(calib));
                 });
             });
 
@@ -2841,8 +3156,8 @@ async function initGISMap(mapElementId, options = {}) {
 
             // Save Alignment to Server & LocalStorage (full precision, no rounding)
             panel.querySelector('#btnSaveCalib').addEventListener('click', () => {
-                calib.calibVersion = 7;
-                localStorage.setItem('subdivision_gis_calibration_v7', JSON.stringify(calib));
+                calib.calibVersion = 9;
+                localStorage.setItem('subdivision_gis_calibration_v9', JSON.stringify(calib));
                 fetch('/api/settings', {
                     method: 'POST',
                     headers: {

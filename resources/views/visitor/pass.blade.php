@@ -288,10 +288,6 @@
                     Your Location (Live GPS)
                 </div>
                 <div class="legend-row">
-                    <div style="width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"></div>
-                    Entrance Gate
-                </div>
-                <div class="legend-row">
                     <div style="width: 12px; height: 12px; background: #ef4444; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"></div>
                     Destination ({{ $destination }})
                 </div>

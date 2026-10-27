@@ -204,7 +204,7 @@
 {"type":"Feature","properties":{"fid":199,"id":199,"lot_number":6,"block_num":9,"name":null,"house_id":199},"geometry":{"type":"Point","coordinates":[0.000195139868234,-0.000353050111464]}},
 {"type":"Feature","properties":{"fid":200,"id":200,"lot_number":6,"block_num":17,"name":null,"house_id":200},"geometry":{"type":"Point","coordinates":[-0.000008088990154,-0.001965230829921]}},
 {"type":"Feature","properties":{"fid":201,"id":201,"lot_number":7,"block_num":17,"name":null,"house_id":201},"geometry":{"type":"Point","coordinates":[0.000012808994618,-0.001905990674573]}},
-{"type":"Feature","properties":{"fid":202,"id":202,"lot_number":7,"block_num":17,"name":null,"house_id":202},"geometry":{"type":"Point","coordinates":[0.000033773097569,-0.001846954123437]}},
+{"type":"Feature","properties":{"fid":202,"id":202,"lot_number":8,"block_num":17,"name":null,"house_id":202},"geometry":{"type":"Point","coordinates":[0.000033773097569,-0.001846954123437]}},
 {"type":"Feature","properties":{"fid":203,"id":203,"lot_number":9,"block_num":17,"name":null,"house_id":203},"geometry":{"type":"Point","coordinates":[0.000054367697846,-0.001787975395589]}},
 {"type":"Feature","properties":{"fid":204,"id":204,"lot_number":10,"block_num":17,"name":null,"house_id":204},"geometry":{"type":"Point","coordinates":[0.000075853204031,-0.001729477202947]}},
 {"type":"Feature","properties":{"fid":205,"id":205,"lot_number":11,"block_num":17,"name":null,"house_id":205},"geometry":{"type":"Point","coordinates":[0.000096080537529,-0.001670789728123]}},
