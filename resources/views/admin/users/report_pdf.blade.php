@@ -161,7 +161,7 @@
 
     <!-- Official Masthead (Pure Monochrome) -->
     <div class="header">
-        <h1>Tagbong Residences / Alteza Ville Homeowners Association</h1>
+        <h1>Althesa Village Subdivision Users</h1>
         <p>Zone 1, Tagbong, Pili, Camarines Sur, 4418 &bull; Management &amp; Administrative Office</p>
         <p class="sub-header">Identity &amp; System Access Control Division &bull; Official Registry System</p>
     </div>
@@ -268,7 +268,7 @@
     <!-- Clean Footer -->
     <div class="footer">
         <div class="footer-left">
-            Tagbong Residences &bull; Official Database Report &bull; Generated from Subdivision Management System
+            Althesa Village Subdivision &bull; Official Database Report &bull; Generated from Subdivision Management System
         </div>
         <div class="footer-right">
             Confidential &bull; Internal Use Only

@@ -227,29 +227,27 @@
                     timeSelect.innerHTML = '<option value="">Select a time...</option>';
                     timeSelect.disabled = false;
 
+                    let addedCount = 0;
                     availableHours.forEach(hour => {
                         const isTaken = isTakenSlot(dateRaw, hour);
                         const lead = slotLeadMs(dateRaw, hour);
 
+                        // Remove unavailable time slots (taken, past, or within 1 hour cutoff)
+                        if (isTaken || lead < 60 * 60 * 1000) {
+                            return;
+                        }
+
                         const option = document.createElement('option');
                         option.value = hour;
-                        if (isTaken) {
-                            option.textContent = `${hour} (Taken)`;
-                            option.disabled = true;
-                            option.style.color = '#dc2626';
-                            option.style.backgroundColor = '#fef2f2';
-                        } else if (lead <= 0) {
-                            option.textContent = `${hour} (Past)`;
-                            option.disabled = true;
-                            option.style.color = '#6b7280';
-                            option.style.backgroundColor = '#f3f4f6';
-                        } else if (lead < 60 * 60 * 1000) {
-                            return;
-                        } else {
-                            option.textContent = hour;
-                        }
+                        option.textContent = hour;
                         timeSelect.appendChild(option);
+                        addedCount++;
                     });
+
+                    if (addedCount === 0) {
+                        timeSelect.innerHTML = '<option value="">No available time slots</option>';
+                        timeSelect.disabled = true;
+                    }
                 }
 
                 document.getElementById('appointmentForm').addEventListener('submit', function(e) {
