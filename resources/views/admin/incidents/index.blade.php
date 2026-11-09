@@ -35,18 +35,14 @@
     </div>
 
     <!-- Summary Metric Cards -->
-    <div class="responsive-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;">
+    <div class="responsive-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
         <div onclick="filterByQuickStatus('all')" style="background: #fff; padding: 18px 20px; border-radius: 16px; border: 1px solid var(--bill-border); border-left: 4px solid var(--bill-primary); cursor: pointer; transition: transform 0.15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
             <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Incidents</div>
             <div id="statTotal" style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $incidentsList->count() }}</div>
         </div>
-        <div onclick="filterByQuickStatus('pending')" style="background: #fff; padding: 18px 20px; border-radius: 16px; border: 1px solid var(--bill-border); border-left: 4px solid #ef4444; cursor: pointer; transition: transform 0.15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
-            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Pending Review</div>
-            <div id="statPending" style="font-size: 28px; font-weight: 800; color: #ef4444; margin-top: 4px;">{{ $incidentsList->where('status', 'pending')->count() }}</div>
-        </div>
         <div onclick="filterByQuickStatus('progress')" style="background: #fff; padding: 18px 20px; border-radius: 16px; border: 1px solid var(--bill-border); border-left: 4px solid #3b82f6; cursor: pointer; transition: transform 0.15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
             <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">In Progress</div>
-            <div id="statProgress" style="font-size: 28px; font-weight: 800; color: #3b82f6; margin-top: 4px;">{{ $incidentsList->where('status', 'progress')->count() }}</div>
+            <div id="statProgress" style="font-size: 28px; font-weight: 800; color: #3b82f6; margin-top: 4px;">{{ $incidentsList->where('status', '!=', 'resolved')->count() }}</div>
         </div>
         <div onclick="filterByQuickStatus('resolved')" style="background: #fff; padding: 18px 20px; border-radius: 16px; border: 1px solid var(--bill-border); border-left: 4px solid #10b981; cursor: pointer; transition: transform 0.15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
             <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Resolved</div>
@@ -74,7 +70,6 @@
             <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 6px; display: block;">Status</label>
             <select id="statusFilter" class="filter-select" onchange="applyIncidentFilters()" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #fff;">
                 <option value="all">All Statuses</option>
-                <option value="pending">Pending</option>
                 <option value="progress">In Progress</option>
                 <option value="resolved">Resolved</option>
             </select>
@@ -104,16 +99,17 @@
                         @php
                             $cat = $inc['type'] ?? 'Others';
                             $meta = $categoryMeta[$cat] ?? $categoryMeta['Others'];
-                            $status = strtolower($inc['status'] ?? 'pending');
+                            $status = strtolower($inc['status'] ?? 'progress');
+                            if ($status === 'pending') {
+                                $status = 'progress';
+                            }
                             $statusLabel = match($status) {
-                                'progress' => 'In Progress',
                                 'resolved' => 'Resolved',
-                                default => 'Pending'
+                                default => 'In Progress'
                             };
                             $statusClass = match($status) {
-                                'progress' => 'badge-primary',
                                 'resolved' => 'badge-success',
-                                default => 'badge-danger'
+                                default => 'badge-primary'
                             };
                             $photoCount = is_array($inc['photos'] ?? null) ? count($inc['photos']) : (!empty($inc['img']) ? 1 : 0);
                             $hasVideo = !empty($inc['video']) || !empty($inc['video_url']);
@@ -245,7 +241,6 @@
             <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
                 <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Update Triage Status</span>
                 <select id="modalIncStatus" class="filter-select" style="width: 100%; margin-top: 8px; padding: 10px; border-radius: 8px; font-weight: 700; background: #fff; border: 1px solid #cbd5e1; font-size: 13px;">
-                    <option value="pending">Pending</option>
                     <option value="progress">In Progress</option>
                     <option value="resolved">Resolved</option>
                 </select>
