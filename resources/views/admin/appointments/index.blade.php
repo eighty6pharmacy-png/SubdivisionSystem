@@ -969,24 +969,21 @@
                                 );
                                 const lead = appointmentLeadMs(dateRaw, hour);
 
+                                // Remove unavailable time slots (taken, past, or within 1 hour cutoff)
+                                if (isTaken || lead < 60 * 60 * 1000) {
+                                    return;
+                                }
+
                                 const option = document.createElement('option');
                                 option.value = hour;
-                                if (isTaken) {
-                                    option.textContent = `${hour} (Taken)`;
-                                    option.disabled = true;
-                                    option.style.color = '#dc2626';
-                                    option.style.backgroundColor = '#fef2f2';
-                                } else if (lead <= 0) {
-                                    option.textContent = `${hour} (Past)`;
-                                    option.disabled = true;
-                                    option.style.color = '#6b7280';
-                                } else if (lead < 60 * 60 * 1000) {
-                                    return;
-                                } else {
-                                    option.textContent = hour;
-                                }
+                                option.textContent = hour;
                                 timeSelect.appendChild(option);
                             });
+
+                            if (timeSelect.options.length <= 1) {
+                                timeSelect.innerHTML = '<option value="">No available time slots</option>';
+                                timeSelect.disabled = true;
+                            }
                         }
                     }
                 });
