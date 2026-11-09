@@ -364,17 +364,18 @@
 
             if (matches) {
                 visibleCount++;
-                if (rowStatus === 'pending') pendingCount++;
-                if (rowStatus === 'progress') progressCount++;
-                if (rowStatus === 'resolved') resolvedCount++;
+                if (rowStatus === 'resolved') {
+                    resolvedCount++;
+                } else {
+                    progressCount++;
+                }
             }
         });
 
         // Update stats
         document.getElementById('statTotal').textContent = visibleCount;
-        document.getElementById('statPending').textContent = pendingCount;
-        document.getElementById('statProgress').textContent = progressCount;
-        document.getElementById('statResolved').textContent = resolvedCount;
+        if (document.getElementById('statProgress')) document.getElementById('statProgress').textContent = progressCount;
+        if (document.getElementById('statResolved')) document.getElementById('statResolved').textContent = resolvedCount;
 
         if (window.incidentsTablePagination) {
             window.incidentsTablePagination.resetPage();
@@ -404,7 +405,7 @@
         }
         document.getElementById('modalIncDate').textContent = formattedDate;
         document.getElementById('modalIncDesc').textContent = inc.desc;
-        document.getElementById('modalIncStatus').value = inc.status;
+        document.getElementById('modalIncStatus').value = (inc.status || 'progress').toLowerCase() === 'resolved' ? 'resolved' : 'progress';
 
         const fullViewLink = document.getElementById('modalIncFullView');
         if (fullViewLink) {
@@ -488,8 +489,8 @@
                     row.dataset.status = newStatus.toLowerCase();
                     const statusTd = row.children[5];
                     if (statusTd) {
-                        const statusClass = newStatus === 'resolved' ? 'badge-success' : (newStatus === 'progress' ? 'badge-primary' : 'badge-danger');
-                        const statusLabel = newStatus === 'resolved' ? 'RESOLVED' : (newStatus === 'progress' ? 'IN PROGRESS' : 'PENDING');
+                        const statusClass = newStatus === 'resolved' ? 'badge-success' : 'badge-primary';
+                        const statusLabel = newStatus === 'resolved' ? 'RESOLVED' : 'IN PROGRESS';
                         statusTd.innerHTML = `<span class="badge ${statusClass}" style="padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">${statusLabel}</span>`;
                         statusTd.setAttribute('data-sort-val', newStatus.toLowerCase());
                     }
