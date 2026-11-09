@@ -363,11 +363,23 @@
                                 Address *</label><input type="text" name="present_address" id="inp_present_address" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
-                        <div style="grid-column: span 3;"><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Postal
-                                Address *</label><input type="text" name="postal_address" id="inp_postal_address" required
+                        <div style="grid-column: span 3;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <label class="form-label" style="margin: 0; font-size: 12px; font-weight: 600;">Postal Address *</label>
+                                <button type="button" id="btn_copy_address" onclick="copyPresentAddress()"
+                                    style="background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 6px; padding: 2px 10px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; transition: all 0.15s ease;"
+                                    title="Copy Present Address to Postal Address">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                    </svg>
+                                    <span>Same as Present Address</span>
+                                </button>
+                            </div>
+                            <input type="text" name="postal_address" id="inp_postal_address" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly"></div>
+                                class="view-readonly">
+                        </div>
                         <div><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Type of ID *</label>
                             <select name="id_type" id="inp_id_type" required
@@ -546,6 +558,13 @@
             btnElement.classList.add('active');
         }
 
+        function copyPresentAddress() {
+            const present = document.getElementById('inp_present_address').value;
+            const postalInput = document.getElementById('inp_postal_address');
+            postalInput.value = present;
+            postalInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
         function syncSpouseField() {
             const status = document.getElementById('inp_civil_status').value;
             const spouse = document.getElementById('inp_spouse_name');
@@ -576,6 +595,11 @@
             const lotsContent = document.getElementById('view_reserved_lots_content');
             if (lotsSection) lotsSection.style.display = 'none';
             if (lotsContent) lotsContent.innerHTML = '';
+
+            const copyBtn = document.getElementById('btn_copy_address');
+            if (copyBtn) {
+                copyBtn.style.display = (mode === 'view') ? 'none' : 'inline-flex';
+            }
 
             if (mode === 'add') {
                 document.getElementById('modalTitle').textContent = 'Add New Buyer';

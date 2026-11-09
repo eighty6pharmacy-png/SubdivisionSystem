@@ -15,7 +15,7 @@ return new class extends Migration
             $table->string('type');
             $table->text('description');
             $table->string('image_url')->nullable();
-            $table->string('status')->default('pending'); // pending, progress, resolved
+            $table->string('status')->default('progress'); // progress, resolved
             $table->timestamps();
             $table->softDeletes();
 

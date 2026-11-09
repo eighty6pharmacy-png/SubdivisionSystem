@@ -109,14 +109,13 @@ async function bindGisDropdowns(blockSelectId, lotSelectId, options = {}) {
             return;
         }
         const lots = map[b] || [];
-        lotSelect.innerHTML = (includePlaceholder ? lotPlaceholder : '') + lots.map(lObj => {
-            // Is it the currently selected lot for this existing resident/reservation?
-            const isCurrent = (currentLot == lObj.lot);
-            // It's selectable if it's available or if it's the current lot being edited
-            const isAvail = lObj.available || isCurrent;
-            const disabled = isAvail ? '' : 'disabled';
-            const color = isAvail ? '' : 'color: #94a3b8; background-color: #f1f5f9;';
-            return `<option value="${lObj.lot}" ${disabled} style="${color}">${lotPrefix}${lObj.lot}</option>`;
+        const availableLots = lots.filter(lObj => lObj.available || (currentLot == lObj.lot));
+        if (availableLots.length === 0) {
+            lotSelect.innerHTML = `<option value="">No available lots</option>`;
+            return;
+        }
+        lotSelect.innerHTML = (includePlaceholder ? lotPlaceholder : '') + availableLots.map(lObj => {
+            return `<option value="${lObj.lot}">${lotPrefix}${lObj.lot}</option>`;
         }).join('');
     };
 
