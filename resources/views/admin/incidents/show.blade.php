@@ -19,7 +19,7 @@
                 <span class="incident-type">{{ $inc['type'] }}</span>
                 <h1 style="font-size: 24px; font-weight: 700; color: var(--incident-text-main); margin-top: 4px;">INC-{{ str_pad($inc['id'], 5, '0', STR_PAD_LEFT) }} — {{ $inc['sub'] }}</h1>
                 <div class="incident-meta" style="margin-top: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <span class="badge-premium badge-{{ strtolower($inc['status']) }}">{{ ucfirst($inc['status']) === 'Pending' ? 'Pending Review' : ucfirst($inc['status']) }}</span>
+                    <span class="badge-premium badge-{{ strtolower($inc['status']) === 'resolved' ? 'resolved' : 'progress' }}">{{ strtolower($inc['status']) === 'resolved' ? 'Resolved' : 'In Progress' }}</span>
                     <span>&bull;</span>
                     <span>Reported by: <strong>{{ $inc['res'] }}</strong></span>
                     <span>&bull;</span>
@@ -84,9 +84,8 @@
                     <div class="detail-item" style="margin-top: 10px;">
                         <span class="detail-label">Current Status</span>
                         <select id="statusSelect" class="form-input" style="width: 100%; border-radius: 8px; padding: 10px; border: 1px solid #cbd5e1; font-weight: 600; background: #fff; margin-top: 6px;">
-                            <option value="pending" {{ strtolower($inc['status']) == 'pending' ? 'selected' : '' }}>Pending</option>
-                            <option value="progress" {{ strtolower($inc['status']) == 'progress' ? 'selected' : '' }}>In Progress</option>
-                            <option value="resolved" {{ strtolower($inc['status']) == 'resolved' ? 'selected' : '' }}>Resolved</option>
+                            <option value="progress" {{ strtolower($inc['status']) !== 'resolved' ? 'selected' : '' }}>In Progress</option>
+                            <option value="resolved" {{ strtolower($inc['status']) === 'resolved' ? 'selected' : '' }}>Resolved</option>
                         </select>
                     </div>
                     <div style="margin-top: 12px;">
