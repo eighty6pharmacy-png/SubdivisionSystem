@@ -84,7 +84,7 @@
         </div>
         <div class="stat-box">
             <div style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Active Issues</div>
-            <div style="font-size: 24px; font-weight: 800; color: #3b82f6; margin-top: 4px;">{{ collect($incidents)->whereIn('status', ['pending', 'progress'])->count() }}</div>
+            <div style="font-size: 24px; font-weight: 800; color: #3b82f6; margin-top: 4px;">{{ collect($incidents)->where('status', '!=', 'resolved')->count() }}</div>
         </div>
         <div class="stat-box">
             <div style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Resolved</div>
@@ -104,7 +104,9 @@
                 $incDesc = is_array($inc) ? ($inc['description'] ?? ($inc['desc'] ?? '')) : ($inc->description ?? '');
                 $incType = is_array($inc) ? ($inc['type'] ?? 'General') : ($inc->type ?? 'General');
                 $incId = is_array($inc) ? ($inc['id'] ?? '') : ($inc->id ?? '');
-                $incStatus = strtolower(is_array($inc) ? ($inc['status'] ?? 'pending') : ($inc->status ?? 'pending'));
+                $incStatus = strtolower(is_array($inc) ? ($inc['status'] ?? 'progress') : ($inc->status ?? 'progress'));
+                if ($incStatus === 'pending') $incStatus = 'progress';
+                $statusLabel = $incStatus === 'resolved' ? 'Resolved' : 'In Progress';
                 $incDate = is_array($inc) ? ($inc['created_at'] ?? null) : ($inc->created_at ?? null);
                 $timeAgo = $incDate ? \Carbon\Carbon::parse($incDate)->diffForHumans() : 'Recently';
                 $refDisplay = is_numeric($incId) ? 'INC-' . str_pad($incId, 5, '0', STR_PAD_LEFT) : $incId;
@@ -121,7 +123,7 @@
                     </div>
                 </div>
                 <div class="incident-status">
-                    <span class="badge-status badge-{{ $incStatus }}">{{ ucfirst($incStatus) }}</span>
+                    <span class="badge-status badge-{{ $incStatus }}">{{ $statusLabel }}</span>
                     <button class="btn btn-outline" onclick="openDetailsModal('{{ $incId }}')" style="padding: 4px 12px; font-size: 11px; border-radius: 6px;">View Details</button>
                 </div>
             </div>
@@ -251,7 +253,7 @@
                     <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
                 </div>
                 <h3 style="font-size: 20px; font-weight: 800; color: #1e293b; margin: 0;">Report Submitted</h3>
-                <p style="color: #64748b; margin-top: 8px;">Our maintenance and security team will review your report shortly. Your reference ID is <span id="successReferenceId" style="font-family: monospace; font-weight: 800; color: #0f172a;">INC-PENDING</span>.</p>
+                <p style="color: #64748b; margin-top: 8px;">Our maintenance and security team will review your report shortly. Your reference ID is <span id="successReferenceId" style="font-family: monospace; font-weight: 800; color: #0f172a;">INC-...</span>.</p>
             </div>
         </div>
         <div class="modal-footer" id="modalFooter">
@@ -274,7 +276,7 @@
         <div class="modal-body" style="padding-top: 10px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                 <div style="font-size: 13px; color: #64748b;">Reference ID: <strong id="detId" style="color: #0f172a;">INC-1001</strong></div>
-                <span id="detStatus" class="badge-status badge-pending">Pending</span>
+                <span id="detStatus" class="badge-status badge-progress">In Progress</span>
             </div>
 
             <div style="margin-bottom: 24px;">
