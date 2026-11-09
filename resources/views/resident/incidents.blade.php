@@ -356,7 +356,7 @@
             date: inc.created_at || inc.date,
             updated: inc.updated_at,
             desc: inc.description || inc.desc || 'No description provided.',
-            status: (inc.status || 'pending').toLowerCase(),
+            status: ((inc.status || 'progress').toLowerCase() === 'pending' ? 'progress' : (inc.status || 'progress').toLowerCase()),
             photos: parsedPhotos,
             video: inc.video_url || inc.video || null,
         };
@@ -388,7 +388,8 @@
         incidents.forEach(inc => {
             const card = document.createElement('div');
             card.className = 'incident-card';
-            const statusClass = inc.status || 'pending';
+            const statusClass = inc.status === 'resolved' ? 'resolved' : 'progress';
+            const statusLabel = statusClass === 'resolved' ? 'Resolved' : 'In Progress';
             const shortDesc = inc.desc.length > 80 ? inc.desc.substring(0, 80) + '...' : inc.desc;
             
             const mediaBadges = [];
@@ -413,7 +414,7 @@
                     </div>
                 </div>
                 <div class="incident-status">
-                    <span class="badge-status badge-${statusClass}">${escapeHtml(statusClass.charAt(0).toUpperCase() + statusClass.slice(1))}</span>
+                    <span class="badge-status badge-${statusClass}">${escapeHtml(statusLabel)}</span>
                     <button class="btn btn-outline" onclick="openDetailsModal('${inc.id}')" style="padding: 4px 12px; font-size: 11px; border-radius: 6px;">View Details</button>
                 </div>
             `;
@@ -1013,9 +1014,9 @@
         document.getElementById('detDesc').textContent = inc.desc;
         
         const statusEl = document.getElementById('detStatus');
-        const statusClass = inc.status || 'pending';
+        const statusClass = inc.status === 'resolved' ? 'resolved' : 'progress';
         statusEl.className = 'badge-status badge-' + statusClass;
-        statusEl.textContent = statusClass.charAt(0).toUpperCase() + statusClass.slice(1);
+        statusEl.textContent = statusClass === 'resolved' ? 'Resolved' : 'In Progress';
         
         const photoContainer = document.getElementById('detPhotos');
         const photoWrapper = document.getElementById('detPhotosContainer');
@@ -1060,10 +1061,10 @@
             </div>
         `;
 
-        if (statusClass !== 'pending') {
-            let color = statusClass === 'resolved' ? '#10b981' : '#f59e0b';
-            let title = statusClass === 'resolved' ? 'Issue Resolved' : 'Status Updated';
-            let desc = statusClass === 'resolved' ? 'The admin has marked this incident as resolved.' : 'The administrative review updated the status.';
+        if (statusClass === 'resolved') {
+            let color = '#10b981';
+            let title = 'Issue Resolved';
+            let desc = 'The admin has marked this incident as resolved.';
             
             timelineHtml += `
                 <div style="display: flex; gap: 12px;">
