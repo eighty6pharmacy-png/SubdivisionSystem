@@ -115,13 +115,31 @@
                     @endif
                 </form>
             </div>
+            @php
+                $curSort = request('sort_by', 'created_at');
+                $curDir = strtolower(request('sort_dir', 'desc'));
+                $getSortUrl = function($col) use ($curSort, $curDir) {
+                    $nextDir = ($curSort === $col && $curDir === 'asc') ? 'desc' : 'asc';
+                    $params = request()->query();
+                    $params['sort_by'] = $col;
+                    $params['sort_dir'] = $nextDir;
+                    $params['page'] = 1;
+                    return route('buyer-master-list.index', $params);
+                };
+                $getSortIcon = function($col) use ($curSort, $curDir) {
+                    if ($curSort !== $col) return '<span style="opacity:0.35;margin-left:5px;font-size:11px;">⇅</span>';
+                    return $curDir === 'asc' 
+                        ? '<span style="margin-left:5px;font-size:11px;color:#0284c7;font-weight:bold;">▲</span>' 
+                        : '<span style="margin-left:5px;font-size:11px;color:#0284c7;font-weight:bold;">▼</span>';
+                };
+            @endphp
             <div class="bill-table-container" style="overflow-x: auto;">
                 <table class="bill-table" style="min-width: 1240px;">
                     <thead>
                         <tr>
-                            <th>First Name</th>
+                            <th><a href="{{ $getSortUrl('first_name') }}" style="color: inherit; text-decoration: none; display: inline-flex; align-items: center;" title="Sort by First Name">First Name {!! $getSortIcon('first_name') !!}</a></th>
                             <th>Middle Name</th>
-                            <th>Last Name</th>
+                            <th><a href="{{ $getSortUrl('last_name') }}" style="color: inherit; text-decoration: none; display: inline-flex; align-items: center;" title="Sort by Last Name">Last Name {!! $getSortIcon('last_name') !!}</a></th>
                             <th>Reserved Lot(s)</th>
                             <th>Contract Amount</th>
                             <th>Equity</th>

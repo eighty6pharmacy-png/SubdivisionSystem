@@ -4,7 +4,6 @@ namespace App\Enums;
 
 enum IncidentStatus: string
 {
-    case Pending = 'pending';
     case Progress = 'progress';
     case Resolved = 'resolved';
 

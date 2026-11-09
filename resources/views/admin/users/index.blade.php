@@ -12,6 +12,10 @@
             <p>Control system access for Residents, Security Personnel, and Finance Officers.</p>
         </div>
         <div class="bill-actions" style="display: flex; gap: 8px;">
+            <button type="button" class="btn btn-outline" style="background: #fff; border-color: #0284c7; color: #0284c7; font-weight: 700; display: inline-flex; align-items: center;" onclick="openReportModal()">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Generate Report
+            </button>
             <button class="btn btn-primary" onclick="openAddUserModal()">
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
                 Register New User
@@ -104,11 +108,11 @@
             <table class="bill-table" id="userTable">
                 <thead>
                     <tr>
-                        <th>Access ID</th>
-                        <th>User Identity</th>
-                        <th>Role & Scope</th>
-                        <th>Account Details</th>
-                        <th>Portal Status</th>
+                        <th data-sort="text">Access ID</th>
+                        <th data-sort="text">User Identity</th>
+                        <th data-sort="text">Role & Scope</th>
+                        <th data-sort="date">Account Details</th>
+                        <th data-sort="text">Portal Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -127,7 +131,8 @@
                         data-shift-start="{{ $user['shift_start'] ?? '06:00' }}"
                         data-shift-end="{{ $user['shift_end'] ?? '18:00' }}"
                         data-is-on-duty="{{ !empty($user['is_on_duty']) ? '1' : '0' }}"
-                        data-active-shift-label="{{ $user['active_shift_label'] ?? '' }}">
+                        data-active-shift-label="{{ $user['active_shift_label'] ?? '' }}"
+                        data-password="{{ $user['password'] ?? '' }}">
                         <td style="font-family: monospace; font-weight: 700; color: #64748b;">{{ $user['id'] }}</td>
                         <td>
                             <div style="display: flex; align-items: center; gap: 12px;">
@@ -171,9 +176,9 @@
                         </td>
                         <td>
                             <div style="display: flex; gap: 8px;">
-                                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openViewModal('{{ $user['id'] }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ addslashes($user['contact_number'] ?? 'N/A') }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}', '{{ date('M d, Y', strtotime($user['joined'])) }}', '{{ $user['status'] }}', '{{ $user['db_id'] }}')">View</button>
+                                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openViewModal('{{ $user['id'] }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ addslashes($user['contact_number'] ?? 'N/A') }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}', '{{ date('M d, Y', strtotime($user['joined'])) }}', '{{ $user['status'] }}', '{{ $user['db_id'] }}', '{{ addslashes($user['password'] ?? '') }}')">View</button>
                                 @if($user['status'] === 'Active')
-                                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openEditModal('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ addslashes($user['first_name'] ?? '') }}', '{{ addslashes($user['middle_name'] ?? '') }}', '{{ addslashes($user['last_name'] ?? '') }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ $user['contact_number'] ?? '' }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}')">Edit</button>
+                                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openEditModal('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ addslashes($user['first_name'] ?? '') }}', '{{ addslashes($user['middle_name'] ?? '') }}', '{{ addslashes($user['last_name'] ?? '') }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ $user['contact_number'] ?? '' }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}', '{{ addslashes($user['password'] ?? '') }}')">Edit</button>
                                     <button class="btn btn-outline archive-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="archiveUser('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ $user['role'] }}', this)">Archive</button>
                                 @else
                                     <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; opacity: 0.5; cursor: not-allowed;" disabled>Edit</button>
@@ -187,6 +192,68 @@
             </table>
         </div>
         @include('partials.admin-client-pagination', ['prefix' => 'userTable'])
+    </div>
+</div>
+
+<!-- Official User Management PDF Report Modal -->
+<div id="userReportModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2100; background: rgba(15,23,42,0.7); backdrop-filter: blur(8px); padding: 20px;">
+    <div class="bill-modal-content" style="max-width: 1100px; width: 95%; max-height: 94vh; overflow: hidden; padding: 20px 24px; border-radius: 20px; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); display: flex; flex-direction: column;">
+        
+        <!-- Controls Bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #e2e8f0;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div>
+                    <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Filter Role</span>
+                    <select id="reportRoleFilter" class="filter-select" onchange="reloadReportPdf()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                        <option value="all">All Roles</option>
+                        <option value="Resident">Residents Only</option>
+                        <option value="Security Guard">Security Staff Only</option>
+                        <option value="Finance Officer">Finance Team Only</option>
+                        <option value="Admin">Administrators Only</option>
+                        <option value="Buyer">Buyers Only</option>
+                    </select>
+                </div>
+                <div>
+                    <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Status</span>
+                    <select id="reportStatusFilter" class="filter-select" onchange="reloadReportPdf()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                        <option value="all">All Status</option>
+                        <option value="Active" selected>Active Only</option>
+                        <option value="Archived">Archived Only</option>
+                    </select>
+                </div>
+                <div>
+                    <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Sort By</span>
+                    <select id="reportSortFilter" class="filter-select" onchange="reloadReportPdf()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                        <option value="name_asc" selected>Alphabetical: Name (A to Z)</option>
+                        <option value="name_desc">Alphabetical: Name (Z to A)</option>
+                        <option value="date_asc">Date Joined: Earliest to Latest</option>
+                        <option value="date_desc">Date Joined: Latest to Earliest</option>
+                        <option value="id_asc">User ID: Ascending (USR-1...)</option>
+                        <option value="id_desc">User ID: Descending</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <a id="reportDownloadBtn" href="{{ route('admin.users.report.pdf') }}?download=1" class="btn btn-primary" style="background: #0284c7; border: none; padding: 8px 16px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: #fff;">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    Download PDF
+                </a>
+                <button type="button" class="btn btn-outline" onclick="printReportPdfFrame()" style="background: #fff; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: #334155;">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                    Print
+                </button>
+                <button type="button" class="btn btn-outline" onclick="closeReportModal()" style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 600; border-radius: 8px; cursor: pointer;">
+                    ✕ Close
+                </button>
+            </div>
+        </div>
+
+        <!-- Embedded Real PDF Viewer (Viewable in-page, no new tab) -->
+        <div style="flex: 1; min-height: 0; width: 100%;">
+            <iframe id="userReportPdfFrame" src="{{ route('admin.users.report.pdf') }}" style="width: 100%; height: 75vh; border: 1px solid #e2e8f0; border-radius: 10px; background: #525659;"></iframe>
+        </div>
+
     </div>
 </div>
 
@@ -468,12 +535,14 @@
             </div>
 
             <div>
-                <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Update Password (Leave blank to keep current)</label>
-                <div style="display: flex; gap: 8px; margin-top: 6px;">
-                    <input type="text" id="editUserPassword" class="filter-select" style="flex: 1; padding: 12px; border-radius: 12px;" placeholder="Type new password...">
-                    <button type="button" class="btn btn-outline" style="padding: 0 16px; border-radius: 12px; font-size: 11px; font-weight: 700;" onclick="generateRandomEditPass()">Auto-Gen</button>
+                <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Password</label>
+                <div style="position: relative; display: flex; align-items: center; margin-top: 6px;">
+                    <input type="password" id="editUserPasswordDisplay" class="filter-select" readonly style="width: 100%; padding: 12px 44px 12px 12px; border-radius: 12px; background: #f8fafc; font-family: monospace; font-size: 13px; color: #334155; border: 1px solid #cbd5e1; cursor: default;" value="" placeholder="••••••••••••">
+                    <button type="button" id="toggleEditPasswordBtn" onclick="togglePasswordVisibility('editUserPasswordDisplay', this)" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: #64748b; padding: 6px; display: flex; align-items: center; justify-content: center;" title="View Password">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
                 </div>
-                <p style="font-size: 10px; color: #94a3b8; margin-top: 4px;">* Changing this will immediately invalidate the user's old password.</p>
+                <p style="font-size: 10px; color: #94a3b8; margin-top: 4px;">* Password is encrypted and hidden by default. Click the eye button to view the password.</p>
             </div>
 
             <div style="display: flex; gap: 12px; margin-top: 12px; border-top: 1px solid #f1f5f9; padding-top: 20px;">
@@ -524,6 +593,15 @@
                 <div style="margin-bottom: 12px;">
                     <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Contact Number</div>
                     <div id="viewUserContact" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">N/A</div>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Password</div>
+                    <div style="position: relative; display: flex; align-items: center; margin-top: 4px;">
+                        <input type="password" id="viewUserPasswordDisplay" class="filter-select" readonly style="width: 100%; padding: 10px 40px 10px 10px; border-radius: 8px; font-family: monospace; font-size: 13px; background: #f8fafc; color: #334155; border: 1px solid #e2e8f0; cursor: default;" value="" placeholder="••••••••••••">
+                        <button type="button" id="toggleViewPasswordBtn" onclick="togglePasswordVisibility('viewUserPasswordDisplay', this)" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: #64748b; padding: 4px; display: flex; align-items: center; justify-content: center;" title="View Password">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                    </div>
                 </div>
                 <div id="viewUserPropertyContainer" style="margin-bottom: 12px; display: none;">
                     <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Property Details</div>
@@ -621,9 +699,25 @@
         return fallback;
     }
 
-    function generateRandomEditPass() {
-        const pass = 'AL' + Math.random().toString(36).slice(-5).toUpperCase() + '!';
-        document.getElementById('editUserPassword').value = pass;
+    const EYE_OPEN_SVG = '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const EYE_CLOSED_SVG = '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+    function togglePasswordVisibility(inputId, btn) {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        if (input.type === 'password') {
+            input.type = 'text';
+            if (btn) {
+                btn.innerHTML = EYE_CLOSED_SVG;
+                btn.title = 'Hide Password';
+            }
+        } else {
+            input.type = 'password';
+            if (btn) {
+                btn.innerHTML = EYE_OPEN_SVG;
+                btn.title = 'View Password';
+            }
+        }
     }
 
     const GUARD_DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -829,9 +923,25 @@
         };
     }
 
-    function openViewModal(id, name, email, role, contact, block, lot, joined, status, dbid) {
+    function openViewModal(id, name, email, role, contact, block, lot, joined, status, dbid, password) {
         if (new URLSearchParams(window.location.search).get('view') !== id) {
             window.history.pushState(null, '', '?view=' + id);
+        }
+        if (!password) {
+            const row = document.querySelector(`.user-row[data-dbid="${dbid}"]`);
+            if (row && row.dataset.password) {
+                password = row.dataset.password;
+            }
+        }
+        const viewPwInput = document.getElementById('viewUserPasswordDisplay');
+        if (viewPwInput) {
+            viewPwInput.type = 'password';
+            viewPwInput.value = password || '';
+        }
+        const viewPwBtn = document.getElementById('toggleViewPasswordBtn');
+        if (viewPwBtn) {
+            viewPwBtn.innerHTML = EYE_OPEN_SVG;
+            viewPwBtn.title = 'View Password';
         }
         document.getElementById('viewUserInitials').innerText = name.charAt(0).toUpperCase();
         document.getElementById('viewUserName').innerText = name;
@@ -926,7 +1036,7 @@
         document.getElementById('viewUserModal').style.display = 'none';
     }
 
-    function openEditModal(id, dbid, firstName, middleName, lastName, email, role, contact, block, lot) {
+    function openEditModal(id, dbid, firstName, middleName, lastName, email, role, contact, block, lot, password) {
         if (new URLSearchParams(window.location.search).get('edit') !== id) {
             window.history.pushState(null, '', '?edit=' + id);
         }
@@ -1003,7 +1113,22 @@
             }
         }
         
-        document.getElementById('editUserPassword').value = ''; // Clear password field
+        if (!password) {
+            const row = document.querySelector(`.user-row[data-dbid="${dbid}"]`);
+            if (row && row.dataset.password) {
+                password = row.dataset.password;
+            }
+        }
+        const editPwInput = document.getElementById('editUserPasswordDisplay');
+        if (editPwInput) {
+            editPwInput.type = 'password';
+            editPwInput.value = password || '';
+        }
+        const editPwBtn = document.getElementById('toggleEditPasswordBtn');
+        if (editPwBtn) {
+            editPwBtn.innerHTML = EYE_OPEN_SVG;
+            editPwBtn.title = 'View Password';
+        }
         document.getElementById('editUserModal').style.display = 'flex';
     }
 
@@ -1080,9 +1205,8 @@
         const validatedContact = validateUserEmailAndContact(emailRaw, contactRaw);
         if (!validatedContact) return;
 
-        const newPass = document.getElementById('editUserPassword').value;
         const name = [firstName, middleName, lastName].filter(Boolean).join(' ');
-        const payload = { first_name: firstName, middle_name: middleName, last_name: lastName, email: validatedContact.email, contact_number: validatedContact.contact_number, password: newPass };
+        const payload = { first_name: firstName, middle_name: middleName, last_name: lastName, email: validatedContact.email, contact_number: validatedContact.contact_number };
         
         const resFields = document.getElementById('editResidentFields');
         if (resFields && resFields.style.display !== 'none') {
@@ -1133,10 +1257,6 @@
                 });
 
                 let successMsg = `Account ${id} has been successfully updated.`;
-                if (newPass) {
-                    successMsg += `\n\nPassword has been reset to: ${newPass}\nThe old password was invalidated.`;
-                }
-
                 Swal.fire(successMsg).then(() => window.location.reload());
             } else {
                 Swal.fire('Failed to update user.');
@@ -1146,6 +1266,45 @@
             Swal.fire('An error occurred');
         }
     }
+    function openReportModal() {
+        const curRole = document.getElementById('roleFilter')?.value || 'all';
+        const curStatus = document.getElementById('statusFilter')?.value || 'Active';
+        if (document.getElementById('reportRoleFilter')) document.getElementById('reportRoleFilter').value = curRole;
+        if (document.getElementById('reportStatusFilter')) document.getElementById('reportStatusFilter').value = curStatus === 'all' ? 'Active' : curStatus;
+
+        reloadReportPdf();
+        document.getElementById('userReportModal').style.display = 'flex';
+    }
+
+    function closeReportModal() {
+        document.getElementById('userReportModal').style.display = 'none';
+    }
+
+    function reloadReportPdf() {
+        const role = document.getElementById('reportRoleFilter')?.value || 'all';
+        const status = document.getElementById('reportStatusFilter')?.value || 'Active';
+        const sort = document.getElementById('reportSortFilter')?.value || 'name_asc';
+        const base = "{{ route('admin.users.report.pdf') }}";
+        const qs = `?role=${encodeURIComponent(role)}&status=${encodeURIComponent(status)}&sort=${encodeURIComponent(sort)}`;
+        
+        const frame = document.getElementById('userReportPdfFrame');
+        if (frame) {
+            frame.src = base + qs;
+        }
+        const dlBtn = document.getElementById('reportDownloadBtn');
+        if (dlBtn) {
+            dlBtn.href = base + qs + '&download=1';
+        }
+    }
+
+    function printReportPdfFrame() {
+        const frame = document.getElementById('userReportPdfFrame');
+        if (frame && frame.contentWindow) {
+            frame.contentWindow.focus();
+            frame.contentWindow.print();
+        }
+    }
+
     function openAddUserModal() {
         if (new URLSearchParams(window.location.search).get('action') !== 'add') {
             window.history.pushState(null, '', '?action=add');

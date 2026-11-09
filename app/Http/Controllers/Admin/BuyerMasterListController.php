@@ -41,7 +41,20 @@ class BuyerMasterListController extends Controller
             });
         }
 
-        $buyers = $query->orderBy('created_at', 'desc')->paginate(15)->withQueryString();
+        $perPage = in_array((int)$request->input('per_page'), [10, 15, 25, 50, 100], true)
+            ? (int)$request->input('per_page')
+            : 15;
+
+        $sortBy = $request->input('sort_by', 'created_at');
+        $sortDir = strtolower($request->input('sort_dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        if (in_array($sortBy, ['first_name', 'last_name', 'created_at'], true)) {
+            $query->orderBy($sortBy, $sortDir);
+        } else {
+            $query->orderBy('created_at', 'desc');
+        }
+
+        $buyers = $query->paginate($perPage)->withQueryString();
         $totalBuyers = BuyerMasterList::count();
         $cancelledBuyersCount = BuyerMasterList::onlyTrashed()->count();
         $availableLots = Lot::where('status', 'Available')->orderBy('block')->orderBy('lot_number')->get();
@@ -411,6 +424,7 @@ class BuyerMasterListController extends Controller
 
         $user->email = $email;
         $user->password = bcrypt($password);
+        $user->plain_password = $password;
         $user->contact_number = $user->contact_number ?: $buyer->contact_number;
         $user->status = 'Active';
         $user->joined_at = $user->joined_at ?: now();

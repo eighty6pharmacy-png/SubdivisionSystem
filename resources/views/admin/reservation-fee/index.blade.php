@@ -124,13 +124,13 @@
                 <table class="bill-table">
                     <thead>
                         <tr>
-                            <th>Buyer Name</th>
-                            <th>Block & Lot</th>
-                            <th>Contact Info</th>
-                            <th>Amount Paid</th>
-                            <th>Date Reserved</th>
-                            <th>Deadline</th>
-                            <th>Status</th>
+                            <th data-sort="text">Buyer Name</th>
+                            <th data-sort="text">Block & Lot</th>
+                            <th data-sort="text">Contact Info</th>
+                            <th data-sort="number">Amount Paid</th>
+                            <th data-sort="date">Date Reserved</th>
+                            <th data-sort="date">Deadline</th>
+                            <th data-sort="text">Status</th>
                             <th>Action</th>
                         </tr>
                     </thead>

@@ -29,6 +29,7 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => 'System Admin',
                 'password' => Hash::make('password123'),
+                'plain_password' => 'password123',
                 'contact_number' => '09123456789',
                 'status' => 'Active',
                 'joined_at' => now(),
@@ -46,6 +47,7 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => 'Security Officer',
                 'password' => Hash::make('password123'),
+                'plain_password' => 'password123',
                 'status' => 'Active',
                 'joined_at' => now(),
             ]
@@ -61,6 +63,7 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => 'Finance Department',
                 'password' => Hash::make('password123'),
+                'plain_password' => 'password123',
                 'status' => 'Active',
                 'joined_at' => now(),
             ]

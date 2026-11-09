@@ -22,7 +22,7 @@ return new class extends Migration
     private array $orders = [
         'users' => [
             'id', 'last_name', 'first_name', 'middle_name', 'external_id', 'email', 'contact_number',
-            'email_verified_at', 'password', 'status', 'joined_at', 'remember_token',
+            'email_verified_at', 'password', 'plain_password', 'status', 'joined_at', 'remember_token',
             'created_at', 'updated_at', 'deleted_at',
         ],
         'admins' => ['user_id', 'created_at', 'updated_at'],

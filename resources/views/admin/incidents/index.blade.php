@@ -1,213 +1,272 @@
 @extends('layouts.admin')
 
-@section('title', 'Incident reports')
+@section('title', 'Incident Management')
 
 @section('content')
+<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
 <link rel="stylesheet" href="{{ asset('css/admin-incidents.css') }}">
 
 @php
-    $inc_col = collect($incidents);
-    $groupedIncidents = $inc_col->groupBy('type');
-
-    $allCategories = ['Security', 'Maintenance', 'Utilities', 'Others'];
-    $categoryMeta  = [
+    $incidentsList = collect($incidents ?? []);
+    $categoryMeta = [
         'Security'    => ['icon' => '🛡️', 'color' => '#ef4444', 'bg' => '#fef2f2', 'border' => '#fecaca'],
         'Maintenance' => ['icon' => '🛠️', 'color' => '#f59e0b', 'bg' => '#fffbeb', 'border' => '#fde68a'],
-        'Utilities'   => ['icon' => '💡', 'color' => '#3b82f6', 'bg' => '#eff6ff', 'border' => '#bfdbfe'],
+        'Utilities'   => ['icon' => '💡', 'color' => '#0284c7', 'bg' => '#eff6ff', 'border' => '#bfdbfe'],
         'Others'      => ['icon' => '📁', 'color' => '#8b5cf6', 'bg' => '#f5f3ff', 'border' => '#ddd6fe'],
     ];
 @endphp
 
-<div class="incident-show-container fade-in">
+<div class="bill-container fade-in">
     <!-- Page Header -->
-    <div class="incident-header">
-        <div class="incident-title">
-            <h1>Incident Management</h1>
-            <p>Monitor and resolve community concerns. Select a category to view its reports.</p>
+    <div class="bill-header">
+        <div class="bill-title">
+            <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">Incident Management</h1>
+            <p style="font-size: 13px; color: #64748b; margin-top: 4px;">Monitor, triage, and resolve community security issues, utility faults, and resident reports.</p>
         </div>
-        <div class="incident-header-actions" style="display: flex; gap: 12px; align-items: center;">
-            <select id="incidentDateFilter" class="search-input" style="width: 160px; padding-left: 14px; border-radius: 12px; font-weight: 600; cursor: pointer;">
+        <div class="bill-actions" style="display: flex; gap: 8px; align-items: center;">
+            <select id="incidentDateFilter" class="filter-select" style="padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 600; background: #fff; cursor: pointer;">
                 <option value="all">All Time</option>
                 <option value="today">Today</option>
                 <option value="this_week">This Week</option>
                 <option value="this_month">This Month</option>
                 <option value="last_month">Last Month</option>
             </select>
-            <div class="incident-search-wrapper">
-                <input type="text" id="incidentSearch" placeholder="Search reports..." class="search-input">
-                <svg width="18" height="18" fill="none" stroke="var(--incident-text-sub)" stroke-width="2" viewBox="0 0 24 24"
-                     style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); pointer-events: none;">
-                    <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                </svg>
+        </div>
+    </div>
+
+    <!-- Summary Metric Cards -->
+    <div class="responsive-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <div onclick="filterByQuickStatus('all')" style="background: #fff; padding: 18px 20px; border-radius: 16px; border: 1px solid var(--bill-border); border-left: 4px solid var(--bill-primary); cursor: pointer; transition: transform 0.15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Incidents</div>
+            <div id="statTotal" style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ $incidentsList->count() }}</div>
+        </div>
+        <div onclick="filterByQuickStatus('pending')" style="background: #fff; padding: 18px 20px; border-radius: 16px; border: 1px solid var(--bill-border); border-left: 4px solid #ef4444; cursor: pointer; transition: transform 0.15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Pending Review</div>
+            <div id="statPending" style="font-size: 28px; font-weight: 800; color: #ef4444; margin-top: 4px;">{{ $incidentsList->where('status', 'pending')->count() }}</div>
+        </div>
+        <div onclick="filterByQuickStatus('progress')" style="background: #fff; padding: 18px 20px; border-radius: 16px; border: 1px solid var(--bill-border); border-left: 4px solid #3b82f6; cursor: pointer; transition: transform 0.15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">In Progress</div>
+            <div id="statProgress" style="font-size: 28px; font-weight: 800; color: #3b82f6; margin-top: 4px;">{{ $incidentsList->where('status', 'progress')->count() }}</div>
+        </div>
+        <div onclick="filterByQuickStatus('resolved')" style="background: #fff; padding: 18px 20px; border-radius: 16px; border: 1px solid var(--bill-border); border-left: 4px solid #10b981; cursor: pointer; transition: transform 0.15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Resolved</div>
+            <div id="statResolved" style="font-size: 28px; font-weight: 800; color: #10b981; margin-top: 4px;">{{ $incidentsList->where('status', 'resolved')->count() }}</div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar" style="background: #f8fafc; padding: 18px 20px; border-radius: 16px; border: 1px solid #e2e8f0; display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 24px;">
+        <div style="flex: 1; min-width: 260px;">
+            <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 6px; display: block;">Search Incidents</label>
+            <input type="text" id="incidentSearch" class="filter-select" placeholder="Search by Ticket #, Resident, Subject, or details..." style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" oninput="applyIncidentFilters()">
+        </div>
+        <div style="width: 180px;">
+            <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 6px; display: block;">Category</label>
+            <select id="categoryFilter" class="filter-select" onchange="applyIncidentFilters()" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #fff;">
+                <option value="all">All Categories</option>
+                <option value="security">Security</option>
+                <option value="maintenance">Maintenance</option>
+                <option value="utilities">Utilities</option>
+                <option value="others">Others</option>
+            </select>
+        </div>
+        <div style="width: 170px;">
+            <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 6px; display: block;">Status</label>
+            <select id="statusFilter" class="filter-select" onchange="applyIncidentFilters()" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #fff;">
+                <option value="all">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+            </select>
+        </div>
+        <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn btn-outline" onclick="resetIncidentFilters()" style="padding: 8px 14px; font-size: 13px; font-weight: 600; border-radius: 8px; background: #fff;">Clear</button>
+        </div>
+    </div>
+
+    <!-- Incidents Database Table -->
+    <div class="analytic-card" style="padding: 0; overflow: hidden; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+        <div class="bill-table-container">
+            <table class="bill-table" id="incidentsTable">
+                <thead>
+                    <tr>
+                        <th data-sort="text" style="width: 110px;">Ticket ID</th>
+                        <th data-sort="date" style="width: 150px;">Date &amp; Time</th>
+                        <th data-sort="text" style="width: 140px;">Category</th>
+                        <th data-sort="text" style="width: 170px;">Reported By</th>
+                        <th data-sort="text">Subject &amp; Summary</th>
+                        <th data-sort="text" style="width: 130px;">Status</th>
+                        <th style="width: 110px; text-align: center;">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="incidentsTableBody">
+                    @forelse($incidentsList as $inc)
+                        @php
+                            $cat = $inc['type'] ?? 'Others';
+                            $meta = $categoryMeta[$cat] ?? $categoryMeta['Others'];
+                            $status = strtolower($inc['status'] ?? 'pending');
+                            $statusLabel = match($status) {
+                                'progress' => 'In Progress',
+                                'resolved' => 'Resolved',
+                                default => 'Pending'
+                            };
+                            $statusClass = match($status) {
+                                'progress' => 'badge-primary',
+                                'resolved' => 'badge-success',
+                                default => 'badge-danger'
+                            };
+                            $photoCount = is_array($inc['photos'] ?? null) ? count($inc['photos']) : (!empty($inc['img']) ? 1 : 0);
+                            $hasVideo = !empty($inc['video']) || !empty($inc['video_url']);
+                            $dateObj = !empty($inc['date']) ? \Carbon\Carbon::parse($inc['date']) : null;
+                        @endphp
+                        <tr class="incident-row pagination-match"
+                            data-id="{{ $inc['id'] }}"
+                            data-cat="{{ strtolower($cat) }}"
+                            data-status="{{ $status }}"
+                            data-date="{{ $inc['date'] ?? '' }}"
+                            data-search="{{ strtolower($inc['id'].' '.$inc['sub'].' '.($inc['res'] ?? '').' '.$inc['desc'].' '.$cat.' '.$status) }}">
+                            
+                            <!-- Ticket ID -->
+                            <td data-sort-val="{{ $inc['id'] }}" style="font-family: monospace; font-weight: 700; color: #0284c7; white-space: nowrap;">
+                                INC-{{ str_pad($inc['id'], 5, '0', STR_PAD_LEFT) }}
+                            </td>
+
+                            <!-- Date & Time -->
+                            <td data-sort-val="{{ $inc['date'] ?? '' }}" style="font-size: 12px; color: #475569; white-space: nowrap;">
+                                @if($dateObj)
+                                    <div style="font-weight: 600; color: #0f172a;">{{ $dateObj->format('M d, Y') }}</div>
+                                    <div style="font-size: 11px; color: #94a3b8;">{{ $dateObj->format('h:i A') }}</div>
+                                @else
+                                    <span>—</span>
+                                @endif
+                            </td>
+
+                            <!-- Category -->
+                            <td data-sort-val="{{ $cat }}">
+                                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: 700; background: {{ $meta['bg'] }}; color: {{ $meta['color'] }}; border: 1px solid {{ $meta['border'] }};">
+                                    <span>{{ $meta['icon'] }}</span>
+                                    <span>{{ $cat }}</span>
+                                </span>
+                            </td>
+
+                            <!-- Reported By -->
+                            <td data-sort-val="{{ $inc['res'] ?? 'Anonymous' }}" style="font-size: 13px; font-weight: 600; color: #1e293b;">
+                                {{ $inc['res'] ?: 'Anonymous' }}
+                            </td>
+
+                            <!-- Subject & Summary -->
+                            <td>
+                                <div style="font-weight: 700; color: #0f172a; margin-bottom: 2px;">
+                                    {{ $inc['sub'] }}
+                                </div>
+                                <div style="font-size: 12px; color: #64748b; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;">
+                                    {{ $inc['desc'] }}
+                                </div>
+                                @if($photoCount > 0 || $hasVideo)
+                                    <div style="display: flex; gap: 6px; margin-top: 4px; align-items: center;">
+                                        @if($photoCount > 0)
+                                            <span style="font-size: 10px; font-weight: 700; background: #eff6ff; color: #1d4ed8; padding: 1px 6px; border-radius: 4px; border: 1px solid #bfdbfe;">
+                                                📷 {{ $photoCount }} photo{{ $photoCount > 1 ? 's' : '' }}
+                                            </span>
+                                        @endif
+                                        @if($hasVideo)
+                                            <span style="font-size: 10px; font-weight: 700; background: #fef3c7; color: #92400e; padding: 1px 6px; border-radius: 4px; border: 1px solid #fde68a;">
+                                                🎥 video
+                                            </span>
+                                        @endif
+                                    </div>
+                                @endif
+                            </td>
+
+                            <!-- Status -->
+                            <td data-sort-val="{{ $status }}">
+                                <span class="badge {{ $statusClass }}" style="padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
+                                    {{ $statusLabel }}
+                                </span>
+                            </td>
+
+                            <!-- Action -->
+                            <td style="text-align: center;">
+                                <button type="button" class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; border-color: #cbd5e1;" onclick="openIncidentModal('{{ $inc['id'] }}')">
+                                    Details
+                                </button>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr id="emptyIncidentsRow">
+                            <td colspan="7" style="padding: 40px; text-align: center; color: #64748b;">
+                                No incident reports recorded in the system.
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+        @include('partials.admin-client-pagination', ['prefix' => 'incidentsTable', 'defaultPerPage' => 15])
+    </div>
+</div>
+
+<!-- Incident Detail Modal -->
+<div id="incidentModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 1050; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); position: fixed; top: 0; left: 0; right: 0; bottom: 0;">
+    <div class="bill-modal-content" style="max-width: 580px; width: 95%; max-height: 90vh; overflow-y: auto; border-radius: 20px; background: #fff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
+        <div class="modal-header" style="border-bottom: 1px solid var(--bill-border); padding: 20px 24px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
+            <div>
+                <h2 style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 0;">Incident Details</h2>
+                <p id="modalIncId" style="font-size: 12px; font-weight: 700; color: #0284c7; margin: 2px 0 0 0; font-family: monospace;"></p>
             </div>
+            <button class="ann-btn-icon" onclick="closeIncidentModal()" style="padding: 8px; background: none; border: none; cursor: pointer; color: #64748b;">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
         </div>
-    </div>
+        <div style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+            <div>
+                <h3 id="modalIncSubject" style="font-size: 18px; font-weight: 800; color: #1e293b; margin: 0 0 6px 0;"></h3>
+                <div style="font-size: 12px; font-weight: 600; color: #64748b; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span id="modalIncType" style="color: #0369a1; background: #e0f2fe; padding: 2px 8px; border-radius: 9999px; font-weight: 700;"></span>
+                    <span>&bull;</span>
+                    <span id="modalIncRes"></span>
+                    <span>&bull;</span>
+                    <span id="modalIncDate"></span>
+                </div>
+            </div>
+            
+            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Description</span>
+                <p id="modalIncDesc" style="font-size: 13px; color: #334155; margin: 8px 0 0 0; line-height: 1.6; white-space: pre-wrap;"></p>
+            </div>
 
-    <!-- Summary Stats -->
-    <div class="responsive-grid grid-4" style="margin-bottom: 32px;">
-        <div class="stat-card yellow" style="cursor: default;">
-            <div id="stat-total" class="stat-value">0</div>
-            <div class="stat-label">Total Reports</div>
-        </div>
-        <div class="stat-card blue" style="cursor: default;">
-            <div id="stat-progress" class="stat-value">0</div>
-            <div class="stat-label">In Progress</div>
-        </div>
-        <div class="stat-card green" style="cursor: default; background: rgba(16, 185, 129, 0.05);">
-            <div id="stat-resolved" class="stat-value">0</div>
-            <div class="stat-label">Resolved</div>
-        </div>
-        <div class="stat-card red" style="cursor: default;">
-            <div id="stat-pending" class="stat-value">0</div>
-            <div class="stat-label">Pending Review</div>
-        </div>
-    </div>
-
-    <!-- Category Cards -->
-    <div style="margin-bottom: 12px;">
-        <h2 style="font-size: 14px; font-weight: 700; color: var(--incident-text-sub); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 16px;">Browse by Category</h2>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px;">
-            @foreach($allCategories as $cat)
-            @php
-                $meta = $categoryMeta[$cat];
-            @endphp
-            <button
-                onclick="showCategory('{{ $cat }}')"
-                id="catBtn-{{ Str::slug($cat) }}"
-                style="
-                    background: {{ $meta['bg'] }};
-                    border: 2px solid {{ $meta['border'] }};
-                    border-radius: 16px;
-                    padding: 20px 18px;
-                    text-align: left;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    position: relative;
-                    outline: none;
-                "
-                onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 8px 24px rgba(0,0,0,0.1)';"
-                onmouseout="this.style.transform=''; this.style.boxShadow='';"
-            >
-                <div style="font-size: 28px; margin-bottom: 10px;">{{ $meta['icon'] }}</div>
-                <div style="font-size: 15px; font-weight: 800; color: #1e293b; margin-bottom: 6px;">{{ $cat }}</div>
-                <div id="cat-content-{{ Str::slug($cat) }}">
+            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Attached Media</span>
+                <div id="modalIncMedia" style="margin-top: 10px; width: 100%; height: 160px; border-radius: 8px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; border: 2px dashed #cbd5e1; color: #94a3b8; font-size: 13px; font-weight: 600;">
                     <!-- JS populated -->
                 </div>
-            </button>
-            @endforeach
-        </div>
-    </div>
-
-    <!-- Report Panel (shown when a category is selected) -->
-    <div id="reportPanel" style="display: none; margin-top: 28px;">
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px solid var(--border);">
-            <span id="panelIcon" style="font-size: 22px;"></span>
-            <div>
-                <h2 id="panelTitle" style="font-size: 18px; font-weight: 800; color: var(--incident-text-main); margin: 0;"></h2>
-                <p id="panelSubtitle" style="font-size: 12px; color: var(--incident-text-sub); margin: 2px 0 0;"></p>
             </div>
-            <button onclick="closePanel()" style="margin-left: auto; background: #f1f5f9; border: none; border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 700; color: #64748b; cursor: pointer;">✕ Close</button>
-        </div>
 
-        <div id="panelEmpty" style="display: none; padding: 48px; text-align: center; background: #f8fafc; border-radius: 16px; border: 1px dashed #e2e8f0;">
-            <div style="font-size: 40px; margin-bottom: 12px;">📭</div>
-            <h3 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 0;">No reports found</h3>
-            <p style="color: #64748b; margin-top: 6px; font-size: 13px;">Adjust your search or date filter to find what you're looking for.</p>
-        </div>
-
-        <div id="panelGrid" class="incident-grid"></div>
-        
-        <div id="paginationControls" style="display:none; margin-top:32px; text-align:center; justify-content:center; align-items:center;">
-            <button id="btnPrevPage" class="btn btn-outline" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-weight: 600;" onclick="changePage(-1)">Previous</button>
-            <span id="pageIndicator" style="font-size: 14px; font-weight: 700; color: #475569; margin: 0 16px;">Page 1 of 1</span>
-            <button id="btnNextPage" class="btn btn-outline" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-weight: 600;" onclick="changePage(1)">Next</button>
-        </div>
-    </div>
-
-    <!-- Incident Detail Modal -->
-    <div id="incidentModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 1050; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); position: fixed; top: 0; left: 0; right: 0; bottom: 0;">
-        <div class="bill-modal-content" style="max-width: 550px; width: 100%; border-radius: 20px; overflow: hidden; background: #fff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
-            <div class="modal-header" style="border-bottom: 1px solid var(--border); padding: 24px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
-                <div>
-                    <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0;">Incident Details</h2>
-                    <p id="modalIncId" style="font-size: 13px; font-weight: 600; color: #64748b; margin: 2px 0 0 0;"></p>
-                </div>
-                <button class="ann-btn-icon" onclick="closeIncidentModal()" style="padding: 8px; background: none; border: none; cursor: pointer;">
-                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
+            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Update Triage Status</span>
+                <select id="modalIncStatus" class="filter-select" style="width: 100%; margin-top: 8px; padding: 10px; border-radius: 8px; font-weight: 700; background: #fff; border: 1px solid #cbd5e1; font-size: 13px;">
+                    <option value="pending">Pending</option>
+                    <option value="progress">In Progress</option>
+                    <option value="resolved">Resolved</option>
+                </select>
             </div>
-            <div style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
-                <div>
-                    <h3 id="modalIncSubject" style="font-size: 18px; font-weight: 800; color: #1e293b; margin: 0 0 4px 0;"></h3>
-                    <div style="font-size: 13px; font-weight: 600; color: var(--incident-text-sub);">
-                        <span id="modalIncType" style="color: #3b82f6; background: #eff6ff; padding: 2px 8px; border-radius: 12px; margin-right: 8px;"></span>
-                        <span id="modalIncDate"></span>
-                    </div>
-                </div>
-                
-                <div style="background: #f1f5f9; padding: 16px; border-radius: 12px;">
-                    <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Description</span>
-                    <p id="modalIncDesc" style="font-size: 14px; color: #334155; margin: 8px 0 0 0; line-height: 1.5;"></p>
-                </div>
-
-                <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                    <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Attached Media</span>
-                    <div id="modalIncMedia" style="margin-top: 12px; width: 100%; height: 160px; border-radius: 8px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; border: 2px dashed #cbd5e1; color: #94a3b8; font-size: 13px; font-weight: 600;">
-                        <!-- JS injected -->
-                    </div>
-                </div>
-
-                <div class="responsive-grid grid-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                    <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                        <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Reported By</span>
-                        <div id="modalIncRes" style="font-size: 15px; font-weight: 700; color: #0f172a; margin-top: 4px;"></div>
-                    </div>
-                    <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                        <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Update Status</span>
-                        <select id="modalIncStatus" class="search-input" style="width: 100%; margin-top: 8px; padding: 10px; border-radius: 8px; font-weight: 600; background: #fff; border: 1px solid #cbd5e1;">
-                            <option value="pending">Pending</option>
-                            <option value="progress">In Progress</option>
-                            <option value="resolved">Resolved</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            <div style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
-                <a id="modalIncFullView" href="#" class="btn btn-outline" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-weight: 700; color: #1e293b; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
-                    Full Report Page &rarr;
-                </a>
-                <div style="display: flex; gap: 12px;">
-                    <button class="btn btn-outline" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-weight: 600;" onclick="closeIncidentModal()">Cancel</button>
-                    <button class="btn btn-primary" style="padding: 12px 28px; border-radius: 10px; background: linear-gradient(135deg, #059669, #10b981); color: #fff; font-weight: 700; font-size: 14px; border: none; cursor: pointer; box-shadow: 0 4px 14px rgba(16,185,129,0.4); transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(16,185,129,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 14px rgba(16,185,129,0.4)'" onclick="saveIncidentStatus()">✅ Save Changes</button>
-                </div>
+        </div>
+        <div style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid var(--bill-border); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <a id="modalIncFullView" href="#" class="btn btn-outline" style="padding: 8px 14px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-weight: 700; color: #1e293b; text-decoration: none; font-size: 12px;">
+                Full Report Page &rarr;
+            </a>
+            <div style="display: flex; gap: 10px;">
+                <button type="button" class="btn btn-outline" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-weight: 600; font-size: 13px;" onclick="closeIncidentModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" style="padding: 8px 20px; border-radius: 8px; background: #0284c7; color: #fff; font-weight: 700; font-size: 13px; border: none; cursor: pointer;" onclick="saveIncidentStatus()">Save Status</button>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- Fullscreen Image Viewer -->
-    <div id="fullscreenImageViewer" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 9999; align-items: center; justify-content: center; flex-direction: column;">
-        <button onclick="closeFullscreenImage()" style="position: absolute; top: 20px; right: 20px; background: none; border: none; color: white; font-size: 36px; cursor: pointer;">&times;</button>
-        <img id="fullscreenImage" src="" style="max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 8px;">
-    </div>
-
-    <!-- Hidden data store for JS -->
-    <div id="incidentData" style="display:none;">
-    @foreach($groupedIncidents as $category => $items)
-        @foreach($items as $inc)
-        <div
-            class="inc-data"
-            data-cat="{{ $category }}"
-            data-id="{{ $inc['id'] }}"
-            data-sub="{{ $inc['sub'] }}"
-            data-type="{{ $inc['type'] }}"
-            data-status="{{ $inc['status'] }}"
-            data-desc="{{ Str::limit($inc['desc'], 90) }}"
-            data-res="{{ $inc['res'] }}"
-            data-href="/admin/incidents/{{ $inc['id'] }}"
-        ></div>
-        @endforeach
-    @endforeach
-    </div>
+<!-- Fullscreen Image Viewer -->
+<div id="fullscreenImageViewer" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.92); z-index: 9999; align-items: center; justify-content: center; flex-direction: column;">
+    <button onclick="closeFullscreenImage()" style="position: absolute; top: 20px; right: 20px; background: none; border: none; color: white; font-size: 36px; cursor: pointer;">&times;</button>
+    <img id="fullscreenImage" src="" style="max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 8px;">
 </div>
 
 <script>
@@ -222,296 +281,125 @@
     }
 
     const rawIncidents = @json($incidents);
-    const categoryMeta = {
-        'Security':    { icon: '🛡️', color: '#ef4444' },
-        'Maintenance': { icon: '🛠️', color: '#f59e0b' },
-        'Utilities':   { icon: '💡', color: '#3b82f6' },
-        'Others':      { icon: '📁', color: '#8b5cf6' },
-    };
-
-    let activeCategory = null;
-
-    document.addEventListener('DOMContentLoaded', function() {
-        recalculateIncidentMetrics();
-    });
-
-    function recalculateIncidentMetrics() {
-        let incidents = rawIncidents;
-        const dateFilter = document.getElementById('incidentDateFilter').value;
-        const now = new Date();
-        
-        incidents = incidents.filter(d => {
-            if (dateFilter === 'all') return true;
-            if (!d.date) return false;
-            let incDate = new Date(d.date);
-            if (isNaN(incDate.getTime())) return false;
-
-            if (dateFilter === 'today') {
-                return incDate.toDateString() === now.toDateString();
-            }
-            if (dateFilter === 'this_week') {
-                const startOfWeek = new Date(now);
-                startOfWeek.setHours(0, 0, 0, 0);
-                startOfWeek.setDate(now.getDate() - now.getDay());
-                const endOfWeek = new Date(startOfWeek);
-                endOfWeek.setDate(startOfWeek.getDate() + 6);
-                endOfWeek.setHours(23, 59, 59, 999);
-                return incDate >= startOfWeek && incDate <= endOfWeek;
-            }
-            if (dateFilter === 'this_month') {
-                return incDate.getFullYear() === now.getFullYear() && incDate.getMonth() === now.getMonth();
-            }
-            if (dateFilter === 'last_month') {
-                const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-                return incDate >= lastMonth && incDate <= endOfLastMonth;
-            }
-            return true;
-        });
-        
-        document.getElementById('stat-total').textContent = incidents.length;
-        document.getElementById('stat-progress').textContent = incidents.filter(i => (i.status || '').toLowerCase() === 'progress').length;
-        document.getElementById('stat-resolved').textContent = incidents.filter(i => (i.status || '').toLowerCase() === 'resolved').length;
-        document.getElementById('stat-pending').textContent = incidents.filter(i => (i.status || '').toLowerCase() === 'pending').length;
-
-        const categories = ['Security', 'Maintenance', 'Utilities', 'Others'];
-        categories.forEach(cat => {
-            const catData = incidents.filter(i => (i.type || '').toLowerCase() === cat.toLowerCase());
-            const catCount = catData.length;
-            const pendingCount = catData.filter(i => (i.status || '').toLowerCase() === 'pending').length;
-            const slug = cat.toLowerCase().replace(/\s+/g, '-');
-            const container = document.getElementById('cat-content-' + slug);
-            
-            if (container) {
-                if (catCount > 0) {
-                    const color = categoryMeta[cat]?.color || '#3b82f6';
-                    let html = `<div style="font-size: 22px; font-weight: 900; color: ${color}; line-height: 1;">${catCount}</div>
-                                <div style="font-size: 11px; font-weight: 600; color: #64748b; margin-top: 2px;">
-                                    ${catCount === 1 ? 'report' : 'reports'}`;
-                    if (pendingCount > 0) {
-                        html += ` &nbsp;&middot;&nbsp;<span style="color: #ef4444;">${pendingCount} pending</span>`;
-                    }
-                    html += `</div>`;
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = `<div style="font-size: 13px; font-weight: 600; color: #94a3b8; font-style: italic;">No reports</div>`;
-                }
-            }
-        });
-    }
-
-    let currentPage = 1;
-    const ITEMS_PER_PAGE = 6;
-    let filteredData = [];
-
-    document.getElementById('incidentDateFilter').addEventListener('change', () => {
-        recalculateIncidentMetrics();
-        if (activeCategory) {
-            currentPage = 1;
-            renderGrid();
-        }
-    });
-
-    document.getElementById('incidentSearch').addEventListener('input', () => {
-        currentPage = 1;
-        renderGrid();
-    });
-
-    function applyFiltersAndSearch(dataArr) {
-        const dateFilter = document.getElementById('incidentDateFilter').value;
-        const now = new Date();
-        
-        let filtered = dataArr.filter(d => {
-            if (dateFilter === 'all') return true;
-            if (!d.date) return false;
-            let incDate = new Date(d.date);
-            if (isNaN(incDate.getTime())) return false;
-
-            if (dateFilter === 'today') {
-                return incDate.toDateString() === now.toDateString();
-            }
-            if (dateFilter === 'this_week') {
-                const startOfWeek = new Date(now);
-                startOfWeek.setHours(0, 0, 0, 0);
-                startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
-                const endOfWeek = new Date(startOfWeek);
-                endOfWeek.setDate(startOfWeek.getDate() + 6);
-                endOfWeek.setHours(23, 59, 59, 999);
-                return incDate >= startOfWeek && incDate <= endOfWeek;
-            }
-            if (dateFilter === 'this_month') {
-                return incDate.getFullYear() === now.getFullYear() && incDate.getMonth() === now.getMonth();
-            }
-            if (dateFilter === 'last_month') {
-                const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-                return incDate >= lastMonth && incDate <= endOfLastMonth;
-            }
-            return true;
-        });
-
-        const q = document.getElementById('incidentSearch').value.toLowerCase().trim();
-        if (q) {
-            filtered = filtered.filter(d => {
-                const text = `${d.type || ''} ${d.sub || ''} ${d.res || ''} ${d.desc || ''} ${d.status || ''} ${d.id || ''}`.toLowerCase();
-                return text.includes(q);
-            });
-        }
-        return filtered;
-    }
-
-    function showCategory(cat) {
-        document.querySelectorAll('[id^="catBtn-"]').forEach(btn => {
-            btn.style.outline = 'none';
-            btn.style.borderWidth = '2px';
-        });
-        const slug = cat.toLowerCase().replace(/\s+/g, '-');
-        const activeBtn = document.getElementById('catBtn-' + slug);
-        if (activeBtn) {
-            activeBtn.style.outline = '3px solid ' + (categoryMeta[cat]?.color || '#3b82f6');
-            activeBtn.style.outlineOffset = '2px';
-        }
-
-        activeCategory = cat;
-        currentPage = 1;
-        
-        const storeIncidents = rawIncidents;
-        const catData = storeIncidents.filter(d => (d.type || '').toLowerCase() === cat.toLowerCase());
-
-        const panel    = document.getElementById('reportPanel');
-        const title    = document.getElementById('panelTitle');
-        const subtitle = document.getElementById('panelSubtitle');
-        const icon     = document.getElementById('panelIcon');
-
-        icon.textContent  = categoryMeta[cat]?.icon || '📋';
-        title.textContent = cat + ' Reports';
-        
-        const matchCount = applyFiltersAndSearch(catData).length;
-        subtitle.textContent = matchCount + ' report' + (matchCount !== 1 ? 's' : '') + ' found';
-
-        renderGrid();
-        
-        panel.style.display = 'block';
-        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function renderGrid() {
-        if(!activeCategory) return;
-        
-        const storeIncidents = rawIncidents;
-        const catData = storeIncidents.filter(d => (d.type || '').toLowerCase() === activeCategory.toLowerCase());
-        
-        filteredData = applyFiltersAndSearch(catData);
-        
-        const grid = document.getElementById('panelGrid');
-        const empty = document.getElementById('panelEmpty');
-        const pagination = document.getElementById('paginationControls');
-        
-        grid.innerHTML = '';
-
-        if (filteredData.length === 0) {
-            empty.style.display = 'block';
-            grid.style.display  = 'none';
-            pagination.style.display = 'none';
-        } else {
-            empty.style.display = 'none';
-            grid.style.display  = 'grid';
-            
-            const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
-            if (currentPage > totalPages) currentPage = totalPages;
-            
-            const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-            const pageData = filteredData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-            
-            pageData.forEach(d => {
-                const statusLabel = { pending: 'Pending', progress: 'In Progress', resolved: 'Resolved' }[d.status] || d.status;
-                let formattedDate = 'Recently';
-                if (d.date) {
-                    const dObj = new Date(d.date);
-                    if (!isNaN(dObj)) {
-                        formattedDate = dObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
-                    }
-                }
-
-                const mediaBadges = [];
-                if (d.photos && d.photos.length > 0) {
-                    mediaBadges.push(`<span style="font-size:11px; background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:700;">📷 ${d.photos.length}</span>`);
-                }
-                if (d.video || d.video_url) {
-                    mediaBadges.push(`<span style="font-size:11px; background:#fef3c7; color:#92400e; padding:2px 6px; border-radius:4px; font-weight:700;">🎥 Video</span>`);
-                }
-                const mediaIndicators = mediaBadges.length > 0 ? mediaBadges.join(' ') : '';
-
-                grid.innerHTML += `
-                    <div class="incident-card" style="display:flex; flex-direction:column; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';" onmouseout="this.style.transform=''; this.style.boxShadow='var(--shadow-sm)';" onclick="openIncidentModal('${d.id}')">
-                        <div class="status-dot">
-                            <span class="badge-premium badge-${escapeHtml(d.status)}">${escapeHtml(statusLabel)}</span>
-                        </div>
-                        <div class="incident-card-header">
-                            <span class="incident-type">${escapeHtml(d.type)}</span>
-                            <h3 class="incident-subject">${escapeHtml(d.sub)}</h3>
-                            <div class="incident-meta" style="flex-wrap: wrap; gap: 6px;">
-                                <span class="incident-id">INC-${String(d.id).padStart(5, '0')}</span>
-                                <span>&bull;</span>
-                                <span>${escapeHtml(d.res || 'Resident')}</span>
-                                ${mediaIndicators ? `<span>&bull;</span> ${mediaIndicators}` : ''}
-                            </div>
-                        </div>
-                        <p class="incident-preview">${escapeHtml(d.desc)}</p>
-                        <div class="incident-footer" style="margin-top:12px; border-top:1px solid #f1f5f9; padding-top:8px;">
-                            <div style="font-size:11px;font-weight:600;color:var(--incident-text-sub);">${escapeHtml(formattedDate)}</div>
-                        </div>
-                    </div>`;
-            });
-            
-            if (totalPages > 1) {
-                pagination.style.display = 'flex';
-                document.getElementById('pageIndicator').textContent = `Page ${currentPage} of ${totalPages}`;
-                document.getElementById('btnPrevPage').disabled = currentPage === 1;
-                document.getElementById('btnNextPage').disabled = currentPage === totalPages;
-                
-                document.getElementById('btnPrevPage').style.opacity = currentPage === 1 ? '0.5' : '1';
-                document.getElementById('btnNextPage').style.opacity = currentPage === totalPages ? '0.5' : '1';
-                document.getElementById('btnPrevPage').style.cursor = currentPage === 1 ? 'not-allowed' : 'pointer';
-                document.getElementById('btnNextPage').style.cursor = currentPage === totalPages ? 'not-allowed' : 'pointer';
-            } else {
-                pagination.style.display = 'none';
-            }
-        }
-    }
-
-    function changePage(delta) {
-        const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
-        currentPage += delta;
-        if (currentPage < 1) currentPage = 1;
-        if (currentPage > totalPages) currentPage = totalPages;
-        renderGrid();
-    }
-
-    function closePanel() {
-        document.getElementById('reportPanel').style.display = 'none';
-        document.querySelectorAll('[id^="catBtn-"]').forEach(btn => {
-            btn.style.outline = 'none';
-            btn.style.borderWidth = '2px';
-        });
-        activeCategory = null;
-    }
-
     let currentIncidentId = null;
 
-    function openIncidentModal(id) {
-        if (new URLSearchParams(window.location.search).get('incident') !== String(id)) {
-            window.history.pushState(null, '', '?incident=' + id);
+    window.addEventListener('DOMContentLoaded', () => {
+        window.incidentsTablePagination = initTablePagination({
+            rowSelector: '.incident-row',
+            infoEl: '#incidentsTablePageInfo',
+            prevEl: '#incidentsTablePagePrev',
+            nextEl: '#incidentsTablePageNext',
+            perPage: 15,
+        });
+
+        applyIncidentFilters();
+
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('incident')) {
+            openIncidentModal(params.get('incident'));
         }
-        const incidents = rawIncidents;
-        const inc = incidents.find(i => String(i.id) === String(id));
+    });
+
+    document.getElementById('incidentDateFilter').addEventListener('change', () => {
+        applyIncidentFilters();
+    });
+
+    function filterByQuickStatus(status) {
+        document.getElementById('statusFilter').value = status;
+        applyIncidentFilters();
+    }
+
+    function resetIncidentFilters() {
+        document.getElementById('incidentSearch').value = '';
+        document.getElementById('categoryFilter').value = 'all';
+        document.getElementById('statusFilter').value = 'all';
+        document.getElementById('incidentDateFilter').value = 'all';
+        applyIncidentFilters();
+    }
+
+    function applyIncidentFilters() {
+        const query = document.getElementById('incidentSearch').value.toLowerCase().trim();
+        const category = document.getElementById('categoryFilter').value.toLowerCase();
+        const status = document.getElementById('statusFilter').value.toLowerCase();
+        const dateFilter = document.getElementById('incidentDateFilter').value;
+        const now = new Date();
+
+        const rows = document.querySelectorAll('.incident-row');
+        let visibleCount = 0;
+        let pendingCount = 0;
+        let progressCount = 0;
+        let resolvedCount = 0;
+
+        rows.forEach(row => {
+            const rowSearch = row.dataset.search || '';
+            const rowCat = row.dataset.cat || '';
+            const rowStatus = row.dataset.status || '';
+            const rowDateStr = row.dataset.date || '';
+
+            const matchesQuery = !query || rowSearch.includes(query);
+            const matchesCat = (category === 'all') || (rowCat === category);
+            const matchesStatus = (status === 'all') || (rowStatus === status);
+
+            let matchesDate = true;
+            if (dateFilter !== 'all' && rowDateStr) {
+                const incDate = new Date(rowDateStr);
+                if (!isNaN(incDate.getTime())) {
+                    if (dateFilter === 'today') {
+                        matchesDate = incDate.toDateString() === now.toDateString();
+                    } else if (dateFilter === 'this_week') {
+                        const startOfWeek = new Date(now);
+                        startOfWeek.setHours(0, 0, 0, 0);
+                        startOfWeek.setDate(now.getDate() - now.getDay());
+                        const endOfWeek = new Date(startOfWeek);
+                        endOfWeek.setDate(startOfWeek.getDate() + 6);
+                        endOfWeek.setHours(23, 59, 59, 999);
+                        matchesDate = incDate >= startOfWeek && incDate <= endOfWeek;
+                    } else if (dateFilter === 'this_month') {
+                        matchesDate = incDate.getFullYear() === now.getFullYear() && incDate.getMonth() === now.getMonth();
+                    } else if (dateFilter === 'last_month') {
+                        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                        const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+                        matchesDate = incDate >= lastMonth && incDate <= endOfLastMonth;
+                    }
+                }
+            }
+
+            const matches = matchesQuery && matchesCat && matchesStatus && matchesDate;
+            row.classList.toggle('pagination-match', matches);
+
+            if (matches) {
+                visibleCount++;
+                if (rowStatus === 'pending') pendingCount++;
+                if (rowStatus === 'progress') progressCount++;
+                if (rowStatus === 'resolved') resolvedCount++;
+            }
+        });
+
+        // Update stats
+        document.getElementById('statTotal').textContent = visibleCount;
+        document.getElementById('statPending').textContent = pendingCount;
+        document.getElementById('statProgress').textContent = progressCount;
+        document.getElementById('statResolved').textContent = resolvedCount;
+
+        if (window.incidentsTablePagination) {
+            window.incidentsTablePagination.resetPage();
+        }
+    }
+
+    function openIncidentModal(id) {
+        const inc = rawIncidents.find(i => String(i.id) === String(id));
         if (!inc) return;
 
         currentIncidentId = id;
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set('incident', id);
+        window.history.replaceState(null, '', currentUrl.toString());
 
         document.getElementById('modalIncId').textContent = 'INC-' + String(inc.id).padStart(5, '0');
         document.getElementById('modalIncSubject').textContent = inc.sub;
         document.getElementById('modalIncType').textContent = inc.type;
+        document.getElementById('modalIncRes').textContent = inc.res || 'Resident';
+
         let formattedDate = 'Recently';
         if (inc.date) {
             const dObj = new Date(inc.date);
@@ -521,7 +409,6 @@
         }
         document.getElementById('modalIncDate').textContent = formattedDate;
         document.getElementById('modalIncDesc').textContent = inc.desc;
-        document.getElementById('modalIncRes').textContent = inc.res || 'Resident';
         document.getElementById('modalIncStatus').value = inc.status;
 
         const fullViewLink = document.getElementById('modalIncFullView');
@@ -545,19 +432,19 @@
 
         if (inc.photos && inc.photos.length > 0) {
             inc.photos.forEach(p => {
-                mediaHtml += `<img src="${p}" onclick="openFullscreenImage('${p}')" style="height: 100%; max-width: 250px; object-fit: cover; border-radius: 6px; border: 1px solid #cbd5e1; flex-shrink: 0; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" alt="Attachment">`;
+                mediaHtml += `<img src="${p}" onclick="openFullscreenImage('${p}')" style="height: 100%; max-width: 240px; object-fit: cover; border-radius: 6px; border: 1px solid #cbd5e1; flex-shrink: 0; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" alt="Attachment">`;
             });
         } else if (inc.img && !inc.video && !inc.video_url) {
             mediaHtml += `<img src="${inc.img}" onclick="openFullscreenImage('${inc.img}')" style="width:100%; height:100%; object-fit:cover; border-radius:6px; cursor: pointer;" alt="Attachment">`;
         }
 
         if (mediaHtml) {
-            mediaContainer.innerHTML = `<div style="display: flex; gap: 12px; width: 100%; height: 100%; overflow-x: auto; padding-bottom: 4px;">${mediaHtml}</div>`;
+            mediaContainer.innerHTML = `<div style="display: flex; gap: 10px; width: 100%; height: 100%; overflow-x: auto; padding-bottom: 4px;">${mediaHtml}</div>`;
             mediaContainer.style.border = 'none';
             mediaContainer.style.background = 'transparent';
         } else {
             mediaContainer.innerHTML = `<div style="text-align:center;">
-                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-bottom:8px; opacity:0.6; display:inline-block;"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-bottom:6px; opacity:0.6; display:inline-block;"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                 <br>No media attached
             </div>`;
             mediaContainer.style.border = '2px dashed #cbd5e1';
@@ -568,7 +455,10 @@
     }
 
     function closeIncidentModal() {
-        window.history.replaceState(null, '', window.location.pathname);
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.delete('incident');
+        window.history.replaceState(null, '', currentUrl.toString());
+
         const v = document.querySelector('#modalIncMedia video');
         if (v) v.pause();
         document.getElementById('incidentModal').style.display = 'none';
@@ -578,13 +468,14 @@
     async function saveIncidentStatus() {
         if (!currentIncidentId) return;
         const newStatus = document.getElementById('modalIncStatus').value;
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
         
         try {
             const response = await fetch(`/admin/incidents/${currentIncidentId}/status`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                    'X-CSRF-TOKEN': csrfToken || '',
                     'Accept': 'application/json'
                 },
                 body: JSON.stringify({ status: newStatus })
@@ -592,13 +483,42 @@
             
             const result = await response.json();
             if (result.success) {
-                window.location.reload();
+                // Update in rawIncidents
+                const target = rawIncidents.find(i => String(i.id) === String(currentIncidentId));
+                if (target) target.status = newStatus;
+
+                // Update in DOM table row
+                const row = document.querySelector(`.incident-row[data-id="${currentIncidentId}"]`);
+                if (row) {
+                    row.dataset.status = newStatus.toLowerCase();
+                    const statusTd = row.children[5];
+                    if (statusTd) {
+                        const statusClass = newStatus === 'resolved' ? 'badge-success' : (newStatus === 'progress' ? 'badge-primary' : 'badge-danger');
+                        const statusLabel = newStatus === 'resolved' ? 'RESOLVED' : (newStatus === 'progress' ? 'IN PROGRESS' : 'PENDING');
+                        statusTd.innerHTML = `<span class="badge ${statusClass}" style="padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">${statusLabel}</span>`;
+                        statusTd.setAttribute('data-sort-val', newStatus.toLowerCase());
+                    }
+                }
+
+                closeIncidentModal();
+                applyIncidentFilters();
+                if (window.Swal) {
+                    Swal.fire({ icon: 'success', title: 'Updated!', text: 'Incident status updated successfully.', timer: 1500, showConfirmButton: false });
+                }
             } else {
-                Swal.fire({ icon: 'error', text: result.message || 'Failed to update status.' });
+                if (window.Swal) {
+                    Swal.fire({ icon: 'error', text: result.message || 'Failed to update status.' });
+                } else {
+                    alert(result.message || 'Failed to update status.');
+                }
             }
         } catch (error) {
             console.error(error);
-            Swal.fire({ icon: 'error', text: 'An error occurred while updating status.' });
+            if (window.Swal) {
+                Swal.fire({ icon: 'error', text: 'An error occurred while updating status.' });
+            } else {
+                alert('An error occurred while updating status.');
+            }
         }
     }
 

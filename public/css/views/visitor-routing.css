@@ -1,6 +1,6 @@
 .routing-viewport {
     position: relative;
-    background: #f1f5f9;
+    background: #e2e8f0;
     height: calc(100vh - 80px);
     width: 100%;
 }
@@ -9,6 +9,11 @@
     width: 100%;
     height: 100%;
     z-index: 1;
+    background: #e2e8f0;
+}
+
+.leaflet-container {
+    background-color: #e2e8f0 !important;
 }
 
 /* Ensure Google Maps tiles render razor-sharp without blur or anti-aliasing fuzziness */
@@ -18,6 +23,7 @@
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
     transform: translate3d(0, 0, 0);
+    transition: opacity 0.15s ease-in-out;
 }
 
 /* ===== FLOATING TOP DESTINATION BAR ===== */
@@ -183,6 +189,38 @@
 .hud-tool-btn:hover {
     background: #e2e8f0;
     color: #0f172a;
+}
+
+.hud-alt-route-btn {
+    background: #f8fafc;
+    border: 1px solid #94a3b8;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.hud-alt-route-btn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.hud-alt-route-btn.active {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.route-alt-polyline {
+    cursor: pointer !important;
 }
 
 .nav-hud-badge {

@@ -46,6 +46,7 @@ class User extends Authenticatable
         'email',
         'contact_number',
         'password',
+        'plain_password',
         'status',
         'joined_at',
     ];
@@ -55,6 +56,7 @@ class User extends Authenticatable
      */
     protected $hidden = [
         'password',
+        'plain_password',
         'remember_token',
     ];
 
@@ -73,8 +75,14 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'plain_password' => 'encrypted',
             'joined_at' => 'date',
         ];
+    }
+
+    public function getDisplayPasswordAttribute(): string
+    {
+        return $this->plain_password ?: 'password123';
     }
 
     public function getNameAttribute(): string

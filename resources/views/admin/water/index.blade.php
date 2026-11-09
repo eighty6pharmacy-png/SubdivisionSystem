@@ -321,11 +321,11 @@
             <table class="bill-table" id="billingTable">
                 <thead>
                     <tr>
-                        <th>Resident / Lot</th>
-                        <th>Amount</th>
-                        <th>Payment Behavior</th>
-                        <th>Method</th>
-                        <th>Status</th>
+                        <th data-sort="text">Resident / Lot</th>
+                        <th data-sort="number">Amount</th>
+                        <th data-sort="text">Payment Behavior</th>
+                        <th data-sort="text">Method</th>
+                        <th data-sort="text">Status</th>
                         <th>Action</th>
                     </tr>
                 </thead>

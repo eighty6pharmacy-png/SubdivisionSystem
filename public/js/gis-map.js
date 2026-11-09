@@ -3,6 +3,12 @@
 // Inject CSS to remove the Leaflet interactive focus outline and style calibration UI
 const gisCalibrationStyle = document.createElement('style');
 gisCalibrationStyle.innerHTML = `
+    .leaflet-container {
+        background-color: #e2e8f0 !important;
+    }
+    .leaflet-tile {
+        transition: opacity 0.15s ease-in-out;
+    }
     path.leaflet-interactive:focus {
         outline: none;
     }
@@ -756,38 +762,60 @@ async function initGISMap(mapElementId, options = {}) {
         },
     }).setView([calib.anchorLat, calib.anchorLng], 18);
 
-    // Real-World Base Tile Layers (Always use crisp high-DPI retina tiles up to maxNativeZoom: 22 so Google Maps never gets blurry)
+    // Real-World Base Tile Layers (Always use crisp high-DPI retina tiles up to maxNativeZoom: 19 so tiles scale smoothly without white flashes)
     const googleStreetLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&scale=2', {
         maxZoom: 22,
-        maxNativeZoom: 22, // Google supports native crisp vector tiles up to zoom 22!
+        maxNativeZoom: 19, // In this region Google tiles natively stop at 19; Leaflet will smoothly upscale at zoom 20-22
         tileSize: 256,
         zoomOffset: 0,
-        detectRetina: true,
+        detectRetina: false, // Avoid double-scaling network overload
+        keepBuffer: 8,       // Retain 8 tiles outside viewport in memory for instant panning
+        updateWhenIdle: false, // Render tiles continuously while dragging
+        updateWhenZooming: true,
         attribution: '&copy; Google Maps'
     });
 
     const googleHybridLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&scale=2', {
         maxZoom: 22,
-        maxNativeZoom: 22,
+        maxNativeZoom: 19,
         tileSize: 256,
         zoomOffset: 0,
-        detectRetina: true,
+        detectRetina: false,
+        keepBuffer: 8,
+        updateWhenIdle: false,
+        updateWhenZooming: true,
         attribution: '&copy; Google Satellite'
     });
 
     const esriSatelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         maxZoom: 22,
         maxNativeZoom: 19,
+        keepBuffer: 8,
+        updateWhenIdle: false,
+        updateWhenZooming: true,
         attribution: '&copy; Esri World Imagery'
     });
 
     const osmStreetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 22,
         maxNativeZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
+        keepBuffer: 8,
+        updateWhenIdle: false,
+        updateWhenZooming: true,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors'
     });
 
-    let currentBaseLayerMode = 'google_street';
+    const cartoVoyagerLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        maxZoom: 22,
+        maxNativeZoom: 19,
+        subdomains: 'abcd',
+        keepBuffer: 8,
+        updateWhenIdle: false,
+        updateWhenZooming: true,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a>'
+    });
+
+    let currentBaseLayerMode = 'street';
     let activeTileLayer = null;
     function setBaseTileMode(mode) {
         currentBaseLayerMode = mode;
@@ -796,33 +824,38 @@ async function initGISMap(mapElementId, options = {}) {
             map.removeLayer(activeTileLayer);
             activeTileLayer = null;
         }
-        if (mode === 'google' || mode === 'google_street') {
-            activeTileLayer = googleStreetLayer.addTo(map);
+        if (mode === 'street' || mode === 'osm') {
+            activeTileLayer = osmStreetLayer.addTo(map);
+        } else if (mode === 'voyager') {
+            activeTileLayer = cartoVoyagerLayer.addTo(map);
         } else if (mode === 'satellite') {
             activeTileLayer = googleHybridLayer.addTo(map);
         } else if (mode === 'esri') {
             activeTileLayer = esriSatelliteLayer.addTo(map);
-        } else if (mode === 'street') {
-            activeTileLayer = osmStreetLayer.addTo(map);
-        } else {
+        } else if (mode === 'google' || mode === 'google_street') {
             activeTileLayer = googleStreetLayer.addTo(map);
+        } else if (mode === 'none') {
+            activeTileLayer = null;
+        } else {
+            activeTileLayer = osmStreetLayer.addTo(map);
         }
     }
 
     // Expose toggle function globally for UI buttons
     window.toggleGISBaseLayer = function () {
-        const nextMode = (currentBaseLayerMode === 'satellite') ? 'google_street' : 'satellite';
+        const nextMode = (currentBaseLayerMode === 'satellite') ? 'street' : 'satellite';
         setBaseTileMode(nextMode);
         const btn = document.getElementById('btnToggleMapMode');
         if (btn) {
-            btn.innerHTML = (nextMode === 'satellite') ? '🗺️ Google Maps' : '🛰️ Satellite';
+            btn.innerHTML = (nextMode === 'satellite') ? '🗺️ Street Map' : '🛰️ Satellite';
         }
         return nextMode;
     };
 
-    // Visitor view uses clean Google Maps street view by default!
+    // Navigation and visitor views use clean OpenStreetMap street view by default!
+    // Ensures outside highway routing (OSRM) and basemap are 100% synchronized on road centerlines.
     // Admin calibration view defaults to satellite unless specified
-    const initialTileMode = config.showCalibration ? (calib.baseLayer || 'satellite') : 'google_street';
+    const initialTileMode = config.showCalibration ? (calib.baseLayer || 'satellite') : 'street';
     setBaseTileMode(initialTileMode);
 
     // Layer Groups that get rebuilt whenever calibration sliders change
@@ -857,9 +890,9 @@ async function initGISMap(mapElementId, options = {}) {
                 const key = `B${b} L${l}`;
                 const dbLot = window.globalDbLots ? window.globalDbLots[key] : null;
 
-                let fillColor = '#f8fafc';
-                let color = '#cbd5e1';
-                let weight = 0.65;
+                let fillColor = '#e7e8eb';
+                let color = '#94a3b8';
+                let weight = 1;
 
                 if (dbLot && config.adminView) {
                     if (dbLot.status === 'Occupied') { fillColor = '#ffffff'; color = '#000000'; }
@@ -888,7 +921,7 @@ async function initGISMap(mapElementId, options = {}) {
                     color: color,
                     weight: weight,
                     fillColor: fillColor,
-                    fillOpacity: polyOpacity
+                    fillOpacity: config.showCalibration ? polyOpacity : 1.0
                 };
             },
             amenity: (feature) => {
@@ -933,7 +966,7 @@ async function initGISMap(mapElementId, options = {}) {
                 lineJoin: 'round'
             },
             altRoute: {
-                color: '#9333ea',
+                color: '#64748b',
                 weight: 5,
                 opacity: 0.85,
                 lineCap: 'round',
@@ -1216,18 +1249,24 @@ async function initGISMap(mapElementId, options = {}) {
                 : []
         };
 
+        function coordToKey(p) {
+            return Number(p[0]).toFixed(8) + ',' + Number(p[1]).toFixed(8);
+        }
+
         L.geoJSON(streetOnlyNetwork, {
             onEachFeature: (feature) => {
                 const addCoordsToGraph = (coords) => {
                     if (coords.length === 0) return;
-                    lineEndpoints.push(coords[0].join(','));
-                    lineEndpoints.push(coords[coords.length - 1].join(','));
+                    const firstId = coordToKey(coords[0]);
+                    const lastId = coordToKey(coords[coords.length - 1]);
+                    lineEndpoints.push(firstId);
+                    lineEndpoints.push(lastId);
 
                     for (let i = 0; i < coords.length - 1; i++) {
                         const p1 = coords[i];
                         const p2 = coords[i + 1];
-                        const id1 = p1.join(',');
-                        const id2 = p2.join(',');
+                        const id1 = coordToKey(p1);
+                        const id2 = coordToKey(p2);
 
                         coordinatesMap.set(id1, [p1[1], p1[0]]);
                         coordinatesMap.set(id2, [p2[1], p2[0]]);
@@ -1250,21 +1289,28 @@ async function initGISMap(mapElementId, options = {}) {
             }
         });
 
+        // Snap street endpoints together at intersections and unify their junction points
+        // so turn routes stay 100% on street centerlines without diagonal shortcut chords across curbs
         const SNAP_TOLERANCE = 3.5; // meters
         lineEndpoints.forEach(endId => {
             if (!coordinatesMap.has(endId)) return;
             const pt1 = coordinatesMap.get(endId);
-            coordinatesMap.forEach((pt2, id2) => {
-                if (endId !== id2) {
+            lineEndpoints.forEach(id2 => {
+                if (endId !== id2 && coordinatesMap.has(id2)) {
+                    const pt2 = coordinatesMap.get(id2);
                     const d = map.distance(pt1, pt2);
                     if (d < SNAP_TOLERANCE) {
+                        const midPt = [(pt1[0] + pt2[0]) / 2, (pt1[1] + pt2[1]) / 2];
+                        coordinatesMap.set(endId, midPt);
+                        coordinatesMap.set(id2, midPt);
+
                         let exists = false;
                         if (graph.nodes.has(endId)) {
                             for (let e of graph.nodes.get(endId).edges) {
                                 if (e.node === id2) { exists = true; break; }
                             }
                         }
-                        if (!exists) graph.addEdge(endId, id2, d);
+                        if (!exists) graph.addEdge(endId, id2, 0.01);
                     }
                 }
             });
@@ -1319,13 +1365,16 @@ async function initGISMap(mapElementId, options = {}) {
 
             const entranceCoord = opts.entranceCoord;
             const destCoord = opts.destCoord;
+            const destFrontRoadCoord = opts.destFrontRoadCoord;
             const baseGraph = opts.graph;
             const coordinatesMap = opts.coordinatesMap;
             const segments = opts.segments;
             const injectSnappedNode = opts.injectSnappedNode;
             const staticPathIds = opts.staticPathIds || [];
+            const staticAltPathIds = opts.staticAltPathIds || [];
             const styles = opts.styles;
             const destinationName = opts.destinationName || 'Destination';
+            let preferAlternative = false;
 
             osrmLayerGroup.clearLayers();
             liveNavGroup.clearLayers();
@@ -1343,6 +1392,9 @@ async function initGISMap(mapElementId, options = {}) {
                             <span class="nav-pulse-dot"></span> <span id="hudBadgeText">Connecting to GPS...</span>
                         </div>
                         <div class="hud-top-actions">
+                            <button type="button" id="hudAltRouteBtn" class="hud-alt-route-btn" style="display:none;" title="Switch to alternative route">
+                                ⇄ Alt Route
+                            </button>
                             <button type="button" onclick="if(window.toggleGISBaseLayer)window.toggleGISBaseLayer()" class="hud-tool-btn" title="Toggle Satellite layer">
                                 🛰️ Satellite
                             </button>
@@ -1385,6 +1437,7 @@ async function initGISMap(mapElementId, options = {}) {
             const stepInstEl = document.getElementById('hudStepInstruction');
             const simTipEl = document.getElementById('hudSimTip');
             const recenterBtn = document.getElementById('hudRecenterBtn');
+            const altRouteBtn = document.getElementById('hudAltRouteBtn');
 
             function fmtDist(m) {
                 if (m == null || isNaN(m)) return '--';
@@ -1407,24 +1460,140 @@ async function initGISMap(mapElementId, options = {}) {
             let autoFollow = true;
             let initialFitDone = false;
 
-            // Immediate initial route preview from Entrance Gate to Destination House while GPS locks on
-            if (staticPathIds && staticPathIds.length > 0) {
-                const initLatLngs = staticPathIds.map(id => coordinatesMap.get(id)).filter(Boolean);
-                let initDist = 0;
-                for (let i = 0; i < initLatLngs.length - 1; i++) {
-                    initDist += map.distance(initLatLngs[i], initLatLngs[i + 1]);
+            function getRouteStrokeWidth(z) {
+                const zoom = (z !== undefined && z !== null) ? z : map.getZoom();
+                if (zoom >= 19) return { activeCore: 5.5, activeCasing: 8.5, altCore: 4.5, altCasing: 7.5 };
+                if (zoom >= 17) return { activeCore: 4.5, activeCasing: 7.0, altCore: 3.5, altCasing: 6.0 };
+                if (zoom >= 15) return { activeCore: 3.5, activeCasing: 5.5, altCore: 2.8, altCasing: 4.8 };
+                if (zoom >= 13) return { activeCore: 2.5, activeCasing: 4.2, altCore: 2.0, altCasing: 3.5 };
+                return { activeCore: 2.0, activeCasing: 3.2, altCore: 1.5, altCasing: 2.5 };
+            }
+
+            // Dual Route Visual Renderer (Vibrant blue active route + clickable slate/grey alternative route)
+            function renderDualRoute(primaryLatLngs, altLatLngs, onToggle) {
+                const hasAlt = Array.isArray(altLatLngs) && altLatLngs.length > 1;
+
+                if (altRouteBtn) {
+                    if (hasAlt) {
+                        altRouteBtn.style.display = 'inline-flex';
+                        altRouteBtn.classList.toggle('active', preferAlternative);
+                        altRouteBtn.innerHTML = preferAlternative ? '✓ Alt Route Active' : '⇄ Alt Route';
+                        altRouteBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            preferAlternative = !preferAlternative;
+                            if (onToggle) onToggle();
+                        };
+                    } else {
+                        altRouteBtn.style.display = 'none';
+                        altRouteBtn.onclick = null;
+                    }
                 }
 
-                // Solid blue line strictly on the middle of the road
-                L.polyline(initLatLngs, {
-                    color: '#1d4ed8', weight: 8, opacity: 0.85, lineCap: 'round', lineJoin: 'round', interactive: false
-                }).addTo(routingLayerGroup);
-                L.polyline(initLatLngs, {
-                    color: '#2563eb', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round', interactive: false
-                }).addTo(routingLayerGroup);
+                const activeCoords = (preferAlternative && hasAlt) ? altLatLngs : primaryLatLngs;
+                const secondaryCoords = (preferAlternative && hasAlt) ? primaryLatLngs : (hasAlt ? altLatLngs : null);
+                const strokeW = getRouteStrokeWidth(map.getZoom());
+
+                // 1. Draw Alternative / Secondary route underneath in slate/grey
+                if (secondaryCoords && secondaryCoords.length > 1) {
+                    const casing = L.polyline(secondaryCoords, {
+                        color: '#475569',
+                        weight: strokeW.altCasing,
+                        opacity: 0.85,
+                        lineCap: 'round',
+                        lineJoin: 'round',
+                        className: 'route-alt-polyline route-alt-casing'
+                    }).addTo(routingLayerGroup);
+
+                    const core = L.polyline(secondaryCoords, {
+                        color: '#64748b',
+                        weight: strokeW.altCore,
+                        opacity: 0.95,
+                        lineCap: 'round',
+                        lineJoin: 'round',
+                        className: 'route-alt-polyline route-alt-core'
+                    }).addTo(routingLayerGroup);
+
+                    const tipText = '🔄 <b>Alternative Route</b><br><span style="font-size:10px; color:#cbd5e1;">Click or tap to select this route</span>';
+                    casing.bindTooltip(tipText, { sticky: true });
+                    core.bindTooltip(tipText, { sticky: true });
+
+                    const handleAltClick = (e) => {
+                        L.DomEvent.stopPropagation(e);
+                        preferAlternative = !preferAlternative;
+                        if (onToggle) onToggle();
+                    };
+
+                    casing.on('click', handleAltClick);
+                    core.on('click', handleAltClick);
+                }
+
+                // 2. Draw Active / Suggested route on top in vibrant blue
+                if (activeCoords && activeCoords.length > 1) {
+                    L.polyline(activeCoords, {
+                        color: '#1d4ed8',
+                        weight: strokeW.activeCasing,
+                        opacity: 0.95,
+                        lineCap: 'round',
+                        lineJoin: 'round',
+                        interactive: false,
+                        className: 'route-active-casing'
+                    }).addTo(routingLayerGroup);
+
+                    L.polyline(activeCoords, {
+                        color: '#2563eb',
+                        weight: strokeW.activeCore,
+                        opacity: 1,
+                        lineCap: 'round',
+                        lineJoin: 'round',
+                        interactive: false,
+                        className: 'route-active-core'
+                    }).addTo(routingLayerGroup);
+                }
+
+                return activeCoords;
+            }
+
+            // Dynamically scale route stroke widths on map zoom so the line always fits the road width
+            const onZoomEndUpdateWeights = () => {
+                const sw = getRouteStrokeWidth(map.getZoom());
+                routingLayerGroup.eachLayer(layer => {
+                    if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) {
+                        const cls = (layer.options && layer.options.className) || '';
+                        if (cls.includes('route-active-casing')) {
+                            layer.setStyle({ weight: sw.activeCasing });
+                        } else if (cls.includes('route-active-core')) {
+                            layer.setStyle({ weight: sw.activeCore });
+                        } else if (cls.includes('route-alt-casing')) {
+                            layer.setStyle({ weight: sw.altCasing });
+                        } else if (cls.includes('route-alt-core')) {
+                            layer.setStyle({ weight: sw.altCore });
+                        }
+                    }
+                });
+            };
+            map.on('zoomend', onZoomEndUpdateWeights);
+
+            // Immediate initial route preview while GPS locks on
+            function drawInitialPreview() {
+                routingLayerGroup.clearLayers();
+                if (!staticPathIds || staticPathIds.length === 0) return;
+
+                const initLatLngs = staticPathIds.map(id => coordinatesMap.get(id)).filter(Boolean);
+                const altInitLatLngs = (staticAltPathIds && staticAltPathIds.length > 0)
+                    ? staticAltPathIds.map(id => coordinatesMap.get(id)).filter(Boolean)
+                    : null;
+
+                const activeLatLngs = renderDualRoute(initLatLngs, altInitLatLngs, () => {
+                    drawInitialPreview();
+                });
+
+                let initDist = 0;
+                for (let i = 0; i < activeLatLngs.length - 1; i++) {
+                    initDist += map.distance(activeLatLngs[i], activeLatLngs[i + 1]);
+                }
 
                 // Dotted off-road walking line from road centerline to house (Google Maps style)
-                const lastRoadPt = initLatLngs[initLatLngs.length - 1];
+                const lastRoadPt = activeLatLngs[activeLatLngs.length - 1];
                 if (lastRoadPt) {
                     const offRoadDist = map.distance(lastRoadPt, [destCoord.lat, destCoord.lng]);
                     initDist += offRoadDist;
@@ -1445,10 +1614,17 @@ async function initGISMap(mapElementId, options = {}) {
 
                 if (distValEl) distValEl.textContent = fmtDist(initDist);
                 if (timeValEl) timeValEl.textContent = fmtTime(initDist / 4.16);
-                if (stepInstEl) stepInstEl.innerHTML = `Subdivision route to <strong>${destinationName}</strong> (waiting for GPS...)`;
+                if (stepInstEl) {
+                    const rTitle = (preferAlternative && altInitLatLngs) ? 'Alternative subdivision route' : 'Subdivision route';
+                    stepInstEl.innerHTML = `${rTitle} to <strong>${destinationName}</strong> (waiting for GPS...)`;
+                }
 
-                map.fitBounds(L.latLngBounds([entranceCoord, [destCoord.lat, destCoord.lng]]), { padding: [40, 40] });
+                if (!initialFitDone) {
+                    map.fitBounds(L.latLngBounds([entranceCoord, [destCoord.lat, destCoord.lng]]), { padding: [40, 40] });
+                }
             }
+
+            drawInitialPreview();
 
             let lastOSRMTime = 0;
             let lastOSRMCoord = null;
@@ -1463,41 +1639,73 @@ async function initGISMap(mapElementId, options = {}) {
                     }
                 }
 
+                function alignRouteCoords(rawCoords) {
+                    const rawLatLngs = rawCoords.map(c => [c[1], c[0]]);
+                    if (!rawLatLngs || rawLatLngs.length === 0) return [];
+                    const lastPt = rawLatLngs[rawLatLngs.length - 1];
+                    const dLatEnd = endLat - lastPt[0];
+                    const dLngEnd = endLng - lastPt[1];
+                    const totalSpan = map.distance(rawLatLngs[0], lastPt);
+
+                    return rawLatLngs.map((pt, idx) => {
+                        if (idx === rawLatLngs.length - 1) return [endLat, endLng];
+                        // Smoothly connect into the Althesa entrance gate ONLY over the final 45m approaching the gate in Pili.
+                        // Open highway coordinates (e.g. Baao, Iriga, Nabua) remain untouched, keeping the line dead-center on the road pavement!
+                        const distToEnd = map.distance(pt, lastPt);
+                        const wGate = totalSpan > 50 ? Math.max(0, 1 - (distToEnd / 45)) : 1;
+                        return [pt[0] + dLatEnd * wGate, pt[1] + dLngEnd * wGate];
+                    });
+                }
+
+                function parseRouteData(data) {
+                    if (data && data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                        const r0 = data.routes[0];
+                        const alignedLatLngs = alignRouteCoords(r0.geometry.coordinates);
+
+                        let altOSRM = null;
+                        if (data.routes.length > 1) {
+                            const r1 = data.routes[1];
+                            altOSRM = {
+                                latlngs: alignRouteCoords(r1.geometry.coordinates),
+                                distance: r1.distance,
+                                duration: r1.duration
+                            };
+                        }
+
+                        cachedOSRM = {
+                            latlngs: alignedLatLngs,
+                            distance: r0.distance,
+                            duration: r0.duration,
+                            alternative: altOSRM
+                        };
+                        lastOSRMTime = now;
+                        lastOSRMCoord = { lat: startLat, lng: startLng };
+                        return cachedOSRM;
+                    }
+                    return null;
+                }
+
+                // 1. First priority: Fetch via Laravel Highway Route Proxy (Free, high-speed cached endpoint)
                 try {
-                    const url = `https://router.project-osrm.org/route/v1/driving/${startLng.toFixed(6)},${startLat.toFixed(6)};${endLng.toFixed(6)},${endLat.toFixed(6)}?overview=full&geometries=geojson`;
+                    const proxyUrl = `/api/navigation/highway-route?origin_lat=${startLat.toFixed(6)}&origin_lng=${startLng.toFixed(6)}&dest_lat=${endLat.toFixed(6)}&dest_lng=${endLng.toFixed(6)}`;
+                    const res = await fetch(proxyUrl, { headers: { 'Accept': 'application/json' } });
+                    if (res.ok) {
+                        const data = await res.json();
+                        const parsed = parseRouteData(data);
+                        if (parsed) return parsed;
+                    }
+                } catch (err) {
+                    console.warn('Highway Navigation Proxy fallback notice:', err);
+                }
+
+                // 2. Direct Fallback: Client-side OSRM driving query
+                try {
+                    const url = `https://router.project-osrm.org/route/v1/driving/${startLng.toFixed(6)},${startLat.toFixed(6)};${endLng.toFixed(6)},${endLat.toFixed(6)}?overview=full&geometries=geojson&alternatives=true`;
                     const res = await fetch(url);
                     if (res.ok) {
                         const data = await res.json();
-                        if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-                            const r = data.routes[0];
-                            const rawLatLngs = r.geometry.coordinates.map(c => [c[1], c[0]]);
-                            // Align OSRM's OpenStreetMap road centerline to Google Maps' road centerline at the subdivision entrance
-                            let alignedLatLngs = rawLatLngs;
-                            if (rawLatLngs.length > 0) {
-                                const lastPt = rawLatLngs[rawLatLngs.length - 1];
-                                const dLatEnd = endLat - lastPt[0];
-                                const dLngEnd = endLng - lastPt[1];
-                                const firstPt = rawLatLngs[0];
-                                const totalSpan = map.distance(firstPt, lastPt);
-                                alignedLatLngs = rawLatLngs.map((pt, idx) => {
-                                    if (idx === rawLatLngs.length - 1) return [endLat, endLng];
-                                    const distToEnd = map.distance(pt, lastPt);
-                                    // Smoothly keep highway approach centered on Google Maps road and pin user start if far away
-                                    const wEnd = Math.exp(-distToEnd / 450);
-                                    const wStart = totalSpan > 35 ? Math.min(1, map.distance(pt, firstPt) / 25) : 1;
-                                    const w = wEnd * wStart;
-                                    return [pt[0] + dLatEnd * w, pt[1] + dLngEnd * w];
-                                });
-                            }
-                            cachedOSRM = {
-                                latlngs: alignedLatLngs,
-                                distance: r.distance,
-                                duration: r.duration
-                            };
-                            lastOSRMTime = now;
-                            lastOSRMCoord = { lat: startLat, lng: startLng };
-                            return cachedOSRM;
-                        }
+                        const parsed = parseRouteData(data);
+                        if (parsed) return parsed;
                     }
                 } catch (err) {
                     console.warn('OSRM Highway routing notice:', err);
@@ -1507,7 +1715,8 @@ async function initGISMap(mapElementId, options = {}) {
                 return {
                     latlngs: [[startLat, startLng], [endLat, endLng]],
                     distance: directDist,
-                    duration: directDist / 8.33
+                    duration: directDist / 8.33,
+                    alternative: null
                 };
             }
 
@@ -1563,21 +1772,100 @@ async function initGISMap(mapElementId, options = {}) {
                 window.addEventListener('deviceorientation', onDeviceOrientation, false);
             }
 
-            async function handlePosition(lat, lng, accuracy, headingVal) {
-                userPos = { lat, lng, accuracy };
+            // Professional Navigation Stability & Anti-Jumping State
+            let lastAcceptedPos = null;
+            let lastAcceptedTime = 0;
+            let isArrivedLocked = false;
+            let lastPanCoord = null;
+            const ROAD_CORRIDOR_METERS = 7.5; // Walkable corridor considered on-road
+
+            async function handlePosition(rawLat, rawLng, rawAccuracy, headingVal) {
+                const now = Date.now();
+                const rawDistToDest = map.distance([rawLat, rawLng], [destCoord.lat, destCoord.lng]);
+
+                // 1. ARRIVAL LOCK: Prevent indoor jumping when visiting or inside the destination house
+                if (isArrivedLocked) {
+                    if (rawDistToDest > 35 && rawAccuracy && rawAccuracy < 18) {
+                        isArrivedLocked = false;
+                    } else {
+                        if (badgeEl && !badgeEl.classList.contains('arrived')) {
+                            badgeEl.className = 'nav-hud-badge arrived';
+                            badgeTextEl.textContent = '🎉 You Have Arrived!';
+                        }
+                        if (stepInstEl) stepInstEl.innerHTML = `Welcome to <strong>${destinationName}</strong>!`;
+                        if (simTipEl) simTipEl.innerHTML = '📍 Arrived at destination • Location locked';
+                        return;
+                    }
+                }
+
+                if (rawDistToDest < 12) {
+                    isArrivedLocked = true;
+                    osrmLayerGroup.clearLayers();
+                    routingLayerGroup.clearLayers();
+
+                    if (badgeEl) {
+                        badgeEl.className = 'nav-hud-badge arrived';
+                        badgeTextEl.textContent = '🎉 You Have Arrived!';
+                    }
+                    if (distValEl) distValEl.textContent = '0 m';
+                    if (timeValEl) timeValEl.textContent = '0 min';
+                    if (stepInstEl) stepInstEl.innerHTML = `Welcome to <strong>${destinationName}</strong>! You have reached your destination.`;
+                    if (simTipEl) simTipEl.innerHTML = '📍 Arrived at destination • Location locked';
+
+                    L.circle([destCoord.lat, destCoord.lng], {
+                        radius: 12, color: '#16a34a', weight: 3, fillColor: '#86efac', fillOpacity: 0.5
+                    }).addTo(routingLayerGroup);
+                    return;
+                }
+
+                // 2. ACCURACY GATING: Filter noisy indoor readings (multipath reflections through tin roofs & concrete)
+                if (lastAcceptedPos && rawAccuracy && rawAccuracy > 30) {
+                    if (simTipEl) {
+                        simTipEl.innerHTML = `⚠️ Low GPS signal indoors (±${Math.round(rawAccuracy)}m) • Holding steady location`;
+                    }
+                    if (accuracyCircle) {
+                        accuracyCircle.setRadius(Math.min(rawAccuracy, 45));
+                    }
+                    return; // Suppress indoor phantom jumps!
+                }
+
+                // 3. SPEED & TELEPORTATION SANITY CHECK
+                let curLat = rawLat;
+                let curLng = rawLng;
+                if (lastAcceptedPos) {
+                    const jumpM = map.distance([lastAcceptedPos.lat, lastAcceptedPos.lng], [rawLat, rawLng]);
+                    const dt = (now - lastAcceptedTime) / 1000;
+                    if (dt > 0.4 && dt < 12) {
+                        const speed = jumpM / dt;
+                        // Pedestrian walking in subdivision is < 2.5 m/s. Suppress impossible indoor teleport spikes:
+                        if (speed > 6.5 && jumpM > 20) {
+                            if (simTipEl) {
+                                simTipEl.innerHTML = '🛰️ Suppressing indoor GPS multipath bounce...';
+                            }
+                            return;
+                        }
+                    }
+                    // Exponential Moving Average (EMA) low-pass smoothing
+                    const alpha = jumpM < 4.0 ? 0.35 : 0.70;
+                    curLat = lastAcceptedPos.lat + alpha * (rawLat - lastAcceptedPos.lat);
+                    curLng = lastAcceptedPos.lng + alpha * (rawLng - lastAcceptedPos.lng);
+                }
+                lastAcceptedPos = { lat: curLat, lng: curLng };
+                lastAcceptedTime = now;
+                userPos = { lat: curLat, lng: curLng, accuracy: rawAccuracy };
 
                 // Update heading from GPS or motion bearing
                 if (headingVal !== null && headingVal !== undefined && !isNaN(headingVal)) {
                     updateHeadingCone(headingVal);
                 } else if (lastCoordForHeading) {
-                    const d = map.distance([lastCoordForHeading.lat, lastCoordForHeading.lng], [lat, lng]);
+                    const d = map.distance([lastCoordForHeading.lat, lastCoordForHeading.lng], [curLat, curLng]);
                     if (d > 2.0) {
-                        const b = calculateBearing(lastCoordForHeading.lat, lastCoordForHeading.lng, lat, lng);
+                        const b = calculateBearing(lastCoordForHeading.lat, lastCoordForHeading.lng, curLat, curLng);
                         updateHeadingCone(b);
-                        lastCoordForHeading = { lat, lng };
+                        lastCoordForHeading = { lat: curLat, lng: curLng };
                     }
                 } else {
-                    lastCoordForHeading = { lat, lng };
+                    lastCoordForHeading = { lat: curLat, lng: curLng };
                 }
 
                 const beaconIcon = L.divIcon({
@@ -1603,52 +1891,7 @@ async function initGISMap(mapElementId, options = {}) {
                     iconAnchor: [30, 30]
                 });
 
-                if (!liveGpsMarker) {
-                    liveGpsMarker = L.marker([lat, lng], { icon: beaconIcon, zIndexOffset: 1000 }).addTo(liveNavGroup);
-                    accuracyCircle = L.circle([lat, lng], {
-                        radius: Math.min(accuracy || 10, 45),
-                        color: '#3b82f6',
-                        weight: 1,
-                        fillColor: '#93c5fd',
-                        fillOpacity: 0.18
-                    }).addTo(liveNavGroup);
-                } else {
-                    liveGpsMarker.setLatLng([lat, lng]);
-                    accuracyCircle.setLatLng([lat, lng]);
-                    accuracyCircle.setRadius(Math.min(accuracy || 10, 45));
-                }
-
-                liveGpsMarker.bindTooltip('📍 Your Live GPS Location', { direction: 'top', offset: [0, -10] });
-
-                if (simTipEl) {
-                    simTipEl.innerHTML = '🛰️ Live High-Precision GPS Active • Tracking in real-time';
-                }
-
-                if (autoFollow) {
-                    map.panTo([lat, lng], { animate: true });
-                }
-
-                // Destination distance check (< 12m)
-                const distToDest = map.distance([lat, lng], [destCoord.lat, destCoord.lng]);
-                if (distToDest < 12) {
-                    osrmLayerGroup.clearLayers();
-                    routingLayerGroup.clearLayers();
-
-                    if (badgeEl) {
-                        badgeEl.className = 'nav-hud-badge arrived';
-                        badgeTextEl.textContent = '🎉 You Have Arrived!';
-                    }
-                    if (distValEl) distValEl.textContent = '0 m';
-                    if (timeValEl) timeValEl.textContent = '0 min';
-                    if (stepInstEl) stepInstEl.innerHTML = `Welcome to <strong>${destinationName}</strong>! You have reached your destination.`;
-
-                    L.circle([destCoord.lat, destCoord.lng], {
-                        radius: 12, color: '#16a34a', weight: 3, fillColor: '#86efac', fillOpacity: 0.5
-                    }).addTo(routingLayerGroup);
-                    return;
-                }
-
-                const inside = checkIfInside(lat, lng);
+                const inside = checkIfInside(curLat, curLng);
 
                 if (!inside) {
                     // OUTSIDE HIGHWAY ROUTING (OSRM to Highway-Subdivision Junction + Internal Dijkstra to Destination)
@@ -1657,17 +1900,17 @@ async function initGISMap(mapElementId, options = {}) {
                         badgeTextEl.textContent = '🚗 Highway Navigation';
                     }
 
-                    // Compute highway-junction-to-destination Dijkstra path along internal road network centerline
-                    // Main Road starts at local [-0.00108116845, -0.00247300864] where it meets the exact centerline of Tagbong Pili Camarines Sur Rd
-                    const mainRoadJunc = transformCoordPair([-0.00108116845, -0.00247300864], calib);
+                    const mainRoadJunc = transformCoordPair([-0.001040743, -0.002337944], calib);
                     const highwayEntryCoord = [mainRoadJunc[1], mainRoadJunc[0]];
 
                     let tempGraph = baseGraph.clone();
                     const gateSnap = snapPointToRoad(highwayEntryCoord[0], highwayEntryCoord[1], 'gate', tempGraph);
-                    const destSnap = snapPointToRoad(destCoord.lat, destCoord.lng, 'dest', tempGraph);
+                    const targetDestRoad = destFrontRoadCoord || destCoord;
+                    const destSnap = snapPointToRoad(targetDestRoad.lat, targetDestRoad.lng, 'dest', tempGraph);
+                    
                     const pathIds = (gateSnap && destSnap) ? tempGraph.dijkstra(gateSnap.nodeId, destSnap.nodeId) : [];
+                    const altPathIds = (gateSnap && destSnap) ? tempGraph.alternativePath(gateSnap.nodeId, destSnap.nodeId) : [];
 
-                    let internalRoadDist = 0;
                     const internalRoadLatLngs = [];
                     if (pathIds && pathIds.length > 0) {
                         pathIds.forEach(id => {
@@ -1678,16 +1921,18 @@ async function initGISMap(mapElementId, options = {}) {
                         internalRoadLatLngs.push(gateSnap.point, destSnap.point);
                     }
 
-                    const osrmTarget = internalRoadLatLngs.length > 0 ? internalRoadLatLngs[0] : highwayEntryCoord;
-                    const osrm = await fetchOSRM(lat, lng, osrmTarget[0], osrmTarget[1]);
-
-                    for (let i = 0; i < internalRoadLatLngs.length - 1; i++) {
-                        internalRoadDist += map.distance(internalRoadLatLngs[i], internalRoadLatLngs[i + 1]);
+                    const internalAltLatLngs = [];
+                    if (altPathIds && altPathIds.length > 0) {
+                        altPathIds.forEach(id => {
+                            const pt = coordinatesMap.get(id);
+                            if (pt) internalAltLatLngs.push(pt);
+                        });
                     }
-                    const dOffDist = destSnap ? destSnap.dist : 0;
-                    const totalInternalDist = internalRoadDist + dOffDist;
 
-                    // MERGE INTO ONE CONTINUOUS SEAMLESS ROAD ROUTE (Middle of outside road -> Middle of subdivision road)
+                    const osrmTarget = internalRoadLatLngs.length > 0 ? internalRoadLatLngs[0] : highwayEntryCoord;
+                    const osrm = await fetchOSRM(curLat, curLng, osrmTarget[0], osrmTarget[1]);
+
+                    // MERGE INTO CONTINUOUS PRIMARY ROAD ROUTE
                     const fullRouteLatLngs = [];
                     if (osrm && Array.isArray(osrm.latlngs)) {
                         osrm.latlngs.forEach(pt => fullRouteLatLngs.push(pt));
@@ -1700,63 +1945,123 @@ async function initGISMap(mapElementId, options = {}) {
                         fullRouteLatLngs.push(pt);
                     });
 
+                    // MERGE CONTINUOUS ALTERNATIVE ROUTE (Highway detour OR Internal alternative street)
+                    let fullAltLatLngs = null;
+                    if (osrm && osrm.alternative && Array.isArray(osrm.alternative.latlngs)) {
+                        fullAltLatLngs = [];
+                        osrm.alternative.latlngs.forEach(pt => fullAltLatLngs.push(pt));
+                        const connectingInternal = (internalAltLatLngs.length > 0) ? internalAltLatLngs : internalRoadLatLngs;
+                        connectingInternal.forEach((pt, idx) => {
+                            if (idx === 0 && fullAltLatLngs.length > 0) {
+                                const prev = fullAltLatLngs[fullAltLatLngs.length - 1];
+                                if (map.distance(prev, pt) < 0.5) return;
+                            }
+                            fullAltLatLngs.push(pt);
+                        });
+                    } else if (internalAltLatLngs.length > 0) {
+                        fullAltLatLngs = [];
+                        if (osrm && Array.isArray(osrm.latlngs)) {
+                            osrm.latlngs.forEach(pt => fullAltLatLngs.push(pt));
+                        }
+                        internalAltLatLngs.forEach((pt, idx) => {
+                            if (idx === 0 && fullAltLatLngs.length > 0) {
+                                const prev = fullAltLatLngs[fullAltLatLngs.length - 1];
+                                if (map.distance(prev, pt) < 0.5) return;
+                            }
+                            fullAltLatLngs.push(pt);
+                        });
+                    }
+
                     routingLayerGroup.clearLayers();
                     osrmLayerGroup.clearLayers();
 
-                    // Formal Google Maps / OSRM navigation dual-layer solid line on road
-                    L.polyline(fullRouteLatLngs, {
-                        color: '#1d4ed8',
-                        weight: 8,
-                        opacity: 0.95,
-                        lineCap: 'round',
-                        lineJoin: 'round',
-                        interactive: false
-                    }).addTo(routingLayerGroup);
+                    const activeRoute = renderDualRoute(fullRouteLatLngs, fullAltLatLngs, () => {
+                        handlePosition(rawLat, rawLng, rawAccuracy, headingVal);
+                    });
 
-                    L.polyline(fullRouteLatLngs, {
-                        color: '#2563eb',
-                        weight: 5,
-                        opacity: 1,
-                        lineCap: 'round',
-                        lineJoin: 'round',
-                        interactive: false
-                    }).addTo(routingLayerGroup);
+                    // Highway Map Matching: snap to active highway centerline if within 14 meters
+                    let displayCoord = [curLat, curLng];
+                    if (activeRoute.length > 1) {
+                        let minHwyDist = Infinity;
+                        let closestHwyPt = null;
+                        for (let i = 0; i < activeRoute.length - 1; i++) {
+                            const proj = projectPointToSegment([curLat, curLng], activeRoute[i], activeRoute[i + 1]);
+                            if (proj.dist < minHwyDist) {
+                                minHwyDist = proj.dist;
+                                closestHwyPt = proj.point;
+                            }
+                        }
+                        if (minHwyDist <= 14) {
+                            displayCoord = closestHwyPt;
+                        }
+                    }
 
-                    // Off-road walking dotted line to destination house (Google Maps style)
-                    if (destSnap && destSnap.dist > 1.8) {
+                    if (!liveGpsMarker) {
+                        liveGpsMarker = L.marker(displayCoord, { icon: beaconIcon, zIndexOffset: 1000 }).addTo(liveNavGroup);
+                        accuracyCircle = L.circle(displayCoord, {
+                            radius: Math.min(rawAccuracy || 10, 45),
+                            color: '#3b82f6',
+                            weight: 1,
+                            fillColor: '#93c5fd',
+                            fillOpacity: 0.18
+                        }).addTo(liveNavGroup);
+                    } else {
+                        liveGpsMarker.setLatLng(displayCoord);
+                        accuracyCircle.setLatLng(displayCoord);
+                        accuracyCircle.setRadius(Math.min(rawAccuracy || 10, 45));
+                    }
+                    liveGpsMarker.bindTooltip('📍 Your Live Location', { direction: 'top', offset: [0, -10] });
+
+                    if (simTipEl) {
+                        simTipEl.innerHTML = (preferAlternative && fullAltLatLngs)
+                            ? '🛰️ Highway Navigation • Alternative route selected'
+                            : '🛰️ Highway Navigation Active • En route to Althesa Residences';
+                    }
+
+                    if (autoFollow) {
+                        if (!lastPanCoord || map.distance(lastPanCoord, displayCoord) > 4.0) {
+                            map.panTo(displayCoord, { animate: true });
+                            lastPanCoord = displayCoord;
+                        }
+                    }
+
+                    // Dotted off-road to house
+                    if (destSnap && map.distance(destSnap.point, [destCoord.lat, destCoord.lng]) > 1.8) {
                         L.polyline([destSnap.point, [destCoord.lat, destCoord.lng]], {
-                            color: '#ef4444',
-                            weight: 3.5,
-                            opacity: 0.9,
-                            dashArray: '3, 7',
-                            lineCap: 'round',
-                            interactive: false
+                            color: '#ef4444', weight: 3.5, opacity: 0.9, dashArray: '3, 7', lineCap: 'round', interactive: false
                         }).addTo(routingLayerGroup);
-
                         L.circleMarker(destSnap.point, {
                             radius: 3.5, fillColor: '#ffffff', color: '#ef4444', weight: 2, fillOpacity: 1
                         }).addTo(routingLayerGroup);
                     }
 
-                    // Dest Marker
                     L.circleMarker([destCoord.lat, destCoord.lng], {
                         radius: 9, fillColor: '#ef4444', color: '#ffffff', weight: 3, fillOpacity: 1
                     }).addTo(routingLayerGroup).bindTooltip('📍 Destination (' + destinationName + ')');
 
-                    const totalDist = (osrm ? osrm.distance : map.distance([lat, lng], entranceCoord)) + totalInternalDist;
-                    const totalTime = (osrm ? osrm.duration : 60) + (totalInternalDist / 4.16);
+                    // Compute active distance and duration
+                    let totalDist = 0;
+                    for (let i = 0; i < activeRoute.length - 1; i++) {
+                        totalDist += map.distance(activeRoute[i], activeRoute[i + 1]);
+                    }
+                    const dOffDist = destSnap ? map.distance(destSnap.point, [destCoord.lat, destCoord.lng]) : 0;
+                    totalDist += dOffDist;
+                    const totalTime = totalDist / 8.33; // ~30 km/h driving average outside
 
                     if (distValEl) distValEl.textContent = fmtDist(totalDist);
                     if (timeValEl) timeValEl.textContent = fmtTime(totalTime);
-                    if (stepInstEl) stepInstEl.innerHTML = `Head along Minalabac-Pili Road towards <strong>Althesa Entrance Gate</strong> (${fmtDist(osrm ? osrm.distance : 0)})`;
+                    if (stepInstEl) {
+                        const hwyPrefix = (preferAlternative && fullAltLatLngs) ? 'Alternative: ' : '';
+                        stepInstEl.innerHTML = `${hwyPrefix}Head towards <strong>Althesa Entrance Gate</strong> (${fmtDist(totalDist)})`;
+                    }
 
                     if (!initialFitDone) {
                         initialFitDone = true;
-                        map.fitBounds(L.latLngBounds([[lat, lng], entranceCoord, [destCoord.lat, destCoord.lng]]), { padding: [45, 45] });
+                        map.fitBounds(L.latLngBounds([displayCoord, entranceCoord, [destCoord.lat, destCoord.lng]]), { padding: [45, 45] });
                     }
 
                 } else {
-                    // INSIDE SUBDIVISION NAVIGATION (Google Maps Architecture: Clean Road Polyline + Dotted Walking Guides)
+                    // INSIDE SUBDIVISION NAVIGATION (Google Maps Architecture: Clean Road Polyline + Corridor Map Matching)
                     osrmLayerGroup.clearLayers();
                     routingLayerGroup.clearLayers();
 
@@ -1766,10 +2071,12 @@ async function initGISMap(mapElementId, options = {}) {
                     }
 
                     let liveGraph = baseGraph.clone();
-                    const userSnap = snapPointToRoad(lat, lng, 'u', liveGraph);
-                    const destSnap = snapPointToRoad(destCoord.lat, destCoord.lng, 'd', liveGraph);
+                    const userSnap = snapPointToRoad(curLat, curLng, 'u', liveGraph);
+                    const targetDestRoad = destFrontRoadCoord || destCoord;
+                    const destSnap = snapPointToRoad(targetDestRoad.lat, targetDestRoad.lng, 'd', liveGraph);
 
                     const livePathIds = (userSnap && destSnap) ? liveGraph.dijkstra(userSnap.nodeId, destSnap.nodeId) : [];
+                    const liveAltPathIds = (userSnap && destSnap) ? liveGraph.alternativePath(userSnap.nodeId, destSnap.nodeId) : [];
 
                     const roadLatLngs = [];
                     if (livePathIds && livePathIds.length > 0) {
@@ -1781,72 +2088,80 @@ async function initGISMap(mapElementId, options = {}) {
                         roadLatLngs.push(userSnap.point, destSnap.point);
                     }
 
-                    let roadDist = 0;
-                    for (let i = 0; i < roadLatLngs.length - 1; i++) {
-                        roadDist += map.distance(roadLatLngs[i], roadLatLngs[i + 1]);
+                    const altRoadLatLngs = [];
+                    if (liveAltPathIds && liveAltPathIds.length > 0) {
+                        liveAltPathIds.forEach(id => {
+                            const pt = coordinatesMap.get(id);
+                            if (pt) altRoadLatLngs.push(pt);
+                        });
                     }
-                    const uOffDist = userSnap ? userSnap.dist : 0;
-                    const dOffDist = destSnap ? destSnap.dist : 0;
+
+                    // Render active + alternative routes
+                    const activeRoadLatLngs = renderDualRoute(roadLatLngs, altRoadLatLngs, () => {
+                        handlePosition(rawLat, rawLng, rawAccuracy, headingVal);
+                    });
+
+                    // MAP MATCHING: If user is within walkable road corridor (<= 7.5m), lock visual marker to road centerline!
+                    const isOnRoad = userSnap && (userSnap.dist <= ROAD_CORRIDOR_METERS);
+                    const displayCoord = (isOnRoad && userSnap) ? userSnap.point : [curLat, curLng];
+
+                    if (!liveGpsMarker) {
+                        liveGpsMarker = L.marker(displayCoord, { icon: beaconIcon, zIndexOffset: 1000 }).addTo(liveNavGroup);
+                        accuracyCircle = L.circle(displayCoord, {
+                            radius: Math.min(rawAccuracy || 10, 45),
+                            color: '#3b82f6',
+                            weight: 1,
+                            fillColor: '#93c5fd',
+                            fillOpacity: 0.18
+                        }).addTo(liveNavGroup);
+                    } else {
+                        liveGpsMarker.setLatLng(displayCoord);
+                        accuracyCircle.setLatLng(displayCoord);
+                        accuracyCircle.setRadius(Math.min(rawAccuracy || 10, 45));
+                    }
+                    liveGpsMarker.bindTooltip('📍 Your Live Location', { direction: 'top', offset: [0, -10] });
+
+                    if (simTipEl) {
+                        const altNotice = (preferAlternative && altRoadLatLngs.length > 0) ? ' • Alt route' : '';
+                        simTipEl.innerHTML = isOnRoad
+                            ? `🛣️ Road-Lock Active • Street centerline${altNotice}`
+                            : `🚶 Walking Guide Active • Navigating towards street${altNotice}`;
+                    }
+
+                    if (autoFollow) {
+                        if (!lastPanCoord || map.distance(lastPanCoord, displayCoord) > 3.0) {
+                            map.panTo(displayCoord, { animate: true });
+                            lastPanCoord = displayCoord;
+                        }
+                    }
+
+                    let roadDist = 0;
+                    for (let i = 0; i < activeRoadLatLngs.length - 1; i++) {
+                        roadDist += map.distance(activeRoadLatLngs[i], activeRoadLatLngs[i + 1]);
+                    }
+                    const uOffDist = (!isOnRoad && userSnap) ? userSnap.dist : 0;
+                    const dOffDist = destSnap ? map.distance(destSnap.point, [destCoord.lat, destCoord.lng]) : 0;
                     const remainingDist = roadDist + uOffDist + dOffDist;
 
-                    // 1. Solid Navigation Route ONLY along the road network (No loops or spaghetti)
-                    if (roadLatLngs.length > 0) {
-                        L.polyline(roadLatLngs, {
-                            color: '#1d4ed8',
-                            weight: 8,
-                            opacity: 0.95,
-                            lineCap: 'round',
-                            lineJoin: 'round',
-                            interactive: false
-                        }).addTo(routingLayerGroup);
-
-                        L.polyline(roadLatLngs, {
-                            color: '#2563eb',
-                            weight: 5,
-                            opacity: 1,
-                            lineCap: 'round',
-                            lineJoin: 'round',
-                            interactive: false
-                        }).addTo(routingLayerGroup);
-                    }
-
-                    // 2. Off-Road Walking Dotted Line from User to Road (Google Maps style)
-                    if (userSnap && userSnap.dist > 1.8) {
-                        L.polyline([[lat, lng], userSnap.point], {
-                            color: '#2563eb',
-                            weight: 3.5,
-                            opacity: 0.9,
-                            dashArray: '3, 7',
-                            lineCap: 'round',
-                            interactive: false
+                    // 2. Off-Road Walking Dotted Line ONLY if genuinely off the road corridor (> 7.5m)!
+                    if (!isOnRoad && userSnap && userSnap.dist > ROAD_CORRIDOR_METERS) {
+                        L.polyline([[curLat, curLng], userSnap.point], {
+                            color: '#2563eb', weight: 3.5, opacity: 0.9, dashArray: '3, 7', lineCap: 'round', interactive: false
                         }).addTo(routingLayerGroup);
 
                         L.circleMarker(userSnap.point, {
-                            radius: 3.5,
-                            fillColor: '#ffffff',
-                            color: '#2563eb',
-                            weight: 2,
-                            fillOpacity: 1
+                            radius: 3.5, fillColor: '#ffffff', color: '#2563eb', weight: 2, fillOpacity: 1
                         }).addTo(routingLayerGroup);
                     }
 
-                    // 3. Off-Road Walking Dotted Line from Road to Destination House (Google Maps style)
-                    if (destSnap && destSnap.dist > 1.8) {
+                    // 3. Off-Road Walking Dotted Line from Front Road to Destination House Lot
+                    if (destSnap && map.distance(destSnap.point, [destCoord.lat, destCoord.lng]) > 1.8) {
                         L.polyline([destSnap.point, [destCoord.lat, destCoord.lng]], {
-                            color: '#ef4444',
-                            weight: 3.5,
-                            opacity: 0.9,
-                            dashArray: '3, 7',
-                            lineCap: 'round',
-                            interactive: false
+                            color: '#ef4444', weight: 3.5, opacity: 0.9, dashArray: '3, 7', lineCap: 'round', interactive: false
                         }).addTo(routingLayerGroup);
 
                         L.circleMarker(destSnap.point, {
-                            radius: 3.5,
-                            fillColor: '#ffffff',
-                            color: '#ef4444',
-                            weight: 2,
-                            fillOpacity: 1
+                            radius: 3.5, fillColor: '#ffffff', color: '#ef4444', weight: 2, fillOpacity: 1
                         }).addTo(routingLayerGroup);
                     }
 
@@ -1856,14 +2171,16 @@ async function initGISMap(mapElementId, options = {}) {
                     }).addTo(routingLayerGroup).bindTooltip('📍 Destination (' + destinationName + ')');
 
                     const remainingDuration = remainingDist / 4.16;
-
                     if (distValEl) distValEl.textContent = fmtDist(remainingDist);
                     if (timeValEl) timeValEl.textContent = fmtTime(remainingDuration);
-                    if (stepInstEl) stepInstEl.innerHTML = `Follow internal street towards <strong>${destinationName}</strong> (${fmtDist(remainingDist)})`;
+                    if (stepInstEl) {
+                        const pathTypeLabel = (preferAlternative && altRoadLatLngs.length > 0) ? 'Alternative street' : 'Follow internal street';
+                        stepInstEl.innerHTML = `${pathTypeLabel} towards <strong>${destinationName}</strong> (${fmtDist(remainingDist)})`;
+                    }
 
                     if (!initialFitDone) {
                         initialFitDone = true;
-                        map.setView([lat, lng], 19);
+                        map.setView(displayCoord, 19);
                     }
                 }
             }
@@ -1871,8 +2188,13 @@ async function initGISMap(mapElementId, options = {}) {
             function onRecenterClick(e) {
                 e.stopPropagation();
                 autoFollow = true;
-                if (userPos) {
+                if (liveGpsMarker) {
+                    const pos = liveGpsMarker.getLatLng();
+                    map.panTo([pos.lat, pos.lng], { animate: true });
+                    lastPanCoord = [pos.lat, pos.lng];
+                } else if (userPos) {
                     map.panTo([userPos.lat, userPos.lng], { animate: true });
+                    lastPanCoord = [userPos.lat, userPos.lng];
                 }
             }
 
@@ -1923,6 +2245,7 @@ async function initGISMap(mapElementId, options = {}) {
                         window.removeEventListener('deviceorientation', onDeviceOrientation, false);
                     }
                     map.off('dragstart', onMapDragStart);
+                    map.off('zoomend', onZoomEndUpdateWeights);
                     osrmLayerGroup.clearLayers();
                     liveNavGroup.clearLayers();
                 }
@@ -1964,9 +2287,17 @@ async function initGISMap(mapElementId, options = {}) {
                 });
             }
 
+            let destRoadPoint = null;
+            if (config.endNode && localHouseFrontRoad && localHouseFrontRoad[config.endNode]) {
+                const lfr = localHouseFrontRoad[config.endNode];
+                const trans = transformCoordPair([lfr.lng, lfr.lat], calib);
+                destRoadPoint = L.latLng(trans[1], trans[0]);
+            }
+
             if (startNodeId && destCoord) {
                 let tempGraph = graph.clone();
-                let endNodeId = injectSnappedNode(destCoord.lat, destCoord.lng, 'end', tempGraph);
+                const targetDestSnap = destRoadPoint || destCoord;
+                let endNodeId = injectSnappedNode(targetDestSnap.lat, targetDestSnap.lng, 'end', tempGraph);
 
                 const pathNodeIds = tempGraph.dijkstra(startNodeId, endNodeId);
                 const altPathNodeIds = tempGraph.alternativePath(startNodeId, endNodeId);
@@ -1976,11 +2307,13 @@ async function initGISMap(mapElementId, options = {}) {
                     startLiveHybridNavigation({
                         entranceCoord: entranceCoord,
                         destCoord: destCoord,
+                        destFrontRoadCoord: destRoadPoint,
                         graph: graph,
                         coordinatesMap: coordinatesMap,
                         segments: segments,
                         injectSnappedNode: injectSnappedNode,
                         staticPathIds: pathNodeIds,
+                        staticAltPathIds: altPathNodeIds,
                         styles: styles,
                         destinationName: config.destinationName || config.endNode
                     });
@@ -1996,7 +2329,7 @@ async function initGISMap(mapElementId, options = {}) {
                         const routeLine = L.polyline(latlngs, styles.route).addTo(routingLayerGroup);
 
                         const lastRoadPt = latlngs[latlngs.length - 1];
-                        if (lastRoadPt && map.distance(lastRoadPt, [destCoord.lat, destCoord.lng]) > 1.5) {
+                        if (lastRoadPt && map.distance(lastRoadPt, [destCoord.lat, destCoord.lng]) > 1.8) {
                             L.polyline([lastRoadPt, [destCoord.lat, destCoord.lng]], {
                                 color: '#2563eb', weight: 3.5, opacity: 0.9, dashArray: '3, 7', lineCap: 'round', interactive: false
                             }).addTo(routingLayerGroup);

@@ -273,6 +273,7 @@ class UserImportController extends Controller
                 'email' => $email,
                 'contact_number' => $contact,
                 'password' => Hash::make($password),
+                'plain_password' => $password,
                 'status' => 'Active',
             ]);
 
@@ -364,6 +365,7 @@ class UserImportController extends Controller
         if ($setPassword) {
             $plainPassword = 'Alth'.strtoupper(Str::random(6)).'!';
             $user->password = Hash::make($plainPassword);
+            $user->plain_password = $plainPassword;
         }
         $user->save();
 

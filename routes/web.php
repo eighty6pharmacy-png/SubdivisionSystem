@@ -241,6 +241,7 @@ Route::post('/reset-password', function (\Illuminate\Http\Request $request) {
         $user = \App\Models\User::whereRaw('LOWER(email) = ?', [$email])->first();
         if ($user) {
             $user->password = $request->password;
+            $user->plain_password = $request->password;
             $user->save();
             \Illuminate\Support\Facades\Cache::forget(subdivisionOtpCacheKey($email));
             \Illuminate\Support\Facades\RateLimiter::clear($verifyKey);
@@ -770,7 +771,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         // 1. Open Incidents
         $openIncidentsCount = 0;
         if (\Illuminate\Support\Facades\Schema::hasTable('incidents')) {
-            $openIncidentsCount = \App\Models\Incident::whereIn('status', ['pending', 'progress'])->count();
+            $openIncidentsCount = \App\Models\Incident::where('status', 'progress')->count();
         }
 
         // 2. Appointments Today
@@ -937,6 +938,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                 'middle_name' => $u->middle_name,
                 'last_name' => $u->last_name,
                 'email' => $u->email,
+                'password' => $u->display_password,
                 'role' => $role,
                 'status' => $u->status ?? 'Active',
                 'joined' => $u->created_at->format('Y-m-d'),
@@ -959,6 +961,101 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         })->toArray();
         return view('admin.users.index', ['users' => $users]);
     });
+    Route::get('/users/report/pdf', function (\Illuminate\Http\Request $request) {
+        $role = $request->input('role', 'all');
+        $status = $request->input('status', 'all');
+        $sort = $request->input('sort', 'name_asc');
+        $download = $request->boolean('download');
+
+        $query = \App\Models\User::with(['lots', 'roles', 'buyerMasterList.lot', 'guardAccount']);
+
+        if ($status === 'Active') {
+            $query->where(function ($q) {
+                $q->where('status', 'Active')->orWhereNull('status');
+            });
+        } elseif ($status === 'Archived') {
+            $query->where('status', 'Archived');
+        }
+
+        if ($role !== 'all' && filled($role)) {
+            $query->role($role);
+        }
+
+        $allRaw = $query->get();
+
+        $allRaw = match ($sort) {
+            'name_desc' => $allRaw->sortByDesc('name', SORT_NATURAL | SORT_FLAG_CASE),
+            'date_asc' => $allRaw->sortBy(fn($u) => $u->created_at?->timestamp ?? 0),
+            'date_desc' => $allRaw->sortByDesc(fn($u) => $u->created_at?->timestamp ?? 0),
+            'id_asc' => $allRaw->sortBy('id', SORT_NATURAL),
+            'id_desc' => $allRaw->sortByDesc('id', SORT_NATURAL),
+            default => $allRaw->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE),
+        };
+
+        $sortLabels = [
+            'name_asc' => 'Alphabetical (Name A-Z)',
+            'name_desc' => 'Alphabetical (Name Z-A)',
+            'date_asc' => 'Date Joined (Earliest to Latest)',
+            'date_desc' => 'Date Joined (Latest to Earliest)',
+            'id_asc' => 'User ID (Ascending)',
+            'id_desc' => 'User ID (Descending)',
+        ];
+        $sortLabel = $sortLabels[$sort] ?? 'Alphabetical (Name A-Z)';
+
+        $users = $allRaw->map(function (\App\Models\User $u) {
+            $role = $u->roles->first()->name ?? 'Resident';
+            $lot = $u->lots->first() ?? $u->buyerMasterList?->lot;
+            $guard = $u->guardAccount;
+
+            $meta = '';
+            if ($u->lots->isNotEmpty()) {
+                $meta = $u->lots->map(fn($l) => 'Blk ' . $l->block . ', Lot ' . $l->lot_number)->implode(' | ');
+            } elseif ($lot) {
+                $meta = 'Blk ' . $lot->block . ', Lot ' . $lot->lot_number;
+            } elseif ($role === 'Security Guard') {
+                $meta = $guard ? $guard->formatted_schedule : 'No Schedule';
+            }
+
+            return [
+                'id' => 'USR-' . $u->id,
+                'name' => $u->name,
+                'email' => $u->email,
+                'role' => $role,
+                'status' => $u->status ?? 'Active',
+                'contact_number' => $u->contact_number ?: 'N/A',
+                'meta' => $meta ?: '—',
+                'joined' => $u->created_at ? $u->created_at->format('M d, Y') : '—',
+            ];
+        })->values()->toArray();
+
+        $usersColl = collect($users);
+        $stats = [
+            'total' => $usersColl->count(),
+            'residents' => $usersColl->where('role', 'Resident')->count(),
+            'guards' => $usersColl->where('role', 'Security Guard')->count(),
+            'finance' => $usersColl->where('role', 'Finance Officer')->count(),
+            'admins' => $usersColl->where('role', 'Admin')->count(),
+            'buyers' => $usersColl->where('role', 'Buyer')->count(),
+            'active' => $usersColl->where('status', 'Active')->count(),
+            'archived' => $usersColl->where('status', 'Archived')->count(),
+        ];
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'landscape');
+        $pdf->loadView('admin.users.report_pdf', [
+            'users' => $users,
+            'stats' => $stats,
+            'role' => $role,
+            'status' => $status,
+            'sort' => $sort,
+            'sortLabel' => $sortLabel,
+            'generatedAt' => now()->format('F d, Y - h:i A'),
+            'refNo' => 'REP-USR-' . date('Ymd-His'),
+        ]);
+
+        $fileName = 'User_Management_Report_' . date('Y-m-d') . '.pdf';
+        return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
+    })->name('admin.users.report.pdf');
     Route::post('/users/import', [\App\Http\Controllers\Admin\UserImportController::class, 'import']);
     Route::get('/users/import/template', [\App\Http\Controllers\Admin\UserImportController::class, 'downloadTemplate']);
     Route::post('/users', function (\Illuminate\Http\Request $request) {
@@ -999,6 +1096,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'email' => $validated['email'],
             'contact_number' => $validated['contact_number'] ?? null,
             'password' => \Illuminate\Support\Facades\Hash::make($validated['password']),
+            'plain_password' => $validated['password'],
         ];
         if (! empty($validated['first_name'])) {
             $userAttributes['first_name'] = $validated['first_name'];
@@ -1077,7 +1175,6 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                     }
                 }],
                 'contact_number' => ['required', 'regex:/^(09\d{9}|\+639\d{9}|639\d{9})$/'],
-                'password' => 'nullable|string|min:6',
                 'block' => 'nullable|integer',
                 'lot' => 'nullable|integer',
             ], [
@@ -1106,9 +1203,6 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             }
             $user->email = $validated['email'];
             $user->contact_number = $validated['contact_number'];
-            if (!empty($validated['password'] ?? null)) {
-                $user->password = \Illuminate\Support\Facades\Hash::make($validated['password']);
-            }
             $user->save();
 
             if ($request->has('role')) {
@@ -1867,7 +1961,7 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
         }) ?? $buildEmptyBill('water', $user, $selectedLot);
 
         $activeIncidentsCount = \App\Models\Incident::where('resident_id', $user->id)
-            ->whereIn('status', ['pending', 'progress', 'Open / Pending', 'In Progress'])
+            ->whereIn('status', ['progress', 'In Progress'])
             ->count();
 
         $announcements = \App\Models\Announcement::orderBy('created_at', 'desc')->take(10)->get();
@@ -2081,7 +2175,7 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             'subject' => $validated['subject'],
             'type' => $validated['type'],
             'description' => $validated['description'],
-            'status' => 'pending',
+            'status' => 'progress',
             'resident_id' => \Illuminate\Support\Facades\Auth::id(),
             'reporter_name' => \Illuminate\Support\Facades\Auth::user()?->name,
             'image_url' => count($imageUrls) > 0 ? json_encode($imageUrls) : null,
@@ -2152,6 +2246,9 @@ Route::get('/visitor-pin', function () {
 Route::get('/routing-guide', function () {
     return view('visitor.routing');
 });
+
+// Highway Navigation Route Proxy (100% Free, cached highway routing)
+Route::get('/api/navigation/highway-route', [\App\Http\Controllers\HighwayNavigationController::class, 'getRoute'])->name('navigation.highway-route');
 
 // Direct Visitor Pass Route (from SMS Link - no manual PIN input required)
 Route::get('/v/{token}', [\App\Http\Controllers\VisitorController::class, 'showDirectPass'])->name('visitor.direct-pass');

@@ -19,6 +19,7 @@ return new class extends Migration
             $table->string('contact_number')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+            $table->text('plain_password')->nullable();
             $table->string('status')->default('Active'); // Active, Archived
             $table->string('payment_behavior')->default('Not available yet');
             $table->date('joined_at')->nullable();

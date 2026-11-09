@@ -299,11 +299,11 @@
                 <table class="bill-table">
                     <thead>
                         <tr>
-                            <th>Client / Lot</th>
-                            <th>Progress</th>
-                            <th>Monthly Payments</th>
-                            <th>Next Due</th>
-                            <th>Payment Behavior</th>
+                            <th data-sort="text">Client / Lot</th>
+                            <th data-sort="number">Progress</th>
+                            <th data-sort="text">Monthly Payments</th>
+                            <th data-sort="date">Next Due</th>
+                            <th data-sort="text">Payment Behavior</th>
                             <th>Action</th>
                         </tr>
                     </thead>
