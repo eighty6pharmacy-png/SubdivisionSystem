@@ -233,9 +233,30 @@
                 <button type="button" onclick="showPassCard()" class="btn-pin-pill" title="View Gate Pass & PIN">
                     🎟️ PIN
                 </button>
-                <button type="button" id="btnCollapseUi" onclick="toggleNavUiCollapse()" class="btn-directions-toggle" title="Toggle directions HUD">
-                    <span id="collapseLabel">Directions</span> <span id="collapseIcon">▼</span>
+                <button type="button" id="btnStartNav" onclick="toggleStartNavigation()" class="btn-start-nav" title="Start turn-by-turn directions">
+                    🧭 Start
                 </button>
+                <button type="button" id="btnCollapseUi" onclick="toggleNavUiCollapse()" class="btn-directions-toggle" title="Toggle directions & steps">
+                    <span id="collapseLabel">Steps</span> <span id="collapseIcon">▼</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Google Maps Style Active Turn-by-Turn Banner -->
+        <div id="activeNavBanner" class="active-nav-banner">
+            <div class="active-nav-main">
+                <div class="active-nav-arrow" id="activeNavArrow">⬆️</div>
+                <div class="active-nav-text">
+                    <div class="active-nav-meters" id="activeNavMeters">-- m</div>
+                    <div class="active-nav-inst" id="activeNavInst">Calculating route...</div>
+                </div>
+            </div>
+            <div class="active-nav-subrow">
+                <span id="activeNavNext">Then: Follow route to {{ $destination }}</span>
+                <div class="active-nav-controls">
+                    <button type="button" id="btnHeadingUp" onclick="toggleHeadingUpMode()" class="active-nav-btn" title="Rotate map to match direction">🧭 North</button>
+                    <button type="button" onclick="toggleStartNavigation(false)" class="active-nav-btn stop">✕ Exit</button>
+                </div>
             </div>
         </div>
 
@@ -270,6 +291,26 @@
             </div>
             <div class="nav-hud-sub" id="hudSimTip">
                 🛰️ Acquiring live GPS signal...
+            </div>
+            <div class="nav-steps-section" id="navStepsSection">
+                <div class="nav-steps-header" onclick="toggleStepsList()">
+                    <span>📋 Step-by-Step Guide (<span id="navStepsCount">0</span>)</span>
+                    <span id="navStepsChevron">▼</span>
+                </div>
+                <div class="nav-steps-list" id="navStepsList"></div>
+            </div>
+        </div>
+
+        <!-- Active Navigation Bottom Bar -->
+        <div id="activeNavBottom" class="active-nav-bottom">
+            <div class="active-nav-eta">
+                <div class="active-nav-eta-time" id="activeNavEtaTime">-- min</div>
+                <div class="active-nav-eta-dist" id="activeNavEtaDist">-- m • {{ $destination }}</div>
+            </div>
+            <div class="active-nav-bottom-actions">
+                <button type="button" onclick="openStepsFromActive()" class="hud-tool-btn" title="View all steps">📋 Steps</button>
+                <button type="button" onclick="document.getElementById('hudRecenterBtn')?.click()" class="hud-recenter-btn" title="Recenter">🎯</button>
+                <button type="button" onclick="toggleStartNavigation(false)" class="btn-start-nav is-active" style="padding: 5px 10px; font-size: 11px;">Exit</button>
             </div>
         </div>
 
@@ -330,8 +371,8 @@
     }
 
     let isUiCollapsed = true;
-    function toggleNavUiCollapse() {
-        isUiCollapsed = !isUiCollapsed;
+    function toggleNavUiCollapse(forceOpen) {
+        isUiCollapsed = (typeof forceOpen === 'boolean') ? !forceOpen : !isUiCollapsed;
         const viewport = document.getElementById('mapViewport');
         const hud = document.getElementById('liveNavHud');
         const label = document.getElementById('collapseLabel');
@@ -344,10 +385,44 @@
             hud.style.display = isUiCollapsed ? 'none' : 'flex';
         }
         if (label) {
-            label.textContent = isUiCollapsed ? 'Directions' : 'Hide';
+            label.textContent = isUiCollapsed ? 'Steps' : 'Hide';
         }
         if (icon) {
             icon.textContent = isUiCollapsed ? '▼' : '▲';
+        }
+    }
+
+    function toggleStartNavigation(forceState) {
+        if (window.toggleGISStartNavigation) {
+            window.toggleGISStartNavigation(forceState);
+        }
+    }
+
+    function toggleHeadingUpMode() {
+        if (window.toggleGISHeadingUp) {
+            window.toggleGISHeadingUp();
+        }
+    }
+
+    function openStepsFromActive() {
+        toggleNavUiCollapse(true);
+        const hud = document.getElementById('liveNavHud');
+        if (hud) {
+            hud.style.top = '126px';
+        }
+        const list = document.getElementById('navStepsList');
+        const chev = document.getElementById('navStepsChevron');
+        if (list) list.style.display = 'flex';
+        if (chev) chev.textContent = '▼';
+    }
+
+    function toggleStepsList() {
+        const list = document.getElementById('navStepsList');
+        const chev = document.getElementById('navStepsChevron');
+        if (list) {
+            const isHidden = list.style.display === 'none';
+            list.style.display = isHidden ? 'flex' : 'none';
+            if (chev) chev.textContent = isHidden ? '▼' : '▶';
         }
     }
 
@@ -391,7 +466,8 @@
             visitorName: "{{ $visitor?->visitor_name ?? '' }}",
             hostName: "{{ $hostName ?? '' }}",
             showCalibration: false,
-            liveNavigation: true
+            liveNavigation: true,
+            visitorToken: accessToken
         });
     }
 
@@ -433,9 +509,37 @@
         if (mapViewport) mapViewport.style.display = 'block';
     }
 
+    function startVisitorGpsTracking() {
+        if (!navigator.geolocation || !accessToken) return;
+        if (window._visitorTrackingWatchId) return;
+
+        window._visitorTrackingWatchId = navigator.geolocation.watchPosition(
+            (pos) => {
+                const nowTs = Date.now();
+                if (!window._lastPassGpsPing || (nowTs - window._lastPassGpsPing >= 3500)) {
+                    window._lastPassGpsPing = nowTs;
+                    fetch('/api/visitor/location', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            token: accessToken,
+                            lat: pos.coords.latitude,
+                            lng: pos.coords.longitude
+                        })
+                    }).catch(() => {});
+                }
+            },
+            (err) => console.warn('Visitor GPS notice:', err.message),
+            { enableHighAccuracy: true, timeout: 12000, maximumAge: 3000 }
+        );
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         if (currentStatus !== 'Rejected') {
             launchRoutingMap();
+        }
+        if (currentStatus === 'Entered') {
+            startVisitorGpsTracking();
         }
         if (accessToken && currentStatus === 'Pending') {
             pollInterval = setInterval(checkLiveStatus, 5000);

@@ -421,4 +421,108 @@ class VisitorController extends Controller
 
         return response()->json(['success' => true]);
     }
+
+    // Visitor transmits live GPS coordinates
+    public function updateLocation(Request $request)
+    {
+        $request->validate([
+            'token' => 'required|string',
+            'lat' => 'required|numeric',
+            'lng' => 'required|numeric',
+            'is_at_destination' => 'nullable|boolean',
+        ]);
+
+        $visitor = Visitor::where('access_token', $request->token)->with('host.lots')->first();
+        if (!$visitor) {
+            return response()->json(['error' => 'Invalid visitor token'], 404);
+        }
+
+        $isAtDest = (bool) $request->input('is_at_destination', false);
+
+        $visitor->update([
+            'current_lat' => $request->lat,
+            'current_lng' => $request->lng,
+            'last_ping_at' => now(),
+            'is_at_destination' => $isAtDest || (bool) $visitor->is_at_destination,
+        ]);
+
+        $dest = 'General';
+        $block = 'N/A';
+        $lotNum = 'N/A';
+        if ($visitor->host && $visitor->host->lots->count() > 0) {
+            $lot = $visitor->host->lots->first();
+            $dest = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
+            $block = $lot->block;
+            $lotNum = $lot->lot_number;
+        }
+
+        $payload = [
+            'visitor_id' => $visitor->id,
+            'visitor_name' => $visitor->visitor_name,
+            'token' => $visitor->access_token,
+            'lat' => (float) $request->lat,
+            'lng' => (float) $request->lng,
+            'destination' => $dest,
+            'block' => $block,
+            'lot' => $lotNum,
+            'host_name' => $visitor->host?->name ?? ($visitor->host_name ?: 'Subdivision Resident'),
+            'plate_number' => $visitor->plate_number ?: 'N/A',
+            'status' => $visitor->status,
+            'is_at_destination' => (bool) $visitor->is_at_destination,
+            'last_ping_at' => now()->setTimezone(config('app.timezone', 'Asia/Manila'))->format('h:i:s A'),
+        ];
+
+        try {
+            event(new \App\Events\VisitorLocationUpdated($payload));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Pusher broadcast warning: ' . $e->getMessage());
+        }
+
+        return response()->json(['success' => true]);
+    }
+
+    // Guard portal retrieves current live visitors with known locations
+    public function getLiveVisitors()
+    {
+        if (!auth()->check()) {
+            return response()->json(['error' => 'Unauthenticated.'], 401);
+        }
+
+        $todayStr = \Carbon\Carbon::now()->setTimezone(config('app.timezone', 'Asia/Manila'))->format('Y-m-d');
+
+        $visitors = Visitor::with('host.lots')
+            ->where('status', 'Entered')
+            ->whereDate('updated_at', $todayStr)
+            ->get()
+            ->map(function ($vis) {
+                $block = 'N/A';
+                $lotNum = 'N/A';
+                $dest = 'General';
+                if ($vis->host && $vis->host->lots->count() > 0) {
+                    $lot = $vis->host->lots->first();
+                    $block = $lot->block;
+                    $lotNum = $lot->lot_number;
+                    $dest = 'Block ' . $block . ', Lot ' . $lotNum;
+                }
+
+                return [
+                    'visitor_id' => $vis->id,
+                    'visitor_name' => $vis->visitor_name,
+                    'token' => $vis->access_token,
+                    'lat' => $vis->current_lat !== null ? (float) $vis->current_lat : null,
+                    'lng' => $vis->current_lng !== null ? (float) $vis->current_lng : null,
+                    'destination' => $dest,
+                    'block' => $block,
+                    'lot' => $lotNum,
+                    'host_name' => $vis->host?->name ?? ($vis->host_name ?: 'Subdivision Resident'),
+                    'plate_number' => $vis->plate_number ?: 'N/A',
+                    'status' => $vis->status,
+                    'arrival_time' => $vis->arrival_time,
+                    'is_at_destination' => (bool) $vis->is_at_destination,
+                    'last_ping_at' => $vis->last_ping_at ? $vis->last_ping_at->setTimezone(config('app.timezone', 'Asia/Manila'))->format('h:i:s A') : null,
+                ];
+            });
+
+        return response()->json($visitors);
+    }
 }

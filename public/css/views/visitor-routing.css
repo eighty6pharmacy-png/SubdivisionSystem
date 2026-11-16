@@ -137,6 +137,36 @@
     background: #1d4ed8;
 }
 
+.btn-start-nav {
+    background: #16a34a;
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 2px 8px rgba(22, 163, 74, 0.35);
+    transition: all 0.15s ease;
+}
+
+.btn-start-nav:hover {
+    background: #15803d;
+}
+
+.btn-start-nav.is-active {
+    background: #dc2626;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.35);
+}
+
+.btn-start-nav.is-active:hover {
+    background: #b91c1c;
+}
+
 /* ===== LIVE NAVIGATION TURN-BY-TURN HUD (DROPDOWN) ===== */
 .live-nav-hud {
     position: absolute;
@@ -340,6 +370,265 @@
     font-weight: 500;
     border-top: 1px solid #f1f5f9;
     padding-top: 6px;
+}
+
+/* ===== STEP-BY-STEP GUIDE LIST ===== */
+.nav-steps-section {
+    border-top: 1px solid #e2e8f0;
+    padding-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.nav-steps-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 800;
+    color: #1e293b;
+    padding: 2px 2px;
+    user-select: none;
+}
+
+.nav-steps-list {
+    max-height: 210px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-right: 2px;
+}
+
+.nav-step-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 9px;
+    border-radius: 10px;
+    background: #f8fafc;
+    border: 1px solid #f1f5f9;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.nav-step-item:hover {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+}
+
+.nav-step-item.is-active {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    box-shadow: 0 1px 4px rgba(37, 99, 235, 0.12);
+}
+
+.nav-step-item.is-done {
+    opacity: 0.52;
+}
+
+.nav-step-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.nav-step-item.is-active .nav-step-icon {
+    background: #2563eb;
+    color: #ffffff;
+    border-color: #2563eb;
+}
+
+.nav-step-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.nav-step-text {
+    font-size: 12px;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.3;
+}
+
+.nav-step-dist {
+    font-size: 11px;
+    font-weight: 800;
+    color: #2563eb;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* ===== GOOGLE MAPS STYLE ACTIVE TURN-BY-TURN BANNER ===== */
+.active-nav-banner {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    max-width: 540px;
+    margin: 0 auto;
+    z-index: 1050;
+    background: linear-gradient(135deg, #065f46 0%, #047857 100%);
+    color: #ffffff;
+    border-radius: 16px;
+    padding: 12px 14px;
+    box-shadow: 0 10px 28px rgba(6, 95, 70, 0.35), 0 2px 8px rgba(0, 0, 0, 0.15);
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    box-sizing: border-box;
+}
+
+.active-nav-banner.is-visible {
+    display: flex;
+}
+
+.active-nav-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.active-nav-arrow {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    font-weight: 900;
+    flex-shrink: 0;
+}
+
+.active-nav-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.active-nav-meters {
+    font-size: 22px;
+    font-weight: 900;
+    line-height: 1.1;
+    letter-spacing: -0.3px;
+}
+
+.active-nav-inst {
+    font-size: 14px;
+    font-weight: 700;
+    color: #ecfdf5;
+    line-height: 1.3;
+    margin-top: 2px;
+}
+
+.active-nav-subrow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.18);
+    padding-top: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #d1fae5;
+}
+
+.active-nav-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.active-nav-btn {
+    background: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.active-nav-btn:hover {
+    background: rgba(255, 255, 255, 0.28);
+}
+
+.active-nav-btn.stop {
+    background: #dc2626;
+    border-color: #ef4444;
+}
+
+/* Active Bottom Bar (Google Maps style) */
+.active-nav-bottom {
+    position: absolute;
+    bottom: 16px;
+    left: 12px;
+    right: 12px;
+    max-width: 540px;
+    margin: 0 auto;
+    z-index: 1050;
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 10px 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    box-sizing: border-box;
+}
+
+.active-nav-bottom.is-visible {
+    display: flex;
+}
+
+.active-nav-eta {
+    display: flex;
+    flex-direction: column;
+}
+
+.active-nav-eta-time {
+    font-size: 17px;
+    font-weight: 900;
+    color: #16a34a;
+    line-height: 1.1;
+}
+
+.active-nav-eta-dist {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+.active-nav-bottom-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.routing-viewport.is-nav-active .route-info-bar {
+    display: none;
+}
+
+.routing-viewport.is-nav-active .route-legend {
+    bottom: 84px;
 }
 
 /* ===== BLUE PULSING LIVE GPS MARKER ===== */

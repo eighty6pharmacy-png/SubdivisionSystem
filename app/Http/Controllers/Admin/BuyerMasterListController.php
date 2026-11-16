@@ -437,15 +437,7 @@ class BuyerMasterListController extends Controller
         // Send email if it's a real email address (not auto-generated @buyer.althesa.com)
         if (!str_contains($email, '@buyer.althesa.com') && !str_contains($email, '@buyers.invalid')) {
             try {
-                \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($email, $buyer, $password) {
-                    $message->to($email)
-                        ->subject('Your Althesa Subdivision Buyer Account')
-                        ->html("<h2>Welcome, {$buyer->first_name}!</h2>
-                                <p>Your buyer account has been successfully created. Here are your login credentials:</p>
-                                <p><strong>Email:</strong> {$email}<br>
-                                <strong>Password:</strong> {$password}</p>
-                                <p>Please login to the portal and change your password as soon as possible.</p>");
-                });
+                \Illuminate\Support\Facades\Mail::to($email)->send(new \App\Mail\NewUserCredentialsMail($user, $password, 'Buyer'));
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error('Failed to send email to new buyer: ' . $e->getMessage());
             }
@@ -666,5 +658,117 @@ class BuyerMasterListController extends Controller
         $templateProcessor->saveAs($tempFile);
 
         return response()->download($tempFile, $fileName)->deleteFileAfterSend(true);
+    }
+
+    public function reportPdf(Request $request)
+    {
+        $status = $request->input('status', 'active');
+        $block = $request->input('block');
+        $sort = $request->input('sort', 'name_asc');
+        $download = $request->boolean('download');
+
+        $query = BuyerMasterList::query();
+        if ($status === 'cancelled') {
+            $query->onlyTrashed()->with(['user', 'lot', 'reservations.lot' => fn ($q) => $q->withTrashed(), 'financingRecord']);
+        } elseif ($status === 'all') {
+            $query->withTrashed()->with(['user', 'lot', 'reservations.lot' => fn ($q) => $q->withTrashed(), 'financingRecord']);
+        } else {
+            $query->with(['user', 'lot', 'reservations.lot', 'financingRecord']);
+        }
+
+        if ($request->filled('block')) {
+            $query->where(function ($q) use ($block) {
+                $q->whereHas('reservations.lot', fn ($inner) => $inner->where('block', $block))
+                    ->orWhereHas('lot', fn ($inner) => $inner->where('block', $block));
+            });
+        }
+
+        $allBuyers = $query->get();
+
+        $mapped = $allBuyers->map(function ($b) {
+            $activeRes = $b->reservations ? $b->reservations->filter(fn ($r) => $r->status !== \App\Enums\ReservationStatus::Cancelled->value) : collect();
+            $lotsStr = '—';
+            if ($activeRes->isNotEmpty()) {
+                $lotsStr = $activeRes->map(fn($r) => $r->lot ? ('Blk ' . $r->lot->block . ' Lot ' . $r->lot->lot_number) : '')->filter()->implode(', ');
+            } elseif ($b->block_no && $b->lot_no) {
+                $lotsStr = 'Blk ' . $b->block_no . ' Lot ' . $b->lot_no;
+            }
+
+            $tcp = (float) ($b->financingRecord?->contract_price ?? 0);
+            if ($tcp <= 0 && $b->lot?->contract_price) {
+                $tcp = (float) $b->lot->contract_price;
+            }
+            $equity = (float) ($b->financingRecord?->paid_by_vendee_equity ?? 0);
+
+            $reservation = $b->reservations
+                ? $b->reservations->filter(fn ($item) => filled($item->deadline_date))
+                    ->sortByDesc(fn ($item) => [in_array($item->status, ['Pending', 'Reserved'], true), $item->id])
+                    ->first()
+                : null;
+            $deadline = $reservation && $reservation->deadline_date ? \Carbon\Carbon::parse($reservation->deadline_date)->format('M d, Y') : '—';
+
+            $fullName = trim(implode(' ', array_filter([$b->first_name, $b->middle_name, $b->last_name])));
+
+            return [
+                'id' => 'BML-' . $b->id,
+                'raw_id' => $b->id,
+                'name' => $fullName ?: 'Unnamed Buyer',
+                'contact' => $b->contact_number ?: ($b->user?->contact_number ?: 'N/A'),
+                'email' => $b->email ?: ($b->user?->email ?: 'N/A'),
+                'lots' => $lotsStr ?: '—',
+                'tcp' => $tcp,
+                'equity' => $equity,
+                'status' => $b->trashed() ? 'Cancelled' : 'Active',
+                'deadline' => $deadline,
+                'created_at' => $b->created_at,
+            ];
+        });
+
+        $sorted = match ($sort) {
+            'name_desc' => $mapped->sortByDesc('name', SORT_NATURAL | SORT_FLAG_CASE),
+            'date_asc' => $mapped->sortBy(fn($b) => $b['created_at']?->timestamp ?? 0),
+            'date_desc' => $mapped->sortByDesc(fn($b) => $b['created_at']?->timestamp ?? 0),
+            'id_asc' => $mapped->sortBy('raw_id'),
+            'id_desc' => $mapped->sortByDesc('raw_id'),
+            'tcp_desc' => $mapped->sortByDesc('tcp'),
+            default => $mapped->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE),
+        };
+
+        $buyersArr = $sorted->values()->toArray();
+
+        $stats = [
+            'total' => count($buyersArr),
+            'active' => collect($buyersArr)->where('status', 'Active')->count(),
+            'cancelled' => collect($buyersArr)->where('status', 'Cancelled')->count(),
+            'total_tcp' => collect($buyersArr)->sum('tcp'),
+            'total_equity' => collect($buyersArr)->sum('equity'),
+        ];
+
+        $sortLabels = [
+            'name_asc' => 'Alphabetical (Name A-Z)',
+            'name_desc' => 'Alphabetical (Name Z-A)',
+            'date_asc' => 'Date Registered (Earliest to Latest)',
+            'date_desc' => 'Date Registered (Latest to Earliest)',
+            'id_asc' => 'Buyer ID (Ascending)',
+            'id_desc' => 'Buyer ID (Descending)',
+            'tcp_desc' => 'Contract Price (Highest First)',
+        ];
+        $sortLabel = $sortLabels[$sort] ?? 'Alphabetical (Name A-Z)';
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'landscape');
+        $pdf->loadView('admin.buyer_master_list.report_pdf', [
+            'buyers' => $buyersArr,
+            'stats' => $stats,
+            'status' => $status,
+            'block' => $block,
+            'sort' => $sort,
+            'sortLabel' => $sortLabel,
+            'generatedAt' => now()->format('F d, Y - h:i A'),
+            'refNo' => 'REP-BML-' . date('Ymd-His'),
+        ]);
+
+        $fileName = 'Buyer_Masterlist_Report_' . date('Y-m-d') . '.pdf';
+        return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
     }
 }

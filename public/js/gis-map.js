@@ -151,8 +151,8 @@ const SUBDIVISION_REF = {
     },
     // Real-World GPS coordinates on Google Maps (Zone 1, Tagbong, Pili, Camarines Sur)
     realEntrance: {
-        lat: 13.545990203879006,
-        lng: 123.25622351397625
+        lat: 13.545993723078043,
+        lng: 123.25616571120268
     },
     realB11L24: {
         lat: 13.5463071,
@@ -173,12 +173,12 @@ const DEFAULT_GOOGLE_POINTS = [
         id: 'pin_entrance',
         type: 'entrance',
         label: 'Pin 1: Entrance Road (Main Gate)',
-        localLng: -0.0010908483152571864,
-        localLat: -0.0023152983534520453,
-        lat: 13.545990203879006,
-        lng: 123.25622351397625,
-        latStr: '13.545990203879006',
-        lngStr: '123.25622351397625',
+        localLng: -0.001061776210629,
+        localLat: -0.002363611841677,
+        lat: 13.545993723078043,
+        lng: 123.25616571120268,
+        latStr: '13.545993723078043',
+        lngStr: '123.25616571120268',
         color: '#10b981' // Green
     },
     {
@@ -1356,6 +1356,62 @@ async function initGISMap(mapElementId, options = {}) {
             return snap ? snap.nodeId : null;
         }
 
+        // Smooths intersection turns with a natural vehicle turning radius (prevents sharp needle/wiggle artifacts)
+        function smoothTurnRoute(rawCoords, maxRadius = 3.5) {
+            if (!rawCoords || rawCoords.length < 3) return rawCoords || [];
+            
+            // 1. Deduplicate consecutive identical / near-identical vertices (< 0.4m)
+            const coords = [rawCoords[0]];
+            for (let i = 1; i < rawCoords.length; i++) {
+                const d = map.distance(coords[coords.length - 1], rawCoords[i]);
+                if (d >= 0.4 || i === rawCoords.length - 1) {
+                    coords.push(rawCoords[i]);
+                }
+            }
+            if (coords.length < 3) return coords;
+
+            const result = [coords[0]];
+            for (let i = 1; i < coords.length - 1; i++) {
+                const pPrev = coords[i - 1];
+                const pCurr = coords[i];
+                const pNext = coords[i + 1];
+                
+                const d1 = map.distance(pPrev, pCurr);
+                const d2 = map.distance(pCurr, pNext);
+                
+                const v1 = [pCurr[0] - pPrev[0], pCurr[1] - pPrev[1]];
+                const v2 = [pNext[0] - pCurr[0], pNext[1] - pCurr[1]];
+                const dot = v1[0] * v2[0] + v1[1] * v2[1];
+                const mag1 = Math.hypot(v1[0], v1[1]);
+                const mag2 = Math.hypot(v2[0], v2[1]);
+                if (mag1 < 1e-7 || mag2 < 1e-7) continue;
+                
+                const cosAngle = Math.max(-1, Math.min(1, dot / (mag1 * mag2)));
+                const angleDeg = Math.acos(cosAngle) * (180 / Math.PI);
+                
+                // Smooth turns where turn angle exceeds 22 degrees
+                if (angleDeg > 22 && d1 > 2.0 && d2 > 2.0) {
+                    const r = Math.min(maxRadius, d1 * 0.42, d2 * 0.42);
+                    const t1 = 1 - (r / d1);
+                    const t2 = r / d2;
+                    
+                    const q1 = [pPrev[0] + t1 * v1[0], pPrev[1] + t1 * v1[1]];
+                    const q2 = [pCurr[0] + t2 * v2[0], pCurr[1] + t2 * v2[1]];
+                    
+                    const mid = [
+                        0.25 * q1[0] + 0.5 * pCurr[0] + 0.25 * q2[0],
+                        0.25 * q1[1] + 0.5 * pCurr[1] + 0.25 * q2[1]
+                    ];
+                    
+                    result.push(q1, mid, q2);
+                } else {
+                    result.push(pCurr);
+                }
+            }
+            result.push(coords[coords.length - 1]);
+            return result;
+        }
+
         // Live Moving GPS & OSRM Outside Highway Hybrid Controller
         function startLiveHybridNavigation(opts) {
             if (liveNavTracker) {
@@ -1459,6 +1515,300 @@ async function initGISMap(mapElementId, options = {}) {
             let userPos = null;
             let autoFollow = true;
             let initialFitDone = false;
+            let isNavStarted = false;
+            let isHeadingUp = false;
+            let currentNavSteps = [];
+            let activeStepIdx = 0;
+            let lastTotalDist = 0;
+            let lastTotalTime = 0;
+
+            function getCardinalDir(b) {
+                const dirs = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
+                return dirs[Math.round(((b % 360) + 360) % 360 / 45) % 8];
+            }
+
+            function getManeuverIcon(type, modifier) {
+                if (type === 'arrive') return '🏁';
+                if (type === 'roundabout' || type === 'rotary') return '🔄';
+                if (modifier === 'uturn') return '⤵️';
+                if (modifier === 'sharp right' || modifier === 'right') return '↱';
+                if (modifier === 'slight right') return '↗️';
+                if (modifier === 'sharp left' || modifier === 'left') return '↰';
+                if (modifier === 'slight left') return '↖️';
+                return '⬆️';
+            }
+
+            function parseOSRMSteps(routeObj) {
+                if (!routeObj || !Array.isArray(routeObj.legs) || !routeObj.legs[0] || !Array.isArray(routeObj.legs[0].steps)) {
+                    return [];
+                }
+                const out = [];
+                routeObj.legs[0].steps.forEach((s) => {
+                    const m = s.maneuver || {};
+                    const type = m.type || 'continue';
+                    const mod = m.modifier || '';
+                    const road = (s.name && s.name.trim()) ? s.name.trim() : '';
+                    const loc = Array.isArray(m.location) ? [m.location[1], m.location[0]] : null;
+                    const icon = getManeuverIcon(type, mod);
+                    let inst = '';
+
+                    if (type === 'depart') {
+                        const dir = m.bearing_after !== undefined ? getCardinalDir(m.bearing_after) : '';
+                        inst = road ? `Head ${dir || 'straight'} on ${road}` : `Head ${dir || 'towards main road'}`;
+                    } else if (type === 'arrive') {
+                        inst = 'Reach Althesa Entrance Gate';
+                    } else if (type === 'roundabout' || type === 'rotary') {
+                        const exitN = m.exit ? `take exit ${m.exit}` : 'continue';
+                        inst = road ? `At roundabout, ${exitN} onto ${road}` : `At roundabout, ${exitN}`;
+                    } else if (type === 'fork') {
+                        inst = `Keep ${mod || 'straight'}${road ? ' onto ' + road : ''}`;
+                    } else if (type === 'merge') {
+                        inst = `Merge ${mod || ''}${road ? ' onto ' + road : ''}`.trim();
+                    } else if (mod) {
+                        const modCap = mod.charAt(0).toUpperCase() + mod.slice(1);
+                        const verb = (mod === 'straight') ? 'Continue straight' : (mod === 'uturn' ? 'Make a U-turn' : `Turn ${mod}`);
+                        inst = road ? `${verb} onto ${road}` : `${modCap}`;
+                    } else {
+                        inst = road ? `Continue onto ${road}` : 'Continue straight';
+                    }
+
+                    if (s.distance >= 2 || type === 'arrive') {
+                        out.push({
+                            icon,
+                            instruction: inst,
+                            distance: s.distance || 0,
+                            location: loc,
+                            source: 'osrm'
+                        });
+                    }
+                });
+                return out;
+            }
+
+            function buildInternalSteps(rawLatLngs, destPoint, destLabel, includeArrival = true) {
+                if (!Array.isArray(rawLatLngs) || rawLatLngs.length < 2) return [];
+                const steps = [];
+                // Filter out micro-duplicate points (< 2m) to avoid false turn angles
+                const pts = [rawLatLngs[0]];
+                for (let i = 1; i < rawLatLngs.length; i++) {
+                    if (map.distance(pts[pts.length - 1], rawLatLngs[i]) >= 2.0 || i === rawLatLngs.length - 1) {
+                        pts.push(rawLatLngs[i]);
+                    }
+                }
+                if (pts.length < 2) return [];
+
+                let segBearing = calculateBearing(pts[0][0], pts[0][1], pts[1][0], pts[1][1]);
+                let accDist = map.distance(pts[0], pts[1]);
+                let currentIcon = '⬆️';
+                let currentInst = `Head ${getCardinalDir(segBearing)} on subdivision street`;
+                let currentLoc = pts[0];
+
+                for (let i = 1; i < pts.length - 1; i++) {
+                    const nextDist = map.distance(pts[i], pts[i + 1]);
+                    if (nextDist < 1.5) continue;
+                    const nextBearing = calculateBearing(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]);
+                    const delta = ((nextBearing - segBearing + 540) % 360) - 180;
+
+                    if (Math.abs(delta) >= 22) {
+                        steps.push({
+                            icon: currentIcon,
+                            instruction: currentInst,
+                            distance: accDist,
+                            location: currentLoc,
+                            source: 'internal'
+                        });
+                        accDist = nextDist;
+                        currentLoc = pts[i];
+                        if (delta >= 120) {
+                            currentIcon = '↱'; currentInst = 'Sharp right on subdivision street';
+                        } else if (delta >= 55) {
+                            currentIcon = '↱'; currentInst = 'Turn right';
+                        } else if (delta >= 22) {
+                            currentIcon = '↗️'; currentInst = 'Slight right';
+                        } else if (delta <= -120) {
+                            currentIcon = '↰'; currentInst = 'Sharp left on subdivision street';
+                        } else if (delta <= -55) {
+                            currentIcon = '↰'; currentInst = 'Turn left';
+                        } else {
+                            currentIcon = '↖️'; currentInst = 'Slight left';
+                        }
+                    } else {
+                        accDist += nextDist;
+                    }
+                    segBearing = nextBearing;
+                }
+
+                steps.push({
+                    icon: currentIcon,
+                    instruction: currentInst,
+                    distance: accDist,
+                    location: currentLoc,
+                    source: 'internal'
+                });
+
+                if (destPoint) {
+                    const lastPt = pts[pts.length - 1];
+                    const offDist = map.distance(lastPt, [destPoint.lat, destPoint.lng]);
+                    if (offDist > 2.0) {
+                        steps.push({
+                            icon: '🚶',
+                            instruction: `Walk to ${destLabel}`,
+                            distance: offDist,
+                            location: lastPt,
+                            source: 'internal'
+                        });
+                    }
+                }
+
+                if (includeArrival) {
+                    steps.push({
+                        icon: '🏁',
+                        instruction: `Arrive at ${destLabel}`,
+                        distance: 0,
+                        location: destPoint ? [destPoint.lat, destPoint.lng] : pts[pts.length - 1],
+                        source: 'internal'
+                    });
+                }
+
+                return steps;
+            }
+
+            function renderNavStepsUI(steps, totalDist, totalTimeSec, curLat = null, curLng = null) {
+                currentNavSteps = Array.isArray(steps) ? steps : [];
+                lastTotalDist = totalDist || 0;
+                lastTotalTime = totalTimeSec || 0;
+
+                // Determine active step & live distance to next maneuver
+                activeStepIdx = 0;
+                let distToNext = currentNavSteps[0] ? currentNavSteps[0].distance : 0;
+
+                if (curLat !== null && curLng !== null && currentNavSteps.length > 1) {
+                    for (let i = 0; i < currentNavSteps.length - 1; i++) {
+                        const s = currentNavSteps[i];
+                        const nextS = currentNavSteps[i + 1];
+                        if (nextS && nextS.location) {
+                            const dToTurn = map.distance([curLat, curLng], nextS.location);
+                            if (dToTurn < 12 && i + 1 < currentNavSteps.length - 1) {
+                                activeStepIdx = i + 1;
+                            } else {
+                                distToNext = dToTurn;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                const curStep = currentNavSteps[activeStepIdx] || { icon: '⬆️', instruction: `Head towards ${destinationName}`, distance: totalDist };
+                const nextStep = currentNavSteps[activeStepIdx + 1] || null;
+
+                // Update Active Navigation Top Banner & Bottom Bar
+                const bannerArrow = document.getElementById('activeNavArrow');
+                const bannerMeters = document.getElementById('activeNavMeters');
+                const bannerInst = document.getElementById('activeNavInst');
+                const bannerNext = document.getElementById('activeNavNext');
+                const etaTimeEl = document.getElementById('activeNavEtaTime');
+                const etaDistEl = document.getElementById('activeNavEtaDist');
+
+                if (bannerArrow) bannerArrow.textContent = curStep.icon;
+                if (bannerMeters) bannerMeters.textContent = curStep.distance > 0 ? fmtDist(distToNext) : 'Arriving';
+                if (bannerInst) bannerInst.textContent = curStep.instruction;
+                if (bannerNext) {
+                    bannerNext.textContent = nextStep
+                        ? `Then: ${nextStep.icon} ${nextStep.instruction} (${fmtDist(nextStep.distance)})`
+                        : `Destination: ${destinationName}`;
+                }
+                if (etaTimeEl) etaTimeEl.textContent = fmtTime(totalTimeSec);
+                if (etaDistEl) etaDistEl.textContent = `${fmtDist(totalDist)} • ${destinationName}`;
+
+                // Update Step-by-Step list in HUD
+                const countEl = document.getElementById('navStepsCount');
+                const listEl = document.getElementById('navStepsList');
+                if (countEl) countEl.textContent = String(currentNavSteps.length);
+                if (listEl) {
+                    listEl.innerHTML = '';
+                    currentNavSteps.forEach((step, idx) => {
+                        const row = document.createElement('div');
+                        row.className = 'nav-step-item' + (idx === activeStepIdx ? ' is-active' : (idx < activeStepIdx ? ' is-done' : ''));
+                        const distLabel = step.distance > 0 ? fmtDist(step.distance) : 'Arrive';
+                        row.innerHTML = `
+                            <div class="nav-step-icon">${step.icon}</div>
+                            <div class="nav-step-body">
+                                <div class="nav-step-text">${step.instruction}</div>
+                            </div>
+                            <div class="nav-step-dist">${distLabel}</div>
+                        `;
+                        if (step.location) {
+                            row.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                autoFollow = false;
+                                map.setView(step.location, Math.max(map.getZoom(), 18), { animate: true });
+                            });
+                        }
+                        listEl.appendChild(row);
+                    });
+                }
+            }
+
+            function applyActiveNavState(active) {
+                isNavStarted = active;
+                const viewport = document.getElementById('mapViewport');
+                const banner = document.getElementById('activeNavBanner');
+                const bottomBar = document.getElementById('activeNavBottom');
+                const startBtn = document.getElementById('btnStartNav');
+                const hud = document.getElementById('liveNavHud');
+
+                if (viewport) viewport.classList.toggle('is-nav-active', active);
+                if (banner) banner.classList.toggle('is-visible', active);
+                if (bottomBar) bottomBar.classList.toggle('is-visible', active);
+                if (startBtn) {
+                    startBtn.classList.toggle('is-active', active);
+                    startBtn.innerHTML = active ? '⏹ Stop' : '🧭 Start';
+                }
+
+                if (active) {
+                    autoFollow = true;
+                    // Collapse HUD dropdown when entering active turn-by-turn mode so the map is unobstructed
+                    if (typeof window.toggleNavUiCollapse === 'function') {
+                        window.toggleNavUiCollapse(false);
+                    } else if (hud) {
+                        hud.style.display = 'none';
+                    }
+                    const focusTarget = userPos
+                        ? [userPos.lat, userPos.lng]
+                        : (currentNavSteps[0] && currentNavSteps[0].location ? currentNavSteps[0].location : entranceCoord);
+                    const targetZoom = (userPos && !checkIfInside(userPos.lat, userPos.lng)) ? 17 : 19;
+                    if (focusTarget) {
+                        map.setView(focusTarget, targetZoom, { animate: true });
+                        lastPanCoord = focusTarget;
+                    }
+                } else {
+                    if (hud) hud.style.top = '';
+                    if (isHeadingUp && typeof map.setBearing === 'function') {
+                        isHeadingUp = false;
+                        map.setBearing(0);
+                        const hBtn = document.getElementById('btnHeadingUp');
+                        if (hBtn) hBtn.textContent = '🧭 North';
+                    }
+                }
+            }
+
+            window.toggleGISStartNavigation = function (forceState) {
+                const nextState = (typeof forceState === 'boolean') ? forceState : !isNavStarted;
+                applyActiveNavState(nextState);
+            };
+
+            window.toggleGISHeadingUp = function () {
+                isHeadingUp = !isHeadingUp;
+                const hBtn = document.getElementById('btnHeadingUp');
+                if (hBtn) hBtn.textContent = isHeadingUp ? '🧭 Heading' : '🧭 North';
+                if (typeof map.setBearing === 'function') {
+                    if (isHeadingUp && currentHeading !== null) {
+                        map.setBearing(-currentHeading);
+                    } else {
+                        map.setBearing(0);
+                    }
+                }
+            };
 
             function getRouteStrokeWidth(z) {
                 const zoom = (z !== undefined && z !== null) ? z : map.getZoom();
@@ -1489,8 +1839,11 @@ async function initGISMap(mapElementId, options = {}) {
                     }
                 }
 
-                const activeCoords = (preferAlternative && hasAlt) ? altLatLngs : primaryLatLngs;
-                const secondaryCoords = (preferAlternative && hasAlt) ? primaryLatLngs : (hasAlt ? altLatLngs : null);
+                const rawActive = (preferAlternative && hasAlt) ? altLatLngs : primaryLatLngs;
+                const rawSecondary = (preferAlternative && hasAlt) ? primaryLatLngs : (hasAlt ? altLatLngs : null);
+                
+                const activeCoords = smoothTurnRoute(rawActive, 3.5);
+                const secondaryCoords = rawSecondary ? smoothTurnRoute(rawSecondary, 3.5) : null;
                 const strokeW = getRouteStrokeWidth(map.getZoom());
 
                 // 1. Draw Alternative / Secondary route underneath in slate/grey
@@ -1619,6 +1972,10 @@ async function initGISMap(mapElementId, options = {}) {
                     stepInstEl.innerHTML = `${rTitle} to <strong>${destinationName}</strong> (waiting for GPS...)`;
                 }
 
+                const rawPreviewPts = (preferAlternative && altInitLatLngs) ? altInitLatLngs : initLatLngs;
+                const previewSteps = buildInternalSteps(rawPreviewPts, destCoord, destinationName, true);
+                renderNavStepsUI(previewSteps, initDist, initDist / 4.16);
+
                 if (!initialFitDone) {
                     map.fitBounds(L.latLngBounds([entranceCoord, [destCoord.lat, destCoord.lng]]), { padding: [40, 40] });
                 }
@@ -1642,19 +1999,8 @@ async function initGISMap(mapElementId, options = {}) {
                 function alignRouteCoords(rawCoords) {
                     const rawLatLngs = rawCoords.map(c => [c[1], c[0]]);
                     if (!rawLatLngs || rawLatLngs.length === 0) return [];
-                    const lastPt = rawLatLngs[rawLatLngs.length - 1];
-                    const dLatEnd = endLat - lastPt[0];
-                    const dLngEnd = endLng - lastPt[1];
-                    const totalSpan = map.distance(rawLatLngs[0], lastPt);
-
-                    return rawLatLngs.map((pt, idx) => {
-                        if (idx === rawLatLngs.length - 1) return [endLat, endLng];
-                        // Smoothly connect into the Althesa entrance gate ONLY over the final 45m approaching the gate in Pili.
-                        // Open highway coordinates (e.g. Baao, Iriga, Nabua) remain untouched, keeping the line dead-center on the road pavement!
-                        const distToEnd = map.distance(pt, lastPt);
-                        const wGate = totalSpan > 50 ? Math.max(0, 1 - (distToEnd / 45)) : 1;
-                        return [pt[0] + dLatEnd * wGate, pt[1] + dLngEnd * wGate];
-                    });
+                    // Keep highway coordinates untouched so the polyline stays 100% dead-center on the outside road pavement!
+                    return rawLatLngs;
                 }
 
                 function parseRouteData(data) {
@@ -1668,7 +2014,8 @@ async function initGISMap(mapElementId, options = {}) {
                             altOSRM = {
                                 latlngs: alignRouteCoords(r1.geometry.coordinates),
                                 distance: r1.distance,
-                                duration: r1.duration
+                                duration: r1.duration,
+                                steps: parseOSRMSteps(r1)
                             };
                         }
 
@@ -1676,6 +2023,7 @@ async function initGISMap(mapElementId, options = {}) {
                             latlngs: alignedLatLngs,
                             distance: r0.distance,
                             duration: r0.duration,
+                            steps: parseOSRMSteps(r0),
                             alternative: altOSRM
                         };
                         lastOSRMTime = now;
@@ -1700,7 +2048,7 @@ async function initGISMap(mapElementId, options = {}) {
 
                 // 2. Direct Fallback: Client-side OSRM driving query
                 try {
-                    const url = `https://router.project-osrm.org/route/v1/driving/${startLng.toFixed(6)},${startLat.toFixed(6)};${endLng.toFixed(6)},${endLat.toFixed(6)}?overview=full&geometries=geojson&alternatives=true`;
+                    const url = `https://router.project-osrm.org/route/v1/driving/${startLng.toFixed(6)},${startLat.toFixed(6)};${endLng.toFixed(6)},${endLat.toFixed(6)}?overview=full&geometries=geojson&alternatives=true&steps=true`;
                     const res = await fetch(url);
                     if (res.ok) {
                         const data = await res.json();
@@ -1757,6 +2105,9 @@ async function initGISMap(mapElementId, options = {}) {
                 if (cone) {
                     cone.style.transform = `rotate(${currentHeading}deg)`;
                 }
+                if (isNavStarted && isHeadingUp && typeof map.setBearing === 'function') {
+                    map.setBearing(-currentHeading);
+                }
             }
 
             function onDeviceOrientation(e) {
@@ -1811,6 +2162,7 @@ async function initGISMap(mapElementId, options = {}) {
                     if (timeValEl) timeValEl.textContent = '0 min';
                     if (stepInstEl) stepInstEl.innerHTML = `Welcome to <strong>${destinationName}</strong>! You have reached your destination.`;
                     if (simTipEl) simTipEl.innerHTML = '📍 Arrived at destination • Location locked';
+                    renderNavStepsUI([{ icon: '🏁', instruction: `Arrived at ${destinationName}`, distance: 0, location: [destCoord.lat, destCoord.lng] }], 0, 0, curLat, curLng);
 
                     L.circle([destCoord.lat, destCoord.lng], {
                         radius: 12, color: '#16a34a', weight: 3, fillColor: '#86efac', fillOpacity: 0.5
@@ -1900,7 +2252,7 @@ async function initGISMap(mapElementId, options = {}) {
                         badgeTextEl.textContent = '🚗 Highway Navigation';
                     }
 
-                    const mainRoadJunc = transformCoordPair([-0.001040743, -0.002337944], calib);
+                    const mainRoadJunc = transformCoordPair([-0.001033611863708, -0.002273077993799], calib);
                     const highwayEntryCoord = [mainRoadJunc[1], mainRoadJunc[0]];
 
                     let tempGraph = baseGraph.clone();
@@ -2055,6 +2407,21 @@ async function initGISMap(mapElementId, options = {}) {
                         stepInstEl.innerHTML = `${hwyPrefix}Head towards <strong>Althesa Entrance Gate</strong> (${fmtDist(totalDist)})`;
                     }
 
+                    // Build combined OSRM highway steps + internal subdivision steps
+                    const useAltHwy = preferAlternative && osrm && osrm.alternative;
+                    const hwySteps = useAltHwy
+                        ? (osrm.alternative.steps || [])
+                        : ((osrm && osrm.steps) ? osrm.steps : []);
+                    const rawIntPts = (preferAlternative && internalAltLatLngs.length > 0) ? internalAltLatLngs : internalRoadLatLngs;
+                    const intSteps = buildInternalSteps(rawIntPts, destCoord, destinationName, true);
+                    const combinedSteps = (hwySteps.length > 0)
+                        ? [...hwySteps, ...intSteps]
+                        : [
+                            { icon: '🚗', instruction: 'Head towards Althesa Entrance Gate', distance: osrm ? osrm.distance : totalDist, location: [curLat, curLng], source: 'osrm' },
+                            ...intSteps
+                        ];
+                    renderNavStepsUI(combinedSteps, totalDist, totalTime, curLat, curLng);
+
                     if (!initialFitDone) {
                         initialFitDone = true;
                         map.fitBounds(L.latLngBounds([displayCoord, entranceCoord, [destCoord.lat, destCoord.lng]]), { padding: [45, 45] });
@@ -2178,9 +2545,46 @@ async function initGISMap(mapElementId, options = {}) {
                         stepInstEl.innerHTML = `${pathTypeLabel} towards <strong>${destinationName}</strong> (${fmtDist(remainingDist)})`;
                     }
 
+                    const rawActiveInternal = (preferAlternative && altRoadLatLngs.length > 0) ? altRoadLatLngs : roadLatLngs;
+                    const insideSteps = [];
+                    if (!isOnRoad && userSnap && userSnap.dist > ROAD_CORRIDOR_METERS) {
+                        insideSteps.push({
+                            icon: '🚶',
+                            instruction: 'Head to the subdivision street',
+                            distance: userSnap.dist,
+                            location: [curLat, curLng],
+                            source: 'internal'
+                        });
+                    }
+                    insideSteps.push(...buildInternalSteps(rawActiveInternal, destCoord, destinationName, true));
+                    renderNavStepsUI(insideSteps, remainingDist, remainingDuration, curLat, curLng);
+
                     if (!initialFitDone) {
                         initialFitDone = true;
                         map.setView(displayCoord, 19);
+                    }
+                }
+
+                // If visitorToken is provided, stream live coordinates & arrival status to guard portal
+                if (config.visitorToken) {
+                    const nowTs = Date.now();
+                    if (!window._lastLocationSendTime || (nowTs - window._lastLocationSendTime >= 3500)) {
+                        window._lastLocationSendTime = nowTs;
+                        let isAtDest = false;
+                        if (destCoord) {
+                            const distToHouse = map.distance([curLat, curLng], [destCoord.lat, destCoord.lng]);
+                            isAtDest = distToHouse <= 20;
+                        }
+                        fetch('/api/visitor/location', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                token: config.visitorToken,
+                                lat: curLat,
+                                lng: curLng,
+                                is_at_destination: isAtDest
+                            })
+                        }).catch(() => {});
                     }
                 }
             }
@@ -2320,12 +2724,14 @@ async function initGISMap(mapElementId, options = {}) {
                 } else {
                     // Static fallback rendering for guard dashboard (Solid line on road + dotted off-road to house)
                     if (altPathNodeIds.length > 0) {
-                        const altLatlngs = altPathNodeIds.map(id => coordinatesMap.get(id)).filter(Boolean);
+                        const rawAlt = altPathNodeIds.map(id => coordinatesMap.get(id)).filter(Boolean);
+                        const altLatlngs = smoothTurnRoute(rawAlt, 3.5);
                         L.polyline(altLatlngs, styles.altRoute).addTo(routingLayerGroup);
                     }
 
                     if (pathNodeIds.length > 0) {
-                        const latlngs = pathNodeIds.map(id => coordinatesMap.get(id)).filter(Boolean);
+                        const rawLatlngs = pathNodeIds.map(id => coordinatesMap.get(id)).filter(Boolean);
+                        const latlngs = smoothTurnRoute(rawLatlngs, 3.5);
                         const routeLine = L.polyline(latlngs, styles.route).addTo(routingLayerGroup);
 
                         const lastRoadPt = latlngs[latlngs.length - 1];
@@ -2373,13 +2779,15 @@ async function initGISMap(mapElementId, options = {}) {
 
             const altPathNodeIds = tempGraph.alternativePath(sNode, eNode);
             if (altPathNodeIds.length > 0) {
-                const altLatlngs = altPathNodeIds.map(id => coordinatesMap.get(id)).filter(Boolean);
+                const rawAlt = altPathNodeIds.map(id => coordinatesMap.get(id)).filter(Boolean);
+                const altLatlngs = smoothTurnRoute(rawAlt, 3.5);
                 L.polyline(altLatlngs, styles.altRoute).addTo(routingLayerGroup);
             }
 
             const pathNodeIds = tempGraph.dijkstra(sNode, eNode);
             if (pathNodeIds.length > 0) {
-                const latlngs = pathNodeIds.map(id => coordinatesMap.get(id)).filter(Boolean);
+                const rawLatlngs = pathNodeIds.map(id => coordinatesMap.get(id)).filter(Boolean);
+                const latlngs = smoothTurnRoute(rawLatlngs, 3.5);
                 L.polyline(latlngs, styles.route).addTo(routingLayerGroup);
 
                 if (latlngs[0] && map.distance([startCoord.lat, startCoord.lng], latlngs[0]) > 1.5) {

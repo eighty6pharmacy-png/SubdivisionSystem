@@ -515,6 +515,9 @@ Route::prefix('guard')->middleware(['auth', 'role:Security Guard|Admin'])->group
     Route::get('/dashboard', function () {
         return view('guard.dashboard');
     });
+    Route::get('/map', function () {
+        return view('guard.map');
+    });
     Route::get('/history', function () {
         $pins = json_decode(app(\App\Http\Controllers\VisitorController::class)->index()->getContent(), true);
         return view('guard.history', compact('pins'));
@@ -523,8 +526,10 @@ Route::prefix('guard')->middleware(['auth', 'role:Security Guard|Admin'])->group
 
 // API Routes for Visitors
 Route::post('/api/validate-pin', [\App\Http\Controllers\VisitorController::class, 'validatePin']);
+Route::post('/api/visitor/location', [\App\Http\Controllers\VisitorController::class, 'updateLocation']);
 Route::middleware(['auth'])->group(function () {
     Route::get('/api/visitors', [\App\Http\Controllers\VisitorController::class, 'index']);
+    Route::get('/api/guard/live-visitors', [\App\Http\Controllers\VisitorController::class, 'getLiveVisitors']);
     Route::post('/api/visitors', [\App\Http\Controllers\VisitorController::class, 'store']);
     Route::put('/api/visitors/{id}/approve', [\App\Http\Controllers\VisitorController::class, 'approve']);
     Route::put('/api/visitors/{id}/reject', [\App\Http\Controllers\VisitorController::class, 'reject']);
@@ -653,6 +658,12 @@ Route::post('/api/appointments', function (\Illuminate\Http\Request $request) {
     
     return response()->json(['success' => true]);
 })->middleware('throttle:20,1');
+
+Route::get('/api/address/regions', [\App\Http\Controllers\AddressApiController::class, 'regions']);
+Route::get('/api/address/provinces', [\App\Http\Controllers\AddressApiController::class, 'allProvinces']);
+Route::get('/api/address/provinces/{regionCode}', [\App\Http\Controllers\AddressApiController::class, 'provinces']);
+Route::get('/api/address/cities/{code}', [\App\Http\Controllers\AddressApiController::class, 'cities']);
+Route::get('/api/address/barangays/{cityCode}', [\App\Http\Controllers\AddressApiController::class, 'barangays']);
 Route::put('/api/incidents/{id}/status', function (\Illuminate\Http\Request $request, $id) {
     $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
         'status' => ['required', \Illuminate\Validation\Rule::in(\App\Enums\IncidentStatus::values())],
@@ -881,6 +892,10 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             ->orderBy('time')
             ->get();
 
+        // 9. Full Dataset for Dashboard Interactive Calendars
+        $dashboardIncidents = getIncidents();
+        $dashboardAppointments = getAppointments();
+
         return view('admin.dashboard', compact(
             'openIncidentsCount', 
             'appointmentsTodayCount', 
@@ -894,11 +909,14 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'totalBills',
             'collectionPercent',
             'todaysAppointmentsList',
-            'notifications'
+            'notifications',
+            'dashboardIncidents',
+            'dashboardAppointments'
         ));
     });
 
     // Master List System
+    Route::get('/buyer-master-list/report/pdf', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'reportPdf'])->name('admin.buyer-master-list.report.pdf');
     Route::resource('buyer-master-list', \App\Http\Controllers\Admin\BuyerMasterListController::class);
     Route::post('buyer-master-list/{id}/generate-account', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'generateAccount'])->name('buyer.generate-account');
     Route::post('buyer-master-list/{id}/restore', [\App\Http\Controllers\Admin\BuyerMasterListController::class, 'restore'])->name('buyer.restore');
@@ -1134,15 +1152,9 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         }
 
         try {
-            \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($validated) {
-                $message->to($validated['email'])
-                    ->subject('Your Subdivision System Account')
-                    ->html("<h2>Welcome to Subdivision System</h2>
-                                <p>Your account has been created. Here are your login credentials:</p>
-                                <p><strong>Email:</strong> {$validated['email']}<br>
-                                <strong>Password:</strong> {$validated['password']}</p>
-                                <p>Please login and change your password immediately.</p>");
-            });
+            \Illuminate\Support\Facades\Mail::to($validated['email'])->send(
+                new \App\Mail\NewUserCredentialsMail($user, $validated['password'], $validated['role'])
+            );
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Failed to send email to new user: ' . $e->getMessage());
         }
@@ -1294,6 +1306,79 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     Route::get('/residents', function () {
         return redirect('/admin/users');
     });
+    Route::get('/billing/report/pdf', function (\Illuminate\Http\Request $request) {
+        $cycle = $request->input('cycle');
+        $status = strtolower($request->input('status', 'all'));
+        $sort = $request->input('sort', 'name_asc');
+        $download = $request->boolean('download');
+
+        $bills = collect(getElectricalBills($cycle, false));
+
+        if ($status !== 'all') {
+            $bills = $bills->filter(function ($b) use ($status) {
+                return strtolower($b['status'] ?? '') === $status;
+            });
+        }
+
+        $sorted = match ($sort) {
+            'name_desc' => $bills->sortByDesc('resident', SORT_NATURAL | SORT_FLAG_CASE),
+            'amount_desc' => $bills->sortByDesc(fn($b) => (float)($b['amount'] ?? 0)),
+            'amount_asc' => $bills->sortBy(fn($b) => (float)($b['amount'] ?? 0)),
+            'usage_desc' => $bills->sortByDesc(fn($b) => (float)($b['usage_kwh'] ?? 0)),
+            'usage_asc' => $bills->sortBy(fn($b) => (float)($b['usage_kwh'] ?? 0)),
+            'due_asc' => $bills->sortBy(fn($b) => strtotime($b['due'] ?? 0)),
+            'due_desc' => $bills->sortByDesc(fn($b) => strtotime($b['due'] ?? 0)),
+            default => $bills->sortBy('resident', SORT_NATURAL | SORT_FLAG_CASE),
+        };
+
+        $billsArr = $sorted->values()->toArray();
+
+        $totalBilled = collect($billsArr)->sum('amount');
+        $totalCollected = collect($billsArr)->sum('total_paid');
+        $colRate = $totalBilled > 0 ? round(($totalCollected / $totalBilled) * 100, 1) : 0;
+
+        $stats = [
+            'total' => count($billsArr),
+            'total_billed' => $totalBilled,
+            'total_collected' => $totalCollected,
+            'total_usage' => collect($billsArr)->sum('usage_kwh'),
+            'collection_rate' => $colRate,
+        ];
+
+        $validCycles = getValidBillingCycles('electricity');
+        $cycleObj = collect($validCycles)->firstWhere('cycle', $cycle) ?? collect($validCycles)->first();
+        $cycleLabel = $cycleObj['label'] ?? ($cycle ?: 'Current Active Cycle');
+
+        $sortLabels = [
+            'name_asc' => 'Alphabetical (Resident A-Z)',
+            'name_desc' => 'Alphabetical (Resident Z-A)',
+            'amount_desc' => 'Billed Amount (Highest First)',
+            'amount_asc' => 'Billed Amount (Lowest First)',
+            'usage_desc' => 'Electricity Consumption (Highest First)',
+            'usage_asc' => 'Electricity Consumption (Lowest First)',
+            'due_asc' => 'Due Date (Earliest to Latest)',
+            'due_desc' => 'Due Date (Latest to Earliest)',
+        ];
+        $sortLabel = $sortLabels[$sort] ?? 'Alphabetical (Resident A-Z)';
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'landscape');
+        $pdf->loadView('admin.billing.report_pdf', [
+            'bills' => $billsArr,
+            'stats' => $stats,
+            'status' => $status,
+            'cycle' => $cycle,
+            'cycleLabel' => $cycleLabel,
+            'sort' => $sort,
+            'sortLabel' => $sortLabel,
+            'generatedAt' => now()->format('F d, Y - h:i A'),
+            'refNo' => 'REP-ELC-' . date('Ymd-His'),
+        ]);
+
+        $fileName = 'Electricity_Billing_Report_' . date('Y-m-d') . '.pdf';
+        return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
+    })->name('admin.billing.report.pdf');
+
     Route::get('/billing', function () {
         $bills = getElectricalBills(request('cycle'), false);
         $lots = getLotStatus();
@@ -1309,6 +1394,79 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'validCycles' => $validCycles
         ]);
     });
+
+    Route::get('/water/report/pdf', function (\Illuminate\Http\Request $request) {
+        $cycle = $request->input('cycle');
+        $status = strtolower($request->input('status', 'all'));
+        $sort = $request->input('sort', 'name_asc');
+        $download = $request->boolean('download');
+
+        $bills = collect(getWaterBills($cycle, false));
+
+        if ($status !== 'all') {
+            $bills = $bills->filter(function ($b) use ($status) {
+                return strtolower($b['status'] ?? '') === $status;
+            });
+        }
+
+        $sorted = match ($sort) {
+            'name_desc' => $bills->sortByDesc('resident', SORT_NATURAL | SORT_FLAG_CASE),
+            'amount_desc' => $bills->sortByDesc(fn($b) => (float)($b['amount'] ?? 0)),
+            'amount_asc' => $bills->sortBy(fn($b) => (float)($b['amount'] ?? 0)),
+            'usage_desc' => $bills->sortByDesc(fn($b) => (float)($b['usage_cbm'] ?? 0)),
+            'usage_asc' => $bills->sortBy(fn($b) => (float)($b['usage_cbm'] ?? 0)),
+            'due_asc' => $bills->sortBy(fn($b) => strtotime($b['due'] ?? 0)),
+            'due_desc' => $bills->sortByDesc(fn($b) => strtotime($b['due'] ?? 0)),
+            default => $bills->sortBy('resident', SORT_NATURAL | SORT_FLAG_CASE),
+        };
+
+        $billsArr = $sorted->values()->toArray();
+
+        $totalBilled = collect($billsArr)->sum('amount');
+        $totalCollected = collect($billsArr)->sum('total_paid');
+        $colRate = $totalBilled > 0 ? round(($totalCollected / $totalBilled) * 100, 1) : 0;
+
+        $stats = [
+            'total' => count($billsArr),
+            'total_billed' => $totalBilled,
+            'total_collected' => $totalCollected,
+            'total_usage' => collect($billsArr)->sum('usage_cbm'),
+            'collection_rate' => $colRate,
+        ];
+
+        $validCycles = getValidBillingCycles('water');
+        $cycleObj = collect($validCycles)->firstWhere('cycle', $cycle) ?? collect($validCycles)->first();
+        $cycleLabel = $cycleObj['label'] ?? ($cycle ?: 'Current Active Cycle');
+
+        $sortLabels = [
+            'name_asc' => 'Alphabetical (Resident A-Z)',
+            'name_desc' => 'Alphabetical (Resident Z-A)',
+            'amount_desc' => 'Billed Amount (Highest First)',
+            'amount_asc' => 'Billed Amount (Lowest First)',
+            'usage_desc' => 'Water Consumption (Highest First)',
+            'usage_asc' => 'Water Consumption (Lowest First)',
+            'due_asc' => 'Due Date (Earliest to Latest)',
+            'due_desc' => 'Due Date (Latest to Earliest)',
+        ];
+        $sortLabel = $sortLabels[$sort] ?? 'Alphabetical (Resident A-Z)';
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'landscape');
+        $pdf->loadView('admin.water.report_pdf', [
+            'bills' => $billsArr,
+            'stats' => $stats,
+            'status' => $status,
+            'cycle' => $cycle,
+            'cycleLabel' => $cycleLabel,
+            'sort' => $sort,
+            'sortLabel' => $sortLabel,
+            'generatedAt' => now()->format('F d, Y - h:i A'),
+            'refNo' => 'REP-WAT-' . date('Ymd-His'),
+        ]);
+
+        $fileName = 'Water_Billing_Report_' . date('Y-m-d') . '.pdf';
+        return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
+    })->name('admin.water.report.pdf');
 
     Route::get('/water', function () {
         $yearly_stats = calculateBillingStats('water');
@@ -1397,6 +1555,59 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             return response()->json(['success' => true]);
         }
         return response()->json(['success' => false], 404);
+    });
+
+    Route::post('/reservation-fee/send-reminder-sms', function (\Illuminate\Http\Request $request) {
+        $res = \App\Models\Reservation::with(['lot', 'buyerMasterList', 'user'])
+            ->whereKey($request->input('id'))
+            ->first();
+
+        if (! $res) {
+            return response()->json(['success' => false, 'message' => 'Reservation not found.'], 404);
+        }
+
+        if (in_array($res->status, [\App\Enums\ReservationStatus::Converted->value, \App\Enums\ReservationStatus::Cancelled->value], true)) {
+            return response()->json(['success' => false, 'message' => 'SMS reminders are only available for active reservations.'], 422);
+        }
+
+        $phone = trim((string) ($res->buyerMasterList->contact_number ?? $res->user->contact_number ?? ''));
+        if ($phone === '') {
+            return response()->json(['success' => false, 'message' => 'No contact number found for this buyer.'], 422);
+        }
+
+        $buyerName = trim((string) (
+            $res->buyerMasterList->first_name
+            ?? $res->first_name
+            ?? $res->user->first_name
+            ?? 'Valued Buyer'
+        ));
+        $lotLabel = $res->lot ? "Block {$res->lot->block}, Lot {$res->lot->lot_number}" : 'your reserved lot';
+
+        if ($res->deadline_date) {
+            $deadline = \Carbon\Carbon::parse($res->deadline_date)->startOfDay();
+            $today = now()->startOfDay();
+            $deadlineStr = $deadline->format('M d, Y');
+
+            if ($deadline->lt($today)) {
+                $msg = "URGENT - Althesa Subd: Hi {$buyerName}, your reservation for {$lotLabel} expired on {$deadlineStr}. Please contact the Admin office immediately to renew or proceed with your downpayment.";
+            } elseif ($deadline->equalTo($today)) {
+                $msg = "URGENT - Althesa Subd: Hi {$buyerName}, your lot reservation for {$lotLabel} expires TODAY ({$deadlineStr}). Please complete your downpayment or contact the Admin office immediately.";
+            } else {
+                $daysLeft = (int) $today->diffInDays($deadline);
+                $dayUnit = $daysLeft === 1 ? 'day' : 'days';
+                $msg = "Althesa Subd Reminder: Hi {$buyerName}, your lot reservation for {$lotLabel} will expire in {$daysLeft} {$dayUnit} on {$deadlineStr}. Please complete your downpayment or contact the Admin office to avoid cancellation.";
+            }
+        } else {
+            $msg = "Althesa Subd Reminder: Hi {$buyerName}, this is a friendly reminder regarding your active lot reservation for {$lotLabel}. Please contact the Admin office to proceed with your downpayment.";
+        }
+
+        $sent = \App\Helpers\SmsHelper::sendSms($phone, $msg);
+
+        if ($sent) {
+            return response()->json(['success' => true, 'message' => "SMS reminder sent to {$phone}."]);
+        }
+
+        return response()->json(['success' => false, 'message' => 'Failed to send SMS. Check TextBee SMS gateway configuration or logs.'], 500);
     });
 
     Route::post('/downpayment-fee', function (\Illuminate\Http\Request $request) {
@@ -1582,6 +1793,76 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         return response()->json(['success' => false], 404);
     });
 
+    Route::get('/reservation-fee/report/pdf', function (\Illuminate\Http\Request $request) {
+        $status = strtolower($request->input('status', 'all'));
+        $block = $request->input('block');
+        $sort = $request->input('sort', 'name_asc');
+        $download = $request->boolean('download');
+
+        $bills = collect(getReservationFees());
+
+        if ($status !== 'all') {
+            $bills = $bills->filter(function ($b) use ($status) {
+                return strtolower($b['status']) === $status;
+            });
+        }
+
+        if ($block && $block !== 'all') {
+            $bills = $bills->filter(function ($b) use ($block) {
+                return (string) $b['block'] === (string) $block;
+            });
+        }
+
+        $sorted = match ($sort) {
+            'name_desc' => $bills->sortByDesc('buyer', SORT_NATURAL | SORT_FLAG_CASE),
+            'date_asc' => $bills->sortBy(fn($b) => strtotime($b['date'] ?? 0)),
+            'date_desc' => $bills->sortByDesc(fn($b) => strtotime($b['date'] ?? 0)),
+            'amount_desc' => $bills->sortByDesc(fn($b) => (float)($b['amount'] ?? 0)),
+            'amount_asc' => $bills->sortBy(fn($b) => (float)($b['amount'] ?? 0)),
+            'id_asc' => $bills->sortBy('id'),
+            'id_desc' => $bills->sortByDesc('id'),
+            default => $bills->sortBy('buyer', SORT_NATURAL | SORT_FLAG_CASE),
+        };
+
+        $billsArr = $sorted->values()->toArray();
+
+        $stats = [
+            'total' => count($billsArr),
+            'active' => collect($billsArr)->filter(fn($b) => in_array(strtolower($b['status']), ['active', 'reserved', 'pending']))->count(),
+            'converted' => collect($billsArr)->filter(fn($b) => strtolower($b['status']) === 'converted')->count(),
+            'cancelled' => collect($billsArr)->filter(fn($b) => strtolower($b['status']) === 'cancelled')->count(),
+            'total_amount' => collect($billsArr)->filter(fn($b) => strtolower($b['status']) !== 'cancelled')->sum('amount'),
+        ];
+
+        $sortLabels = [
+            'name_asc' => 'Alphabetical (Name A-Z)',
+            'name_desc' => 'Alphabetical (Name Z-A)',
+            'date_asc' => 'Date Reserved (Earliest to Latest)',
+            'date_desc' => 'Date Reserved (Latest to Earliest)',
+            'amount_desc' => 'Amount Paid (Highest First)',
+            'amount_asc' => 'Amount Paid (Lowest First)',
+            'id_asc' => 'Reservation ID (Ascending)',
+            'id_desc' => 'Reservation ID (Descending)',
+        ];
+        $sortLabel = $sortLabels[$sort] ?? 'Alphabetical (Name A-Z)';
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'landscape');
+        $pdf->loadView('admin.reservation-fee.report_pdf', [
+            'bills' => $billsArr,
+            'stats' => $stats,
+            'status' => $status,
+            'block' => $block,
+            'sort' => $sort,
+            'sortLabel' => $sortLabel,
+            'generatedAt' => now()->format('F d, Y - h:i A'),
+            'refNo' => 'REP-RES-' . date('Ymd-His'),
+        ]);
+
+        $fileName = 'Reservation_Fee_Report_' . date('Y-m-d') . '.pdf';
+        return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
+    })->name('admin.reservation-fee.report.pdf');
+
     Route::get('/reservation-fee', function () {
         \App\Models\Reservation::whereHas('downpayments')
             ->where('status', '!=', \App\Enums\ReservationStatus::Converted->value)
@@ -1627,6 +1908,78 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         ]);
     });
 
+    Route::get('/downpayment-fee/report/pdf', function (\Illuminate\Http\Request $request) {
+        $behavior = $request->input('behavior', 'all');
+        $block = $request->input('block');
+        $sort = $request->input('sort', 'name_asc');
+        $download = $request->boolean('download');
+
+        $bills = collect(getDownpaymentFees());
+
+        if ($behavior !== 'all') {
+            $bills = $bills->filter(function ($b) use ($behavior) {
+                return ($b['payment_behavior'] ?? '') === $behavior;
+            });
+        }
+
+        if ($block && $block !== 'all') {
+            $bills = $bills->filter(function ($b) use ($block) {
+                return (string) ($b['block'] ?? '') === (string) $block;
+            });
+        }
+
+        $sorted = match ($sort) {
+            'name_desc' => $bills->sortByDesc('buyer', SORT_NATURAL | SORT_FLAG_CASE),
+            'paid_desc' => $bills->sortByDesc(fn($b) => (float)($b['paid_amount'] ?? 0)),
+            'paid_asc' => $bills->sortBy(fn($b) => (float)($b['paid_amount'] ?? 0)),
+            'balance_desc' => $bills->sortByDesc(fn($b) => (float)(($b['total_dp'] ?? 0) - ($b['paid_amount'] ?? 0))),
+            'date_asc' => $bills->sortBy(fn($b) => strtotime($b['next_due'] ?? 0)),
+            'date_desc' => $bills->sortByDesc(fn($b) => strtotime($b['next_due'] ?? 0)),
+            'id_asc' => $bills->sortBy('id'),
+            'id_desc' => $bills->sortByDesc('id'),
+            default => $bills->sortBy('buyer', SORT_NATURAL | SORT_FLAG_CASE),
+        };
+
+        $billsArr = $sorted->values()->toArray();
+
+        $stats = [
+            'total' => count($billsArr),
+            'total_dp' => collect($billsArr)->sum('total_dp'),
+            'total_paid' => collect($billsArr)->sum('paid_amount'),
+            'total_balance' => collect($billsArr)->sum(fn($b) => (float)(($b['total_dp'] ?? 0) - ($b['paid_amount'] ?? 0))),
+            'late' => collect($billsArr)->where('payment_behavior', 'Late')->count(),
+        ];
+
+        $sortLabels = [
+            'name_asc' => 'Alphabetical (Name A-Z)',
+            'name_desc' => 'Alphabetical (Name Z-A)',
+            'paid_desc' => 'Paid Amount (Highest First)',
+            'paid_asc' => 'Paid Amount (Lowest First)',
+            'balance_desc' => 'Remaining Balance (Highest First)',
+            'date_asc' => 'Next Due Date (Earliest to Latest)',
+            'date_desc' => 'Next Due Date (Latest to Earliest)',
+            'id_asc' => 'Contract ID (Ascending)',
+            'id_desc' => 'Contract ID (Descending)',
+        ];
+        $sortLabel = $sortLabels[$sort] ?? 'Alphabetical (Name A-Z)';
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'landscape');
+        $pdf->loadView('admin.downpayment-fee.report_pdf', [
+            'bills' => $billsArr,
+            'stats' => $stats,
+            'behavior' => $behavior,
+            'block' => $block,
+            'sort' => $sort,
+            'sortLabel' => $sortLabel,
+            'generatedAt' => now()->format('F d, Y - h:i A'),
+            'refNo' => 'REP-DP-' . date('Ymd-His'),
+        ]);
+
+        $fileName = 'Downpayment_Fee_Report_' . date('Y-m-d') . '.pdf';
+        return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
+    })->name('admin.downpayment-fee.report.pdf');
+
     Route::get('/downpayment-fee', function () {
         $yearly_stats = [
             '2026' => [
@@ -1669,9 +2022,158 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'masterListBuyers' => $masterListBuyers
         ]);
     });
+    Route::get('/appointments/report/pdf', function (\Illuminate\Http\Request $request) {
+        $status = $request->input('status', 'all');
+        $dateRange = $request->input('date_range', 'all');
+        $sort = $request->input('sort', 'date_desc');
+        $download = $request->boolean('download');
+
+        $appointments = collect(getAppointments());
+
+        if ($status !== 'all') {
+            $appointments = $appointments->filter(function ($apt) use ($status) {
+                return strtolower($apt['status'] ?? '') === strtolower($status);
+            });
+        }
+
+        if ($dateRange !== 'all') {
+            $now = \Carbon\Carbon::now('Asia/Manila');
+            $appointments = $appointments->filter(function ($apt) use ($dateRange, $now) {
+                if (empty($apt['date'])) return false;
+                $d = \Carbon\Carbon::parse($apt['date'], 'Asia/Manila');
+                return match ($dateRange) {
+                    'today' => $d->isSameDay($now),
+                    'this_week' => $d->between($now->copy()->startOfWeek(), $now->copy()->endOfWeek()),
+                    'this_month' => $d->isSameMonth($now),
+                    'last_month' => $d->isSameMonth($now->copy()->subMonth()),
+                    default => true,
+                };
+            });
+        }
+
+        $sorted = match ($sort) {
+            'date_asc' => $appointments->sortBy(fn($a) => strtotime(($a['date'] ?? '') . ' ' . ($a['time'] ?? ''))),
+            'date_desc' => $appointments->sortByDesc(fn($a) => strtotime(($a['date'] ?? '') . ' ' . ($a['time'] ?? ''))),
+            'id_asc' => $appointments->sortBy('id'),
+            'id_desc' => $appointments->sortByDesc('id'),
+            'client_asc' => $appointments->sortBy('client', SORT_NATURAL | SORT_FLAG_CASE),
+            'client_desc' => $appointments->sortByDesc('client', SORT_NATURAL | SORT_FLAG_CASE),
+            default => $appointments->sortByDesc(fn($a) => strtotime(($a['date'] ?? '') . ' ' . ($a['time'] ?? ''))),
+        };
+
+        $appointmentsArr = $sorted->values()->toArray();
+
+        $stats = [
+            'total' => count($appointmentsArr),
+            'pending' => collect($appointmentsArr)->filter(fn($a) => strtolower($a['status'] ?? '') === 'pending')->count(),
+            'scheduled' => collect($appointmentsArr)->filter(fn($a) => strtolower($a['status'] ?? '') === 'scheduled')->count(),
+            'completed' => collect($appointmentsArr)->filter(fn($a) => strtolower($a['status'] ?? '') === 'completed')->count(),
+            'cancelled' => collect($appointmentsArr)->filter(fn($a) => strtolower($a['status'] ?? '') === 'cancelled')->count(),
+        ];
+
+        $sortLabels = [
+            'date_desc' => 'Schedule Date (Newest First)',
+            'date_asc' => 'Schedule Date (Oldest First)',
+            'id_asc' => 'Inquiry ID (Ascending)',
+            'id_desc' => 'Inquiry ID (Descending)',
+            'client_asc' => 'Client Name (A to Z)',
+            'client_desc' => 'Client Name (Z to A)',
+        ];
+        $sortLabel = $sortLabels[$sort] ?? 'Schedule Date (Newest First)';
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'landscape');
+        $pdf->loadView('admin.appointments.report_pdf', [
+            'appointments' => $appointmentsArr,
+            'stats' => $stats,
+            'status' => $status,
+            'dateRange' => $dateRange,
+            'sort' => $sort,
+            'sortLabel' => $sortLabel,
+            'generatedAt' => now('Asia/Manila')->format('F d, Y - h:i A'),
+            'refNo' => 'REP-APT-' . date('Ymd-His'),
+        ]);
+
+        $fileName = 'Appointment_Management_Report_' . date('Y-m-d') . '.pdf';
+        return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
+    })->name('admin.appointments.report.pdf');
+
     Route::get('/appointments', function () {
         return view('admin.appointments.index', ['appointments' => getAppointments()]);
     });
+    Route::get('/incidents/report/pdf', function (\Illuminate\Http\Request $request) {
+        $category = strtolower($request->input('category', 'all'));
+        $status = strtolower($request->input('status', 'all'));
+        $sort = $request->input('sort', 'date_desc');
+        $download = $request->boolean('download');
+
+        $incidents = collect(getIncidents());
+
+        if ($category !== 'all') {
+            $incidents = $incidents->filter(function ($inc) use ($category) {
+                return strtolower($inc['type'] ?? '') === $category;
+            });
+        }
+
+        if ($status !== 'all') {
+            $incidents = $incidents->filter(function ($inc) use ($status) {
+                $curStatus = strtolower($inc['status'] ?? 'progress');
+                if ($curStatus === 'pending') $curStatus = 'progress';
+                return $curStatus === $status;
+            });
+        }
+
+        $sorted = match ($sort) {
+            'date_asc' => $incidents->sortBy(fn($inc) => strtotime($inc['date'] ?? 0)),
+            'date_desc' => $incidents->sortByDesc(fn($inc) => strtotime($inc['date'] ?? 0)),
+            'id_asc' => $incidents->sortBy('id'),
+            'id_desc' => $incidents->sortByDesc('id'),
+            'sub_asc' => $incidents->sortBy('sub', SORT_NATURAL | SORT_FLAG_CASE),
+            'sub_desc' => $incidents->sortByDesc('sub', SORT_NATURAL | SORT_FLAG_CASE),
+            'res_asc' => $incidents->sortBy('res', SORT_NATURAL | SORT_FLAG_CASE),
+            'res_desc' => $incidents->sortByDesc('res', SORT_NATURAL | SORT_FLAG_CASE),
+            default => $incidents->sortByDesc(fn($inc) => strtotime($inc['date'] ?? 0)),
+        };
+
+        $incidentsArr = $sorted->values()->toArray();
+
+        $stats = [
+            'total' => count($incidentsArr),
+            'progress' => collect($incidentsArr)->filter(fn($i) => strtolower($i['status'] ?? '') !== 'resolved')->count(),
+            'resolved' => collect($incidentsArr)->filter(fn($i) => strtolower($i['status'] ?? '') === 'resolved')->count(),
+            'security' => collect($incidentsArr)->filter(fn($i) => strtolower($i['type'] ?? '') === 'security')->count(),
+            'maintenance_utilities' => collect($incidentsArr)->filter(fn($i) => in_array(strtolower($i['type'] ?? ''), ['maintenance', 'utilities']))->count(),
+        ];
+
+        $sortLabels = [
+            'date_desc' => 'Date & Time (Newest First)',
+            'date_asc' => 'Date & Time (Oldest First)',
+            'id_asc' => 'Ticket ID (Ascending)',
+            'id_desc' => 'Ticket ID (Descending)',
+            'sub_asc' => 'Subject (A to Z)',
+            'sub_desc' => 'Subject (Z to A)',
+            'res_asc' => 'Reported By (A to Z)',
+            'res_desc' => 'Reported By (Z to A)',
+        ];
+        $sortLabel = $sortLabels[$sort] ?? 'Date & Time (Newest First)';
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'landscape');
+        $pdf->loadView('admin.incidents.report_pdf', [
+            'incidents' => $incidentsArr,
+            'stats' => $stats,
+            'category' => $category,
+            'status' => $status,
+            'sort' => $sort,
+            'sortLabel' => $sortLabel,
+            'generatedAt' => now()->format('F d, Y - h:i A'),
+            'refNo' => 'REP-INC-' . date('Ymd-His'),
+        ]);
+
+        $fileName = 'Incident_Management_Report_' . date('Y-m-d') . '.pdf';
+        return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
+    })->name('admin.incidents.report.pdf');
+
     Route::get('/incidents', function () {
         return view('admin.incidents.index', ['incidents' => getIncidents()]);
     });
@@ -1748,6 +2250,78 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
         return response()->json(['success' => true]);
     });
+    Route::get('/announcements/report/pdf', function (\Illuminate\Http\Request $request) {
+        $status = strtolower($request->input('status', 'all'));
+        $dateRange = $request->input('date_range', 'all');
+        $sort = $request->input('sort', 'date_desc');
+        $download = $request->boolean('download');
+
+        $announcements = collect(getAnnouncements());
+
+        if ($status !== 'all') {
+            $announcements = $announcements->filter(function ($ann) use ($status) {
+                return strtolower($ann['status'] ?? '') === $status;
+            });
+        }
+
+        if ($dateRange !== 'all') {
+            $now = \Carbon\Carbon::now('Asia/Manila');
+            $announcements = $announcements->filter(function ($ann) use ($dateRange, $now) {
+                if (empty($ann['date'])) return false;
+                $d = \Carbon\Carbon::parse($ann['date'], 'Asia/Manila');
+                return match ($dateRange) {
+                    'today' => $d->isSameDay($now),
+                    'this_week' => $d->between($now->copy()->startOfWeek(), $now->copy()->endOfWeek()),
+                    'this_month' => $d->isSameMonth($now),
+                    'last_month' => $d->isSameMonth($now->copy()->subMonth()),
+                    default => true,
+                };
+            });
+        }
+
+        $sorted = match ($sort) {
+            'date_asc' => $announcements->sortBy(fn($a) => strtotime($a['date'] ?? 0)),
+            'date_desc' => $announcements->sortByDesc(fn($a) => strtotime($a['date'] ?? 0)),
+            'title_asc' => $announcements->sortBy('title', SORT_NATURAL | SORT_FLAG_CASE),
+            'title_desc' => $announcements->sortByDesc('title', SORT_NATURAL | SORT_FLAG_CASE),
+            'author_asc' => $announcements->sortBy('author', SORT_NATURAL | SORT_FLAG_CASE),
+            default => $announcements->sortByDesc(fn($a) => strtotime($a['date'] ?? 0)),
+        };
+
+        $announcementsArr = $sorted->values()->toArray();
+
+        $stats = [
+            'total' => count($announcementsArr),
+            'published' => collect($announcementsArr)->filter(fn($a) => strtolower($a['status'] ?? '') === 'published')->count(),
+            'archived' => collect($announcementsArr)->filter(fn($a) => strtolower($a['status'] ?? '') === 'archived')->count(),
+        ];
+
+        $sortLabels = [
+            'date_desc' => 'Publish Date (Newest First)',
+            'date_asc' => 'Publish Date (Oldest First)',
+            'title_asc' => 'Title (A to Z)',
+            'title_desc' => 'Title (Z to A)',
+            'author_asc' => 'Author (A to Z)',
+        ];
+        $sortLabel = $sortLabels[$sort] ?? 'Publish Date (Newest First)';
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'landscape');
+        $pdf->loadView('admin.announcements.report_pdf', [
+            'announcements' => $announcementsArr,
+            'stats' => $stats,
+            'status' => $status,
+            'dateRange' => $dateRange,
+            'sort' => $sort,
+            'sortLabel' => $sortLabel,
+            'generatedAt' => now('Asia/Manila')->format('F d, Y - h:i A'),
+            'refNo' => 'REP-ANN-' . date('Ymd-His'),
+        ]);
+
+        $fileName = 'Announcement_Management_Report_' . date('Y-m-d') . '.pdf';
+        return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
+    })->name('admin.announcements.report.pdf');
+
     Route::get('/announcements', function () {
         return view('admin.announcements.index', ['announcements' => getAnnouncements()]);
     });
@@ -1787,6 +2361,121 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
         return response()->json(['success' => true, 'message' => 'Announcement posted and emails sent.']);
     });
+    Route::get('/visitors/report/pdf', function (\Illuminate\Http\Request $request) {
+        $status = strtolower($request->input('status', 'all'));
+        $dateRange = $request->input('date_range', 'all');
+        $sort = $request->input('sort', 'date_desc');
+        $download = $request->boolean('download');
+
+        $visitors = \App\Models\Visitor::with('host.lots')->orderBy('updated_at', 'desc')->get()->map(function ($vis) {
+            $block = 'N/A';
+            $lotNum = 'N/A';
+            $hostName = 'Unknown';
+
+            if ($vis->host) {
+                $hostName = $vis->host->name;
+                if ($vis->host->lots->count() > 0) {
+                    $lot = $vis->host->lots->first();
+                    $block = $lot->block;
+                    $lotNum = $lot->lot_number;
+                }
+            } elseif ($vis->host_name) {
+                $hostName = $vis->host_name;
+            }
+
+            return [
+                'id' => $vis->id,
+                'pin' => $vis->pin,
+                'visitor' => $vis->visitor_name,
+                'contact_number' => $vis->contact_number,
+                'host' => $hostName,
+                'block' => $block,
+                'lot' => $lotNum,
+                'purpose' => $vis->purpose,
+                'validity' => $vis->validity,
+                'status' => $vis->status,
+                'arrival_time' => $vis->arrival_time,
+                'guard_name' => $vis->guard_name,
+                'date' => $vis->updated_at ? $vis->updated_at->format('Y-m-d') : '',
+                'date_formatted' => $vis->updated_at ? $vis->updated_at->format('M d, Y') : '',
+            ];
+        });
+
+        if ($status !== 'all') {
+            $visitors = $visitors->filter(function ($v) use ($status) {
+                $cur = strtolower($v['status'] ?? '');
+                if ($status === 'pending') {
+                    return in_array($cur, ['pending', 'awaiting admin approval']);
+                }
+                if ($status === 'rejected') {
+                    return !in_array($cur, ['pending', 'awaiting admin approval', 'approved', 'entered']);
+                }
+                return $cur === $status;
+            });
+        }
+
+        if ($dateRange !== 'all') {
+            $now = \Carbon\Carbon::now('Asia/Manila');
+            $visitors = $visitors->filter(function ($v) use ($dateRange, $now) {
+                if (empty($v['date'])) return false;
+                $d = \Carbon\Carbon::parse($v['date'], 'Asia/Manila');
+                return match ($dateRange) {
+                    'today' => $d->isSameDay($now),
+                    'this_week' => $d->between($now->copy()->startOfWeek(), $now->copy()->endOfWeek()),
+                    'this_month' => $d->isSameMonth($now),
+                    'last_month' => $d->isSameMonth($now->copy()->subMonth()),
+                    default => true,
+                };
+            });
+        }
+
+        $sorted = match ($sort) {
+            'date_asc' => $visitors->sortBy(fn($v) => strtotime($v['date'] ?? 0)),
+            'date_desc' => $visitors->sortByDesc(fn($v) => strtotime($v['date'] ?? 0)),
+            'id_asc' => $visitors->sortBy('id'),
+            'id_desc' => $visitors->sortByDesc('id'),
+            'visitor_asc' => $visitors->sortBy('visitor', SORT_NATURAL | SORT_FLAG_CASE),
+            'host_asc' => $visitors->sortBy('host', SORT_NATURAL | SORT_FLAG_CASE),
+            default => $visitors->sortByDesc(fn($v) => strtotime($v['date'] ?? 0)),
+        };
+
+        $visitorsArr = $sorted->values()->toArray();
+
+        $stats = [
+            'total' => count($visitorsArr),
+            'pending' => collect($visitorsArr)->filter(fn($v) => in_array(strtolower($v['status'] ?? ''), ['pending', 'awaiting admin approval']))->count(),
+            'approved' => collect($visitorsArr)->filter(fn($v) => strtolower($v['status'] ?? '') === 'approved')->count(),
+            'entered' => collect($visitorsArr)->filter(fn($v) => strtolower($v['status'] ?? '') === 'entered')->count(),
+            'rejected' => collect($visitorsArr)->filter(fn($v) => !in_array(strtolower($v['status'] ?? ''), ['pending', 'awaiting admin approval', 'approved', 'entered']))->count(),
+        ];
+
+        $sortLabels = [
+            'date_desc' => 'Date (Newest First)',
+            'date_asc' => 'Date (Oldest First)',
+            'id_asc' => 'Request ID (Ascending)',
+            'id_desc' => 'Request ID (Descending)',
+            'visitor_asc' => 'Visitor Name (A to Z)',
+            'host_asc' => 'Host Name (A to Z)',
+        ];
+        $sortLabel = $sortLabels[$sort] ?? 'Date (Newest First)';
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'landscape');
+        $pdf->loadView('admin.visitors.report_pdf', [
+            'visitors' => $visitorsArr,
+            'stats' => $stats,
+            'status' => $status,
+            'dateRange' => $dateRange,
+            'sort' => $sort,
+            'sortLabel' => $sortLabel,
+            'generatedAt' => now('Asia/Manila')->format('F d, Y - h:i A'),
+            'refNo' => 'REP-VIS-' . date('Ymd-His'),
+        ]);
+
+        $fileName = 'Visitor_Access_Report_' . date('Y-m-d') . '.pdf';
+        return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
+    })->name('admin.visitors.report.pdf');
+
     Route::get('/visitors', function () {
         return view('admin.visitors.index');
     });
@@ -2102,6 +2791,7 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             'selectedLotId' => $selectedLotId,
         ]);
     });
+
     Route::get('/incidents', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
         $reports = \App\Models\Incident::where('resident_id', $user->id)
@@ -2122,6 +2812,7 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             'subject' => 'required|string|max:255',
             'type' => 'required|string|max:100',
             'description' => 'required|string',
+            'incident_date' => 'nullable|string|max:100',
             'photos' => 'nullable',
             'photos.*' => 'nullable|file|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
             'video' => 'nullable|file|mimes:mp4,webm,mov,quicktime|max:102400',
@@ -2171,16 +2862,33 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             $videoUrl = '/storage/' . $videoPath;
         }
 
+        $occurredDate = null;
+        if (!empty($request->input('incident_date'))) {
+            try {
+                $occurredDate = \Carbon\Carbon::parse($request->input('incident_date'));
+            } catch (\Exception $e) {}
+        }
+
+        $desc = $validated['description'];
+        if ($occurredDate) {
+            $desc = "[Occurred: " . $occurredDate->format('M d, Y h:i A') . "]\n\n" . $desc;
+        }
+
         $inc = \App\Models\Incident::create([
             'subject' => $validated['subject'],
             'type' => $validated['type'],
-            'description' => $validated['description'],
+            'description' => $desc,
             'status' => 'progress',
             'resident_id' => \Illuminate\Support\Facades\Auth::id(),
             'reporter_name' => \Illuminate\Support\Facades\Auth::user()?->name,
             'image_url' => count($imageUrls) > 0 ? json_encode($imageUrls) : null,
             'video_url' => $videoUrl,
         ]);
+
+        if ($occurredDate) {
+            $inc->created_at = $occurredDate;
+            $inc->save();
+        }
         
         $admins = \App\Models\User::role('Admin')->get();
         foreach ($admins as $admin) {

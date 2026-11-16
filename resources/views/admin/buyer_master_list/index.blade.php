@@ -47,6 +47,56 @@
             background-color: #fee2e2;
             transform: translateY(-1px);
         }
+
+        .btn-address-helper {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #0369a1;
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            line-height: 1.4;
+            box-shadow: 0 1px 2px rgba(2, 132, 199, 0.06);
+        }
+
+        .btn-address-helper:hover {
+            background: #e0f2fe;
+            border-color: #7dd3fc;
+            color: #0284c7;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 5px rgba(2, 132, 199, 0.15);
+        }
+
+        .btn-address-copy {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #475569;
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            line-height: 1.4;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+        }
+
+        .btn-address-copy:hover {
+            background: #f1f5f9;
+            border-color: #94a3b8;
+            color: #1e293b;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+        }
     </style>
 
     <div class="bill-container fade-in">
@@ -55,7 +105,11 @@
                 <h1>Buyer Master List</h1>
                 <p>Manage subdivision buyers, property lots, and their respective financing details.</p>
             </div>
-            <div class="bill-actions">
+            <div class="bill-actions" style="display: flex; gap: 8px;">
+                <button type="button" class="btn btn-outline" style="background: #fff; border-color: #0284c7; color: #0284c7; font-weight: 700; display: inline-flex; align-items: center;" onclick="openBuyerReportModal()">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    Generate Report
+                </button>
                 <button class="btn btn-outline" style="border-color: var(--bill-primary); color: var(--bill-primary);" onclick="openModal('add')">
                     <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
                         style="margin-right: 8px;">
@@ -358,27 +412,47 @@
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Email Address *</label><input type="email" name="email" id="inp_email" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
-                        <div style="grid-column: span 3;"><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Present
-                                Address *</label><input type="text" name="present_address" id="inp_present_address" required
-                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly"></div>
                         <div style="grid-column: span 3;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                <label class="form-label" style="margin: 0; font-size: 12px; font-weight: 600;">Postal Address *</label>
-                                <button type="button" id="btn_copy_address" onclick="copyPresentAddress()"
-                                    style="background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 6px; padding: 2px 10px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; transition: all 0.15s ease;"
-                                    title="Copy Present Address to Postal Address">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <label class="form-label" style="margin: 0; font-size: 12px; font-weight: 600; color: #334155;">Present Address *</label>
+                                <button type="button" class="btn-address-helper btn-address-api" onclick="openAddressPicker('present')"
+                                    title="Select official Region, Province, City, and Barangay">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                        <circle cx="12" cy="10" r="3"></circle>
                                     </svg>
-                                    <span>Same as Present Address</span>
+                                    <span>Select Standard Address</span>
                                 </button>
                             </div>
+                            <input type="text" name="present_address" id="inp_present_address" required
+                                style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px;"
+                                class="view-readonly" placeholder="e.g. Unit 4B, Emerald St., Brgy. San Antonio, Pasig City">
+                        </div>
+                        <div style="grid-column: span 3;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <label class="form-label" style="margin: 0; font-size: 12px; font-weight: 600; color: #334155;">Postal Address *</label>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <button type="button" class="btn-address-helper btn-address-api" onclick="openAddressPicker('postal')"
+                                        title="Select official Region, Province, City, and Barangay">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                            <circle cx="12" cy="10" r="3"></circle>
+                                        </svg>
+                                        <span>Select Standard Address</span>
+                                    </button>
+                                    <button type="button" id="btn_copy_address" class="btn-address-copy" onclick="copyPresentAddress()"
+                                        title="Copy Present Address to Postal Address">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                        </svg>
+                                        <span>Same as Present Address</span>
+                                    </button>
+                                </div>
+                            </div>
                             <input type="text" name="postal_address" id="inp_postal_address" required
-                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly">
+                                style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px;"
+                                class="view-readonly" placeholder="e.g. Unit 4B, Emerald St., Brgy. San Antonio, Pasig City">
                         </div>
                         <div><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Type of ID *</label>
@@ -463,6 +537,95 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Address Selector Modal -->
+    <div id="addressApiModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(4px); z-index: 1200; align-items: center; justify-content: center; padding: 20px;">
+        <div style="background: white; border-radius: 16px; width: 100%; max-width: 580px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.25); overflow: hidden;">
+            <div style="padding: 18px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 38px; height: 38px; border-radius: 10px; background: #e0f2fe; color: #0284c7; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                            <circle cx="12" cy="10" r="3"></circle>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 id="addressModalTitle" style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;">
+                            Select <span id="addressModalTargetLabel">Present Address</span>
+                        </h3>
+                        <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">Choose the official region, province, city, and barangay.</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeAddressPicker()" style="background: none; border: none; font-size: 20px; color: #94a3b8; cursor: pointer; padding: 4px; border-radius: 6px; line-height: 1;" title="Close">✕</button>
+            </div>
+
+            <div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; max-height: calc(85vh - 130px); overflow-y: auto;">
+                <!-- Province / Metro Manila with Live Search -->
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <label style="margin: 0; font-size: 12px; font-weight: 700; color: #334155;">Province / Metro Manila *</label>
+                        <span style="font-size: 11px; color: #64748b;">Type to filter or select</span>
+                    </div>
+                    <div style="position: relative; margin-bottom: 6px;">
+                        <input type="text" id="addrProvinceSearch" placeholder="Search province (e.g. Cavite, Laguna, Metro Manila)..." 
+                            style="width: 100%; padding: 8px 12px 8px 34px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #f8fafc;"
+                            oninput="filterProvinces(this.value)" autocomplete="off">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none;">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                    </div>
+                    <select id="addrProvince" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #fff;" onchange="onProvinceChange()">
+                        <option value="">Loading provinces...</option>
+                    </select>
+                </div>
+
+                <!-- City / Municipality -->
+                <div>
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px;">City / Municipality *</label>
+                    <select id="addrCity" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #fff;" onchange="onCityChange()" disabled>
+                        <option value="">-- Select Province First --</option>
+                    </select>
+                </div>
+
+                <!-- Barangay -->
+                <div>
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px;">Barangay *</label>
+                    <select id="addrBarangay" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #fff;" onchange="updateAddressPreview()" disabled>
+                        <option value="">-- Select City / Municipality First --</option>
+                    </select>
+                </div>
+
+                <!-- Street / Unit / House / Subdivision details -->
+                <div>
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px;">
+                        Street / Unit / House No. / Subdivision
+                        <span style="font-weight: 400; color: #64748b;">(Optional detail)</span>
+                    </label>
+                    <input type="text" id="addrStreet" placeholder="e.g. Lot 1 Blk 2, Phase 1, Sunflower St." style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" oninput="updateAddressPreview()">
+                </div>
+
+                <!-- Address Preview -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Address Preview</span>
+                    <p id="addrPreviewText" style="margin: 6px 0 0 0; font-size: 13px; font-weight: 600; color: #1e293b; min-height: 20px; word-break: break-word;">
+                        <span style="color: #94a3b8; font-style: italic;">Make selections above to construct address...</span>
+                    </p>
+                </div>
+            </div>
+
+            <div style="padding: 14px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" onclick="closeAddressPicker()" style="padding: 9px 16px; border: 1px solid #cbd5e1; background: #fff; color: #475569; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">Cancel</button>
+                <button type="button" id="btnApplyAddress" onclick="applySelectedAddress()" style="padding: 9px 20px; border: none; background: #0284c7; color: #fff; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; opacity: 0.5;" disabled>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    <span>Apply Address</span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -558,6 +721,307 @@
             btnElement.classList.add('active');
         }
 
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        let currentAddressTarget = 'present';
+        let psgcAllProvincesCache = null;
+        const psgcCitiesCache = {};
+        const psgcBarangaysCache = {};
+
+        function openAddressPicker(target) {
+            currentAddressTarget = target;
+            const targetLabel = target === 'present' ? 'Present Address' : 'Postal Address';
+            const labelEl = document.getElementById('addressModalTargetLabel');
+            if (labelEl) labelEl.textContent = targetLabel;
+            document.getElementById('addressApiModal').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+
+            const searchInp = document.getElementById('addrProvinceSearch');
+            if (searchInp) searchInp.value = '';
+
+            const streetInp = document.getElementById('addrStreet');
+            if (streetInp) streetInp.value = '';
+
+            loadAllProvinces();
+        }
+
+        function closeAddressPicker() {
+            document.getElementById('addressApiModal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('addrProvinceSearch');
+            if (searchInput) {
+                searchInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const select = document.getElementById('addrProvince');
+                        if (select && select.options.length > 1) {
+                            select.selectedIndex = 1;
+                            onProvinceChange();
+                        }
+                    }
+                });
+            }
+        });
+
+        async function fetchWithFallback(url, fallbackUrl) {
+            try {
+                const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (Array.isArray(data) && data.length > 0) return data;
+                }
+            } catch (err) {
+                console.warn('Backend address proxy failed, falling back to public endpoint...', err);
+            }
+            try {
+                const respFallback = await fetch(fallbackUrl);
+                if (respFallback.ok) {
+                    const fbData = await respFallback.json();
+                    if (Array.isArray(fbData) && fbData.length > 0) return fbData;
+                }
+            } catch (e) {
+                console.error('Address service error:', e);
+            }
+            return [];
+        }
+
+        async function loadAllProvinces() {
+            const select = document.getElementById('addrProvince');
+            if (psgcAllProvincesCache && psgcAllProvincesCache.length > 0) {
+                populateProvinceSelect(psgcAllProvincesCache);
+                return;
+            }
+
+            select.innerHTML = '<option value="">Loading provinces...</option>';
+            select.disabled = true;
+
+            let provinces = await fetchWithFallback('/api/address/provinces', 'https://psgc.gitlab.io/api/provinces.json');
+            if (Array.isArray(provinces) && provinces.length > 0) {
+                if (!provinces.some(p => p.name === 'Metro Manila')) {
+                    provinces.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                    provinces.unshift({
+                        code: '130000000',
+                        name: 'Metro Manila',
+                        isNcr: true
+                    });
+                }
+            }
+
+            psgcAllProvincesCache = provinces;
+            select.disabled = false;
+            populateProvinceSelect(provinces);
+        }
+
+        function populateProvinceSelect(provinces, filterTerm = '') {
+            const select = document.getElementById('addrProvince');
+            if (!provinces || provinces.length === 0) {
+                select.innerHTML = '<option value="">Unable to load provinces. Please check connection.</option>';
+                return;
+            }
+
+            const currentVal = select.value;
+            let list = provinces;
+            if (filterTerm) {
+                const term = filterTerm.toLowerCase();
+                list = provinces.filter(p => p.name.toLowerCase().includes(term));
+            }
+
+            if (list.length === 0) {
+                select.innerHTML = '<option value="">No matching provinces found</option>';
+                resetCitySelect();
+                resetBarangaySelect();
+                updateAddressPreview();
+                return;
+            }
+
+            let html = '<option value="">-- Select Province / Metro Manila --</option>';
+            list.forEach(p => {
+                const isNcr = p.isNcr || String(p.code).startsWith('13');
+                const isSelected = p.code === currentVal ? 'selected' : '';
+                html += `<option value="${p.code}" data-name="${escapeHtml(p.name)}" data-is-ncr="${isNcr ? '1' : '0'}" ${isSelected}>${escapeHtml(p.name)}</option>`;
+            });
+            select.innerHTML = html;
+
+            resetCitySelect();
+            resetBarangaySelect();
+            updateAddressPreview();
+        }
+
+        function filterProvinces(val) {
+            if (!psgcAllProvincesCache) return;
+            populateProvinceSelect(psgcAllProvincesCache, (val || '').trim());
+            const select = document.getElementById('addrProvince');
+            // If user filtered down to exactly 1 province result, automatically select it
+            if (select.options.length === 2) {
+                select.selectedIndex = 1;
+                onProvinceChange();
+            }
+        }
+
+        function resetCitySelect() {
+            const citySelect = document.getElementById('addrCity');
+            citySelect.innerHTML = '<option value="">-- Select Province First --</option>';
+            citySelect.disabled = true;
+        }
+
+        function resetBarangaySelect() {
+            const bSelect = document.getElementById('addrBarangay');
+            bSelect.innerHTML = '<option value="">-- Select City / Municipality First --</option>';
+            bSelect.disabled = true;
+        }
+
+        async function onProvinceChange() {
+            const provSelect = document.getElementById('addrProvince');
+            const code = provSelect.value;
+            const opt = provSelect.selectedOptions[0];
+            const isNcr = opt && opt.getAttribute('data-is-ncr') === '1';
+
+            resetCitySelect();
+            resetBarangaySelect();
+
+            if (!code) {
+                updateAddressPreview();
+                return;
+            }
+
+            loadCities(code, isNcr);
+            updateAddressPreview();
+        }
+
+        async function loadCities(code, isRegionDirect) {
+            const citySelect = document.getElementById('addrCity');
+            citySelect.disabled = true;
+            citySelect.innerHTML = '<option value="">Loading cities and municipalities...</option>';
+
+            let cities = psgcCitiesCache[code];
+            if (!cities) {
+                const fallbackUrl = isRegionDirect
+                    ? `https://psgc.gitlab.io/api/regions/${code}/cities-municipalities.json`
+                    : `https://psgc.gitlab.io/api/provinces/${code}/cities-municipalities.json`;
+                const localUrl = isRegionDirect ? `/api/address/cities/${code}?is_region=1` : `/api/address/cities/${code}`;
+                cities = await fetchWithFallback(localUrl, fallbackUrl);
+                psgcCitiesCache[code] = cities;
+            }
+
+            citySelect.disabled = false;
+            if (!cities || cities.length === 0) {
+                citySelect.innerHTML = '<option value="">No cities or municipalities found</option>';
+                return;
+            }
+
+            cities.sort((a, b) => a.name.localeCompare(b.name));
+            let html = '<option value="">-- Select City / Municipality --</option>';
+            cities.forEach(c => {
+                html += `<option value="${c.code}" data-name="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`;
+            });
+            citySelect.innerHTML = html;
+        }
+
+        async function onCityChange() {
+            const citySelect = document.getElementById('addrCity');
+            const code = citySelect.value;
+            resetBarangaySelect();
+
+            if (!code) {
+                updateAddressPreview();
+                return;
+            }
+
+            const bSelect = document.getElementById('addrBarangay');
+            bSelect.disabled = true;
+            bSelect.innerHTML = '<option value="">Loading barangays...</option>';
+
+            let barangays = psgcBarangaysCache[code];
+            if (!barangays) {
+                barangays = await fetchWithFallback(
+                    `/api/address/barangays/${code}`,
+                    `https://psgc.gitlab.io/api/cities-municipalities/${code}/barangays.json`
+                );
+                psgcBarangaysCache[code] = barangays;
+            }
+
+            bSelect.disabled = false;
+            if (!barangays || barangays.length === 0) {
+                bSelect.innerHTML = '<option value="">No barangays found</option>';
+                updateAddressPreview();
+                return;
+            }
+
+            barangays.sort((a, b) => a.name.localeCompare(b.name));
+            let html = '<option value="">-- Select Barangay --</option>';
+            barangays.forEach(b => {
+                html += `<option value="${b.code}" data-name="${escapeHtml(b.name)}">${escapeHtml(b.name)}</option>`;
+            });
+            bSelect.innerHTML = html;
+
+            updateAddressPreview();
+        }
+
+        function buildAddressParts() {
+            const street = (document.getElementById('addrStreet').value || '').trim();
+            const bOpt = document.getElementById('addrBarangay').selectedOptions[0];
+            const cOpt = document.getElementById('addrCity').selectedOptions[0];
+            const pOpt = document.getElementById('addrProvince').selectedOptions[0];
+
+            const bName = bOpt && bOpt.value ? bOpt.getAttribute('data-name') || bOpt.text : '';
+            const cName = cOpt && cOpt.value ? cOpt.getAttribute('data-name') || cOpt.text : '';
+            const pName = pOpt && pOpt.value ? pOpt.getAttribute('data-name') || pOpt.text : '';
+
+            const parts = [];
+            if (street) parts.push(street);
+            if (bName) parts.push(bName.toLowerCase().startsWith('brgy') || bName.toLowerCase().startsWith('barangay') ? bName : 'Brgy. ' + bName);
+            if (cName) parts.push(cName);
+            if (pName) parts.push(pName);
+
+            return parts;
+        }
+
+        function updateAddressPreview() {
+            const parts = buildAddressParts();
+            const previewEl = document.getElementById('addrPreviewText');
+            const applyBtn = document.getElementById('btnApplyAddress');
+
+            if (parts.length === 0) {
+                previewEl.innerHTML = '<span style="color: #94a3b8; font-style: italic;">Make selections above to construct address...</span>';
+                applyBtn.disabled = true;
+                applyBtn.style.opacity = '0.5';
+                applyBtn.style.cursor = 'not-allowed';
+            } else {
+                const fullText = parts.join(', ');
+                previewEl.textContent = fullText;
+                const cityChosen = !!document.getElementById('addrCity').value;
+                applyBtn.disabled = !cityChosen;
+                applyBtn.style.opacity = cityChosen ? '1' : '0.5';
+                applyBtn.style.cursor = cityChosen ? 'pointer' : 'not-allowed';
+            }
+        }
+
+        function applySelectedAddress() {
+            const parts = buildAddressParts();
+            if (parts.length === 0) return;
+            const fullAddress = parts.join(', ');
+
+            const inputId = currentAddressTarget === 'postal' ? 'inp_postal_address' : 'inp_present_address';
+            const input = document.getElementById(inputId);
+            if (input) {
+                input.value = fullAddress;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            closeAddressPicker();
+        }
+
         function copyPresentAddress() {
             const present = document.getElementById('inp_present_address').value;
             const postalInput = document.getElementById('inp_postal_address');
@@ -600,6 +1064,9 @@
             if (copyBtn) {
                 copyBtn.style.display = (mode === 'view') ? 'none' : 'inline-flex';
             }
+            document.querySelectorAll('.btn-address-api').forEach(btn => {
+                btn.style.display = (mode === 'view') ? 'none' : 'inline-flex';
+            });
 
             if (mode === 'add') {
                 document.getElementById('modalTitle').textContent = 'Add New Buyer';
@@ -864,7 +1331,110 @@
                 }
             });
         }
+
+        function openBuyerReportModal() {
+            const currentStatus = "{{ request('status') === 'cancelled' ? 'cancelled' : 'active' }}";
+            const currentBlock = "{{ request('block', '') }}";
+            if (document.getElementById('reportBuyerStatusFilter')) {
+                document.getElementById('reportBuyerStatusFilter').value = currentStatus;
+            }
+            if (document.getElementById('reportBuyerBlockFilter')) {
+                document.getElementById('reportBuyerBlockFilter').value = currentBlock;
+            }
+            reloadBuyerReportPdf();
+            document.getElementById('buyerReportModal').style.display = 'flex';
+        }
+
+        function closeBuyerReportModal() {
+            document.getElementById('buyerReportModal').style.display = 'none';
+        }
+
+        function reloadBuyerReportPdf() {
+            const status = document.getElementById('reportBuyerStatusFilter')?.value || 'active';
+            const block = document.getElementById('reportBuyerBlockFilter')?.value || '';
+            const sort = document.getElementById('reportBuyerSortFilter')?.value || 'name_asc';
+            const base = "{{ route('admin.buyer-master-list.report.pdf') }}";
+            const qs = `?status=${encodeURIComponent(status)}&block=${encodeURIComponent(block)}&sort=${encodeURIComponent(sort)}`;
+
+            const frame = document.getElementById('buyerReportPdfFrame');
+            if (frame) {
+                frame.src = base + qs;
+            }
+            const dlBtn = document.getElementById('buyerReportDownloadBtn');
+            if (dlBtn) {
+                dlBtn.href = base + qs + '&download=1';
+            }
+        }
+
+        function printBuyerReportPdfFrame() {
+            const frame = document.getElementById('buyerReportPdfFrame');
+            if (frame && frame.contentWindow) {
+                frame.contentWindow.focus();
+                frame.contentWindow.print();
+            }
+        }
     </script>
+
+    <!-- Official Buyer Masterlist PDF Report Modal -->
+    <div id="buyerReportModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2100; background: rgba(15,23,42,0.7); backdrop-filter: blur(8px); padding: 20px;">
+        <div class="bill-modal-content" style="max-width: 1100px; width: 95%; max-height: 94vh; overflow: hidden; padding: 20px 24px; border-radius: 20px; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); display: flex; flex-direction: column;">
+            
+            <!-- Controls Bar -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #e2e8f0;">
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <div>
+                        <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Status</span>
+                        <select id="reportBuyerStatusFilter" class="filter-select" onchange="reloadBuyerReportPdf()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                            <option value="active" selected>Active Buyers</option>
+                            <option value="cancelled">Cancelled Buyers</option>
+                            <option value="all">All Buyers</option>
+                        </select>
+                    </div>
+                    <div>
+                        <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Block</span>
+                        <select id="reportBuyerBlockFilter" class="filter-select" onchange="reloadBuyerReportPdf()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                            <option value="">All Blocks</option>
+                            @for($i = 1; $i <= 18; $i++)
+                                <option value="{{ $i }}">Block {{ $i }}</option>
+                            @endfor
+                        </select>
+                    </div>
+                    <div>
+                        <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Sort By</span>
+                        <select id="reportBuyerSortFilter" class="filter-select" onchange="reloadBuyerReportPdf()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                            <option value="name_asc" selected>Alphabetical: Name (A to Z)</option>
+                            <option value="name_desc">Alphabetical: Name (Z to A)</option>
+                            <option value="date_asc">Date Registered: Earliest to Latest</option>
+                            <option value="date_desc">Date Registered: Latest to Earliest</option>
+                            <option value="id_asc">Buyer ID: Ascending (BML-1...)</option>
+                            <option value="id_desc">Buyer ID: Descending</option>
+                            <option value="tcp_desc">Contract Price: Highest First</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <a id="buyerReportDownloadBtn" href="{{ route('admin.buyer-master-list.report.pdf') }}?download=1" class="btn btn-primary" style="background: #0284c7; border: none; padding: 8px 16px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: #fff;">
+                        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        Download PDF
+                    </a>
+                    <button type="button" class="btn btn-outline" onclick="printBuyerReportPdfFrame()" style="background: #fff; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: #334155;">
+                        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                        Print
+                    </button>
+                    <button type="button" class="btn btn-outline" onclick="closeBuyerReportModal()" style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 600; border-radius: 8px; cursor: pointer;">
+                        ✕ Close
+                    </button>
+                </div>
+            </div>
+
+            <!-- Embedded Real PDF Viewer (Viewable in-page, no new tab) -->
+            <div style="flex: 1; min-height: 0; width: 100%;">
+                <iframe id="buyerReportPdfFrame" src="{{ route('admin.buyer-master-list.report.pdf') }}" style="width: 100%; height: 75vh; border: 1px solid #e2e8f0; border-radius: 10px; background: #525659;"></iframe>
+            </div>
+
+        </div>
+    </div>
     @if(session('success'))
     <script>
         document.addEventListener('DOMContentLoaded', function() {

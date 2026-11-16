@@ -119,6 +119,42 @@
             </table>
         </div>
     </div>
+
+    <!-- Walk-in Registration Modal -->
+    <div id="walkinModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center; padding:20px;">
+        <div class="analytic-card" style="width:100%; max-width:500px; padding:0; overflow:hidden;">
+            <div style="padding:20px 24px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="font-size:18px; font-weight:800; color:#0f172a; margin:0;">Walk-in Registration</h3>
+                <button onclick="closeWalkInModal()" style="background:none; border:none; font-size:24px; color:#94a3b8; cursor:pointer;">&times;</button>
+            </div>
+            <form onsubmit="submitWalkIn(event)" style="padding:24px; display:flex; flex-direction:column; gap:16px;">
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; display:block; margin-bottom:6px;">Visitor Full Name</label>
+                    <input type="text" id="wName" required class="filter-select" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;">
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; display:block; margin-bottom:6px;">Purpose of Visit</label>
+                    <input type="text" id="wPurpose" required class="filter-select" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;" placeholder="e.g. Delivery, Guest, Maintenance">
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; display:block; margin-bottom:6px;">Visiting Resident / Destination (Block & Lot)</label>
+                    <input type="text" id="wDestination" class="filter-select" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;" placeholder="e.g. Block 3 Lot 5 / Maria Santos">
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; display:block; margin-bottom:6px;">Visitor's Home Address (Optional)</label>
+                    <input type="text" id="wOrigin" class="filter-select" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;" placeholder="Visitor's home address">
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; display:block; margin-bottom:6px;">Vehicle Plate Number (Optional)</label>
+                    <input type="text" id="wPlate" class="filter-select" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;" placeholder="ABC 1234">
+                </div>
+                <div style="margin-top:8px; display:flex; gap:12px;">
+                    <button type="button" onclick="closeWalkInModal()" class="btn btn-outline" style="flex:1; justify-content:center;">Cancel</button>
+                    <button type="submit" class="btn btn-primary" style="flex:1; justify-content:center; background:var(--guard-primary);">Register Entry</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 @endsection
 
@@ -654,41 +690,4 @@
     }
 
 </script>
-
-
-<!-- Walk-in Registration Modal -->
-<div id="walkinModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center; padding:20px;">
-    <div class="analytic-card" style="width:100%; max-width:500px; padding:0; overflow:hidden;">
-        <div style="padding:20px 24px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
-            <h3 style="font-size:18px; font-weight:800; color:#0f172a; margin:0;">Walk-in Registration</h3>
-            <button onclick="closeWalkInModal()" style="background:none; border:none; font-size:24px; color:#94a3b8; cursor:pointer;">&times;</button>
-        </div>
-        <form onsubmit="submitWalkIn(event)" style="padding:24px; display:flex; flex-direction:column; gap:16px;">
-            <div>
-                <label style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; display:block; margin-bottom:6px;">Visitor Full Name</label>
-                <input type="text" id="wName" required class="filter-select" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;">
-            </div>
-            <div>
-                <label style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; display:block; margin-bottom:6px;">Purpose of Visit</label>
-                <input type="text" id="wPurpose" required class="filter-select" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;" placeholder="e.g. Delivery, Guest, Maintenance">
-            </div>
-            <div>
-                <label style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; display:block; margin-bottom:6px;">Visiting Resident / Destination (Block & Lot)</label>
-                <input type="text" id="wDestination" class="filter-select" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;" placeholder="e.g. Block 3 Lot 5 / Maria Santos">
-            </div>
-            <div>
-                <label style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; display:block; margin-bottom:6px;">Visitor's Home Address (Optional)</label>
-                <input type="text" id="wOrigin" class="filter-select" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;" placeholder="Visitor's home address">
-            </div>
-            <div>
-                <label style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; display:block; margin-bottom:6px;">Vehicle Plate Number (Optional)</label>
-                <input type="text" id="wPlate" class="filter-select" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;" placeholder="ABC 1234">
-            </div>
-            <div style="margin-top:8px; display:flex; gap:12px;">
-                <button type="button" onclick="closeWalkInModal()" class="btn btn-outline" style="flex:1; justify-content:center;">Cancel</button>
-                <button type="submit" class="btn btn-primary" style="flex:1; justify-content:center; background:var(--guard-primary);">Register Entry</button>
-            </div>
-        </form>
-    </div>
-</div>
 @endsection

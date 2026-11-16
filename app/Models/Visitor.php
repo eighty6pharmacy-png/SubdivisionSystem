@@ -27,6 +27,10 @@ class Visitor extends Model
         'visitor_address',
         'guard_id',
         'guard_name',
+        'current_lat',
+        'current_lng',
+        'last_ping_at',
+        'is_at_destination',
     ];
 
     public function host(): BelongsTo

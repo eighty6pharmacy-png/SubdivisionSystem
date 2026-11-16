@@ -46,7 +46,11 @@
             <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">Water Management & Analytics</h1>
             <p style="font-size: 13px; color: #64748b; margin-top: 4px;">12-month consumption analysis, payment channel management, and predictive delinquency tracking.</p>
         </div>
-        <div class="bill-actions">
+        <div class="bill-actions" style="display: flex; gap: 8px;">
+            <button type="button" class="btn btn-outline" style="background: #fff; border-color: #0284c7; color: #0284c7; font-weight: 700; display: inline-flex; align-items: center; padding: 8px 16px;" onclick="openWaterReportModal()">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 6px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Generate Report
+            </button>
             <button class="btn btn-outline" style="border-color: var(--bill-primary); color: var(--bill-primary); padding: 8px 16px; font-weight: 700;" onclick="resetBillingCycle()">
                 <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 6px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
                 New Cycle
@@ -2264,5 +2268,98 @@
                 document.querySelector('.bill-container').style.opacity = '1';
             });
     }
+
+    function openWaterReportModal() {
+        const currentStatus = document.getElementById('statusFilter')?.value || 'all';
+        if (document.getElementById('reportWaterStatusFilter')) {
+            document.getElementById('reportWaterStatusFilter').value = currentStatus;
+        }
+        reloadWaterReportPdf();
+        document.getElementById('waterReportModal').style.display = 'flex';
+    }
+
+    function closeWaterReportModal() {
+        document.getElementById('waterReportModal').style.display = 'none';
+    }
+
+    function reloadWaterReportPdf() {
+        const cycle = "{{ request('cycle', '') }}";
+        const status = document.getElementById('reportWaterStatusFilter')?.value || 'all';
+        const sort = document.getElementById('reportWaterSortFilter')?.value || 'name_asc';
+        const base = "{{ route('admin.water.report.pdf') }}";
+        const qs = `?cycle=${encodeURIComponent(cycle)}&status=${encodeURIComponent(status)}&sort=${encodeURIComponent(sort)}`;
+
+        const frame = document.getElementById('waterReportPdfFrame');
+        if (frame) {
+            frame.src = base + qs;
+        }
+        const dlBtn = document.getElementById('waterReportDownloadBtn');
+        if (dlBtn) {
+            dlBtn.href = base + qs + '&download=1';
+        }
+    }
+
+    function printWaterReportPdfFrame() {
+        const frame = document.getElementById('waterReportPdfFrame');
+        if (frame && frame.contentWindow) {
+            frame.contentWindow.focus();
+            frame.contentWindow.print();
+        }
+    }
 </script>
+
+<!-- Official Water Billing PDF Report Modal -->
+<div id="waterReportModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2100; background: rgba(15,23,42,0.7); backdrop-filter: blur(8px); padding: 20px;">
+    <div class="bill-modal-content" style="max-width: 1100px; width: 95%; max-height: 94vh; overflow: hidden; padding: 20px 24px; border-radius: 20px; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); display: flex; flex-direction: column;">
+        
+        <!-- Controls Bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #e2e8f0;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div>
+                    <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Status</span>
+                    <select id="reportWaterStatusFilter" class="filter-select" onchange="reloadWaterReportPdf()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                        <option value="all">All Statuses</option>
+                        <option value="paid">Paid Only</option>
+                        <option value="partially_paid">Partially Paid</option>
+                        <option value="pending">Pending</option>
+                        <option value="overdue">Overdue / Past Due</option>
+                    </select>
+                </div>
+                <div>
+                    <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Sort By</span>
+                    <select id="reportWaterSortFilter" class="filter-select" onchange="reloadWaterReportPdf()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                        <option value="name_asc" selected>Alphabetical: Resident (A to Z)</option>
+                        <option value="name_desc">Alphabetical: Resident (Z to A)</option>
+                        <option value="amount_desc">Billed Amount: Highest First</option>
+                        <option value="amount_asc">Billed Amount: Lowest First</option>
+                        <option value="usage_desc">Consumption (m³): Highest First</option>
+                        <option value="usage_asc">Consumption (m³): Lowest First</option>
+                        <option value="due_asc">Due Date: Earliest to Latest</option>
+                        <option value="due_desc">Due Date: Latest to Earliest</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <a id="waterReportDownloadBtn" href="{{ route('admin.water.report.pdf') }}?download=1" class="btn btn-primary" style="background: #0284c7; border: none; padding: 8px 16px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: #fff;">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    Download PDF
+                </a>
+                <button type="button" class="btn btn-outline" onclick="printWaterReportPdfFrame()" style="background: #fff; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: #334155;">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                    Print
+                </button>
+                <button type="button" class="btn btn-outline" onclick="closeWaterReportModal()" style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 600; border-radius: 8px; cursor: pointer;">
+                    ✕ Close
+                </button>
+            </div>
+        </div>
+
+        <!-- Embedded Real PDF Viewer (Viewable in-page, no new tab) -->
+        <div style="flex: 1; min-height: 0; width: 100%;">
+            <iframe id="waterReportPdfFrame" src="{{ route('admin.water.report.pdf') }}" style="width: 100%; height: 75vh; border: 1px solid #e2e8f0; border-radius: 10px; background: #525659;"></iframe>
+        </div>
+
+    </div>
+</div>
 @endsection

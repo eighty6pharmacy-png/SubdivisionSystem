@@ -11,7 +11,11 @@
                 <h1>Reservation Fee Tracking</h1>
                 <p>Manage and track initial lot reservation deposits and client payments.</p>
             </div>
-            <div class="bill-actions">
+            <div class="bill-actions" style="display: flex; gap: 8px;">
+                <button type="button" class="btn btn-outline" style="background: #fff; border-color: #0284c7; color: #0284c7; font-weight: 700; display: inline-flex; align-items: center;" onclick="openReservationReportModal()">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    Generate Report
+                </button>
                 <!-- Record New Reservation Button -->
                 <button class="btn btn-primary" onclick="openReservationModal()">
                     <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
@@ -25,27 +29,27 @@
 
         <!-- Collection Summary Dashboard -->
         <div
-            style="background: #fff; border: 1px solid var(--bill-border); border-radius: 20px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            style="background: #fff; border: 1px solid var(--bill-border); border-radius: 16px; padding: 16px 20px; margin-bottom: 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);">
             <div
-                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
-                <h2 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 0;">Reservation Pipeline Summary</h2>
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
+                <h2 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0;">Reservation Pipeline Summary</h2>
             </div>
 
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px;">
                 <div
-                    style="background: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid var(--bill-primary);">
-                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total
+                    style="background: #f8fafc; padding: 12px 14px; border-radius: 10px; border-left: 4px solid var(--bill-primary);">
+                    <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Total
                         Reservations</div>
-                    <div style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ count($bills) }}
+                    <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 2px;">{{ count($bills) }}
                     </div>
                 </div>
                 <div
-                    style="background: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid var(--bill-success);">
-                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total
+                    style="background: #f8fafc; padding: 12px 14px; border-radius: 10px; border-left: 4px solid var(--bill-success);">
+                    <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Total
                         Collected</div>
-                    <div style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">
+                    <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 2px;">
                         @php 
-                                                    $total = 0;
+                            $total = 0;
                             foreach ($bills as $b) {
                                 if ($b['status'] != 'Cancelled')
                                     $total += $b['amount'];
@@ -54,16 +58,16 @@
                         ₱{{ number_format($total, 2) }}
                     </div>
                 </div>
-                <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid #f59e0b;">
-                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Active
+                <div style="background: #f8fafc; padding: 12px 14px; border-radius: 10px; border-left: 4px solid #f59e0b;">
+                    <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Active
                     </div>
-                    <div style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">
+                    <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 2px;">
                         {{ collect($bills)->whereIn('status', ['Reserved', 'Pending'])->count() }}
                     </div>
                 </div>
-                <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid #94a3b8;">
-                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Converted</div>
-                    <div style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px;">
+                <div style="background: #f8fafc; padding: 12px 14px; border-radius: 10px; border-left: 4px solid #94a3b8;">
+                    <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Converted</div>
+                    <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 2px;">
                         {{ collect($bills)->where('status', 'Converted')->count() }}
                     </div>
                 </div>
@@ -72,22 +76,22 @@
 
         <!-- Monthly Reservation Sales & Collection Trend Bar Graph -->
         <div
-            style="background: #fff; border: 1px solid var(--bill-border); border-radius: 20px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            style="background: #fff; border: 1px solid var(--bill-border); border-radius: 16px; padding: 16px 20px; margin-bottom: 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <div>
-                    <h3 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 0;">Monthly Reservation Fee
+                    <h3 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0;">Monthly Reservation Fee
                         Revenue Trends</h3>
-                    <p style="font-size: 12px; color: #64748b; margin: 4px 0 0 0;">12-month initial lot reservation deposits
+                    <p style="font-size: 11px; color: #64748b; margin: 2px 0 0 0;">12-month initial lot reservation deposits
                         & total client bookings (in ₱ Thousands)</p>
                 </div>
             </div>
-            <div style="height: 200px; position: relative;">
+            <div style="height: 180px; position: relative;">
                 <canvas id="reservationSalesChart"></canvas>
             </div>
         </div>
 
         <!-- Filter Bar -->
-        <div class="filter-bar" style="display: flex; gap: 16px; margin-bottom: 24px; padding: 16px; background: #fff; border-radius: 12px; border: 1px solid var(--bill-border);">
+        <div class="filter-bar" style="display: flex; gap: 12px; margin-bottom: 0; padding: 14px 18px; background: #fff; border-radius: 14px; border: 1px solid var(--bill-border); align-items: flex-end;">
             <div class="filter-group" style="flex: 1;">
                 <span class="filter-label" style="display: block; font-size: 12px; color: #64748b; margin-bottom: 4px;">Search</span>
                 <input type="text" id="billingSearch" class="filter-select" placeholder="Buyer or Lot..." style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;">
@@ -264,8 +268,10 @@
                     </div>
 
                     <div id="modalReservationActions"
-                        style="display: flex; gap: 16px; margin-top: 40px; border-top: 1px solid var(--bill-border); padding-top: 32px;">
+                        style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 40px; border-top: 1px solid var(--bill-border); padding-top: 32px;">
                         <button type="button" class="btn btn-primary" onclick="convertReservation()">Convert to Downpayment</button>
+                        <button type="button" id="btnSendReservationSms" class="btn btn-outline" style="border-color: #0284c7; color: #0284c7; font-weight: 700;"
+                            onclick="sendReservationSmsReminder()">📱 Send SMS Reminder</button>
                         <button type="button" class="btn btn-outline" style="color: var(--bill-danger); border-color: #fee2e2;"
                             onclick="cancelReservation()">Cancel Reservation</button>
                     </div>
@@ -700,6 +706,49 @@
             }
         }
 
+        async function sendReservationSmsReminder() {
+            if (!currentModalId) return;
+            const btn = document.getElementById('btnSendReservationSms');
+            const originalText = btn ? btn.textContent : '📱 Send SMS Reminder';
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Sending SMS...';
+            }
+
+            try {
+                const res = await fetch('/admin/reservation-fee/send-reminder-sms', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    },
+                    body: JSON.stringify({ id: currentModalId })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'SMS Reminder Sent',
+                        text: data.message || 'Reservation expiry reminder sent via SMS.'
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'SMS Failed',
+                        text: data.message || 'Could not send SMS reminder.'
+                    });
+                }
+            } catch (e) {
+                console.error('Error sending reservation SMS:', e);
+                Swal.fire('Error connecting to server.');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                }
+            }
+        }
+
         function updateRowStatus(id, badgeHtml, statusKey) {
             const row = Array.from(document.querySelectorAll('.bill-row')).find(r => r.innerHTML.includes(id));
             if (row) {
@@ -809,5 +858,114 @@
 
             window.reservationTablePagination?.resetPage();
         }
+
+        function openReservationReportModal() {
+            const currentStatus = document.getElementById('statusFilter')?.value || 'all';
+            const currentBlock = document.getElementById('blockFilter')?.value || 'all';
+            if (document.getElementById('reportResStatusFilter')) {
+                document.getElementById('reportResStatusFilter').value = currentStatus;
+            }
+            if (document.getElementById('reportResBlockFilter')) {
+                document.getElementById('reportResBlockFilter').value = currentBlock;
+            }
+            reloadReservationReportPdf();
+            document.getElementById('reservationReportModal').style.display = 'flex';
+        }
+
+        function closeReservationReportModal() {
+            document.getElementById('reservationReportModal').style.display = 'none';
+        }
+
+        function reloadReservationReportPdf() {
+            const status = document.getElementById('reportResStatusFilter')?.value || 'all';
+            const block = document.getElementById('reportResBlockFilter')?.value || 'all';
+            const sort = document.getElementById('reportResSortFilter')?.value || 'name_asc';
+            const base = "{{ route('admin.reservation-fee.report.pdf') }}";
+            const qs = `?status=${encodeURIComponent(status)}&block=${encodeURIComponent(block)}&sort=${encodeURIComponent(sort)}`;
+
+            const frame = document.getElementById('reservationReportPdfFrame');
+            if (frame) {
+                frame.src = base + qs;
+            }
+            const dlBtn = document.getElementById('reservationReportDownloadBtn');
+            if (dlBtn) {
+                dlBtn.href = base + qs + '&download=1';
+            }
+        }
+
+        function printReservationReportPdfFrame() {
+            const frame = document.getElementById('reservationReportPdfFrame');
+            if (frame && frame.contentWindow) {
+                frame.contentWindow.focus();
+                frame.contentWindow.print();
+            }
+        }
+    </script>
+
+    <!-- Official Reservation Fee PDF Report Modal -->
+    <div id="reservationReportModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2100; background: rgba(15,23,42,0.7); backdrop-filter: blur(8px); padding: 20px;">
+        <div class="bill-modal-content" style="max-width: 1100px; width: 95%; max-height: 94vh; overflow: hidden; padding: 20px 24px; border-radius: 20px; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); display: flex; flex-direction: column;">
+            
+            <!-- Controls Bar -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #e2e8f0;">
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <div>
+                        <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Status</span>
+                        <select id="reportResStatusFilter" class="filter-select" onchange="reloadReservationReportPdf()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                            <option value="all">All Statuses</option>
+                            <option value="active">Active</option>
+                            <option value="converted">Converted</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    </div>
+                    <div>
+                        <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Block</span>
+                        <select id="reportResBlockFilter" class="filter-select" onchange="reloadReservationReportPdf()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                            <option value="all">All Blocks</option>
+                            @php
+                                $pdfUniqueBlocks = collect($bills)->pluck('block')->filter(function($b) { return $b !== 'N/A'; })->unique()->sort();
+                            @endphp
+                            @foreach($pdfUniqueBlocks as $b)
+                                <option value="{{ $b }}">Block {{ $b }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Sort By</span>
+                        <select id="reportResSortFilter" class="filter-select" onchange="reloadReservationReportPdf()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                            <option value="name_asc" selected>Alphabetical: Name (A to Z)</option>
+                            <option value="name_desc">Alphabetical: Name (Z to A)</option>
+                            <option value="date_asc">Date Reserved: Earliest to Latest</option>
+                            <option value="date_desc">Date Reserved: Latest to Earliest</option>
+                            <option value="amount_desc">Amount Paid: Highest First</option>
+                            <option value="amount_asc">Amount Paid: Lowest First</option>
+                            <option value="id_asc">Reservation ID: Ascending</option>
+                            <option value="id_desc">Reservation ID: Descending</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <a id="reservationReportDownloadBtn" href="{{ route('admin.reservation-fee.report.pdf') }}?download=1" class="btn btn-primary" style="background: #0284c7; border: none; padding: 8px 16px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: #fff;">
+                        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        Download PDF
+                    </a>
+                    <button type="button" class="btn btn-outline" onclick="printReservationReportPdfFrame()" style="background: #fff; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: #334155;">
+                        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                        Print
+                    </button>
+                    <button type="button" class="btn btn-outline" onclick="closeReservationReportModal()" style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 600; border-radius: 8px; cursor: pointer;">
+                        ✕ Close
+                    </button>
+                </div>
+            </div>
+
+            <!-- Embedded Real PDF Viewer (Viewable in-page, no new tab) -->
+            <div style="flex: 1; min-height: 0; width: 100%;">
+                <iframe id="reservationReportPdfFrame" src="{{ route('admin.reservation-fee.report.pdf') }}" style="width: 100%; height: 75vh; border: 1px solid #e2e8f0; border-radius: 10px; background: #525659;"></iframe>
+            </div>
+
+        </div>
+    </div>
     </script>
 @endsection

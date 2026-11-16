@@ -11,7 +11,11 @@
             <h1>Lot & Visit Inquiries</h1>
             <p>Manage potential client appointments, schedule lot viewings, and track sales pipelines.</p>
         </div>
-        <div class="bill-actions">
+        <div class="bill-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <button type="button" class="btn btn-outline" style="background: #fff; border-color: #0284c7; color: #0284c7; font-weight: 700; display: inline-flex; align-items: center; padding: 10px 16px;" onclick="openAppointmentPdfReportModal()">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 6px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Generate Report
+            </button>
             <button class="btn btn-primary" onclick="openAddAptModal()">
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path d="M12 4v16m8-8H4"/></svg>
                 Schedule Walk-In
@@ -65,32 +69,32 @@
     </div>
 
     <!-- Appointments Interactive List -->
-    <div class="analytic-card">
-        <div class="card-title">
+    <div class="analytic-card" style="padding: 0; overflow: hidden; border-radius: 16px; border: 1px solid #e2e8f0;">
+        <div class="card-title" style="padding: 18px 24px; margin: 0; border-bottom: 1px solid var(--bill-border);">
             <span>Inquiry Pipeline</span>
         </div>
         <div class="bill-table-container">
             <table class="bill-table" id="aptTable">
                 <thead>
                     <tr>
-                        <th>Inquiry ID</th>
-                        <th>Client Detail</th>
-                        <th>Requested Schedule</th>
-                        <th>Status</th>
+                        <th data-sort="number">Inquiry ID</th>
+                        <th data-sort="text">Client Detail</th>
+                        <th data-sort="date">Requested Schedule</th>
+                        <th data-sort="text">Status</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody id="aptTableBody">
                     @foreach($appointments as $apt)
-                    <tr class="apt-row" data-id="{{ $apt['id'] }}" data-client="{{ strtolower($apt['client'] . ' ' . ($apt['contact'] ?? '') . ' ' . ($apt['email'] ?? '')) }}" data-status="{{ $apt['status'] }}" data-type="{{ isset($apt['type']) ? $apt['type'] : 'General Inquiry' }}" data-report="{{ isset($apt['report']) ? $apt['report'] : '' }}" data-contact="{{ $apt['contact'] ?? '' }}" data-email="{{ $apt['email'] ?? '' }}">
-                        <td style="font-family: monospace; font-weight: 700; color: #64748b;">
+                    <tr class="apt-row pagination-match" data-id="{{ $apt['id'] }}" data-client="{{ strtolower($apt['client'] . ' ' . ($apt['contact'] ?? '') . ' ' . ($apt['email'] ?? '')) }}" data-status="{{ $apt['status'] }}" data-type="{{ isset($apt['type']) ? $apt['type'] : 'General Inquiry' }}" data-report="{{ isset($apt['report']) ? $apt['report'] : '' }}" data-contact="{{ $apt['contact'] ?? '' }}" data-email="{{ $apt['email'] ?? '' }}">
+                        <td data-sort-val="{{ $apt['id'] }}" style="font-family: monospace; font-weight: 700; color: #64748b;">
                             {{ $apt['id'] }}
                         </td>
                         <td>
                             <div style="font-weight: 700; color: #0f172a;">{{ $apt['client'] }}</div>
                             <div style="font-size: 12px; color: var(--bill-primary);">{{ $apt['contact'] ?? 'No Contact' }} &bull; {{ $apt['email'] ?? 'No Email' }}</div>
                         </td>
-                        <td>
+                        <td data-sort-val="{{ $apt['date'] }}">
                             <div style="font-weight: 700; color: #334155;">{{ date('M d, Y', strtotime($apt['date'])) }}</div>
                             <div style="font-size: 12px; color: #64748b;">{{ $apt['time'] }}</div>
                         </td>
@@ -114,13 +118,8 @@
                     @endforeach
                 </tbody>
             </table>
-            <!-- Pagination Controls -->
-            <div id="paginationControls" style="display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 16px; padding: 12px 16px; border-top: 1px solid var(--bill-border);">
-                <span id="pageInfo" style="font-size: 13px; color: #64748b;">Showing -</span>
-                <button class="btn btn-outline" style="padding: 6px 12px;" onclick="prevPage()">Prev</button>
-                <button class="btn btn-outline" style="padding: 6px 12px;" onclick="nextPage()">Next</button>
-            </div>
         </div>
+        @include('partials.admin-client-pagination', ['prefix' => 'aptTable', 'defaultPerPage' => 15])
     </div>
 
     <!-- Calendar View -->
@@ -344,8 +343,7 @@
     let currentAptId = null;
     let allAppointments = [];
     let filteredAppointments = [];
-    let currentPage = 1;
-    const itemsPerPage = 5;
+    let aptTablePagination = null;
     let calendar;
 
     function manilaNow() {
@@ -370,6 +368,19 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
+        if (window.initTablePagination) {
+            aptTablePagination = window.initTablePagination({
+                rowSelector: '.apt-row',
+                matchClass: 'pagination-match',
+                infoEl: '#aptTablePageInfo',
+                prevEl: '#aptTablePagePrev',
+                nextEl: '#aptTablePageNext',
+                pageSizeEl: '#aptTablePageSize',
+                numbersEl: '#aptTablePageNumbers',
+                table: '#aptTable',
+                perPage: 15
+            });
+        }
         renderAppointmentsFromStore();
     });
 
@@ -383,14 +394,10 @@
         const tbody = document.getElementById('aptTableBody');
         if (!tbody) return;
         tbody.innerHTML = '';
-        
-        const startIndex = (currentPage - 1) * itemsPerPage;
-        const endIndex = startIndex + itemsPerPage;
-        const paginatedData = filteredAppointments.slice(startIndex, endIndex);
 
-        paginatedData.forEach(apt => {
+        filteredAppointments.forEach(apt => {
             const tr = document.createElement('tr');
-            tr.className = 'apt-row';
+            tr.className = 'apt-row pagination-match';
             tr.dataset.id = apt.id;
             tr.dataset.client = (apt.client + ' ' + (apt.contact || '') + ' ' + (apt.email || '')).toLowerCase();
             tr.dataset.status = apt.status;
@@ -406,12 +413,12 @@
             else badgeHtml = `<span class="badge badge-danger">Cancelled</span>`;
 
             tr.innerHTML = `
-                <td style="font-family: monospace; font-weight: 700; color: #64748b;">${apt.id}</td>
+                <td data-sort-val="${apt.id}" style="font-family: monospace; font-weight: 700; color: #64748b;">${apt.id}</td>
                 <td>
                     <div style="font-weight: 700; color: #0f172a;">${apt.client}</div>
                     <div style="font-size: 12px; color: var(--bill-primary);">${apt.contact || 'No Contact'} &bull; ${apt.email || 'No Email'}</div>
                 </td>
-                <td>
+                <td data-sort-val="${apt.date}">
                     <div style="font-weight: 700; color: #334155;">${apt.date}</div>
                     <div style="font-size: 12px; color: #64748b;">${apt.time}</div>
                 </td>
@@ -427,25 +434,10 @@
             tbody.appendChild(tr);
         });
 
-        const pageInfo = document.getElementById('pageInfo');
-        if (pageInfo) {
-            pageInfo.textContent = `Showing ${filteredAppointments.length > 0 ? startIndex + 1 : 0}-${Math.min(endIndex, filteredAppointments.length)} of ${filteredAppointments.length}`;
+        if (aptTablePagination) {
+            aptTablePagination.render();
         }
         recalculateMetrics();
-    }
-
-    function prevPage() {
-        if (currentPage > 1) {
-            currentPage--;
-            renderTable();
-        }
-    }
-
-    function nextPage() {
-        if (currentPage * itemsPerPage < filteredAppointments.length) {
-            currentPage++;
-            renderTable();
-        }
     }
 
     let globalBlackouts = [];
@@ -1017,7 +1009,99 @@
         }, 150);
     });
 
+    function openAppointmentPdfReportModal() {
+        const curStatus = document.getElementById('statusFilter')?.value || 'all';
+        if (document.getElementById('reportAptStatusFilter')) {
+            document.getElementById('reportAptStatusFilter').value = curStatus;
+        }
+        reloadAppointmentPdfReport();
+        document.getElementById('appointmentPdfReportModal').style.display = 'flex';
+    }
+
+    function closeAppointmentPdfReportModal() {
+        document.getElementById('appointmentPdfReportModal').style.display = 'none';
+    }
+
+    function reloadAppointmentPdfReport() {
+        const status = document.getElementById('reportAptStatusFilter')?.value || 'all';
+        const dateRange = document.getElementById('reportAptDateFilter')?.value || 'all';
+        const sort = document.getElementById('reportAptSortFilter')?.value || 'date_desc';
+        const base = "{{ route('admin.appointments.report.pdf') }}";
+        const qs = `?status=${encodeURIComponent(status)}&date_range=${encodeURIComponent(dateRange)}&sort=${encodeURIComponent(sort)}`;
+
+        const frame = document.getElementById('appointmentReportPdfFrame');
+        if (frame) frame.src = base + qs;
+        const dlBtn = document.getElementById('appointmentReportDownloadBtn');
+        if (dlBtn) dlBtn.href = base + qs + '&download=1';
+    }
+
+    function printAppointmentPdfReportFrame() {
+        const frame = document.getElementById('appointmentReportPdfFrame');
+        if (frame && frame.contentWindow) {
+            frame.contentWindow.focus();
+            frame.contentWindow.print();
+        }
+    }
 </script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+<!-- Official Appointment Management PDF Report Modal -->
+<div id="appointmentPdfReportModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2100; background: rgba(15,23,42,0.7); backdrop-filter: blur(8px); padding: 20px;">
+    <div class="bill-modal-content" style="max-width: 1100px; width: 95%; max-height: 94vh; overflow: hidden; padding: 20px 24px; border-radius: 20px; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); display: flex; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #e2e8f0;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div>
+                    <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Status</span>
+                    <select id="reportAptStatusFilter" class="filter-select" onchange="reloadAppointmentPdfReport()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                        <option value="all">All Pipeline</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Scheduled">Scheduled</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div>
+                    <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Date Range</span>
+                    <select id="reportAptDateFilter" class="filter-select" onchange="reloadAppointmentPdfReport()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                        <option value="all">All Time</option>
+                        <option value="today">Today</option>
+                        <option value="this_week">This Week</option>
+                        <option value="this_month">This Month</option>
+                        <option value="last_month">Last Month</option>
+                    </select>
+                </div>
+                <div>
+                    <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Sort By</span>
+                    <select id="reportAptSortFilter" class="filter-select" onchange="reloadAppointmentPdfReport()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                        <option value="date_desc" selected>Schedule Date: Newest First</option>
+                        <option value="date_asc">Schedule Date: Oldest First</option>
+                        <option value="id_asc">Inquiry ID: Ascending</option>
+                        <option value="id_desc">Inquiry ID: Descending</option>
+                        <option value="client_asc">Client Name: A to Z</option>
+                        <option value="client_desc">Client Name: Z to A</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <a id="appointmentReportDownloadBtn" href="{{ route('admin.appointments.report.pdf') }}?download=1" class="btn btn-primary" style="background: #0284c7; border: none; padding: 8px 16px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: #fff;">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    Download PDF
+                </a>
+                <button type="button" class="btn btn-outline" onclick="printAppointmentPdfReportFrame()" style="background: #fff; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: #334155;">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                    Print
+                </button>
+                <button type="button" class="btn btn-outline" onclick="closeAppointmentPdfReportModal()" style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 600; border-radius: 8px; cursor: pointer;">
+                    ✕ Close
+                </button>
+            </div>
+        </div>
+
+        <div style="flex: 1; min-height: 0; width: 100%;">
+            <iframe id="appointmentReportPdfFrame" src="about:blank" style="width: 100%; height: 75vh; border: 1px solid #e2e8f0; border-radius: 10px; background: #525659;"></iframe>
+        </div>
+    </div>
+</div>
 @endsection

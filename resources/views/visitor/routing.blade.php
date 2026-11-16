@@ -6,18 +6,98 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="{{ asset('css/views/visitor-routing.css') }}">
 
-<div class="routing-viewport" id="viewport">
+<div class="routing-viewport nav-ui-collapsed" id="mapViewport">
     <!-- Floating Destination Info -->
     <div class="route-info-bar">
-        <div style="width: 38px; height: 38px; background: #2563eb; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px;">📍</div>
-        <div>
+        <div class="dest-badge-icon">📍</div>
+        <div class="dest-text-group">
             <div class="dest-name" id="uiDestName">Block N/A, Lot N/A</div>
             <div class="dest-sub" id="uiHostName">Host: Loading...</div>
+        </div>
+        <div class="route-bar-actions">
+            <button type="button" id="btnStartNav" onclick="toggleStartNavigation()" class="btn-start-nav" title="Start turn-by-turn directions">
+                🧭 Start
+            </button>
+            <button type="button" id="btnCollapseUi" onclick="toggleNavUiCollapse()" class="btn-directions-toggle" title="Toggle directions & steps">
+                <span id="collapseLabel">Steps</span> <span id="collapseIcon">▼</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Google Maps Style Active Turn-by-Turn Banner -->
+    <div id="activeNavBanner" class="active-nav-banner">
+        <div class="active-nav-main">
+            <div class="active-nav-arrow" id="activeNavArrow">⬆️</div>
+            <div class="active-nav-text">
+                <div class="active-nav-meters" id="activeNavMeters">-- m</div>
+                <div class="active-nav-inst" id="activeNavInst">Calculating route...</div>
+            </div>
+        </div>
+        <div class="active-nav-subrow">
+            <span id="activeNavNext">Then: Follow route to destination</span>
+            <div class="active-nav-controls">
+                <button type="button" id="btnHeadingUp" onclick="toggleHeadingUpMode()" class="active-nav-btn" title="Rotate map to match direction">🧭 North</button>
+                <button type="button" onclick="toggleStartNavigation(false)" class="active-nav-btn stop">✕ Exit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Navigation Turn-by-Turn & Status HUD -->
+    <div id="liveNavHud" class="live-nav-hud" style="display: none;">
+        <div class="nav-hud-top">
+            <div class="nav-hud-badge" id="hudNavBadge">
+                <span class="nav-pulse-dot"></span> <span id="hudBadgeText">Connecting to GPS...</span>
+            </div>
+            <div class="hud-top-actions">
+                <button type="button" onclick="if(window.toggleGISBaseLayer)window.toggleGISBaseLayer()" class="hud-tool-btn" title="Toggle Satellite layer">
+                    🛰️ Satellite
+                </button>
+                <button type="button" id="hudRecenterBtn" class="hud-recenter-btn" title="Center map on your location">
+                    🎯 Recenter
+                </button>
+            </div>
+        </div>
+        <div class="nav-hud-metrics">
+            <div class="nav-metric">
+                <div class="nav-metric-label">DISTANCE</div>
+                <div class="nav-metric-val" id="hudDistanceVal">--</div>
+            </div>
+            <div class="nav-metric-sep"></div>
+            <div class="nav-metric">
+                <div class="nav-metric-label">EST. TIME</div>
+                <div class="nav-metric-val" id="hudTimeVal">--</div>
+            </div>
+        </div>
+        <div class="nav-hud-step" id="hudStepInstruction">
+            Locating fastest route...
+        </div>
+        <div class="nav-hud-sub" id="hudSimTip">
+            🛰️ Acquiring live GPS signal...
+        </div>
+        <div class="nav-steps-section" id="navStepsSection">
+            <div class="nav-steps-header" onclick="toggleStepsList()">
+                <span>📋 Step-by-Step Guide (<span id="navStepsCount">0</span>)</span>
+                <span id="navStepsChevron">▼</span>
+            </div>
+            <div class="nav-steps-list" id="navStepsList"></div>
         </div>
     </div>
 
     <!-- Map -->
     <div id="mapContainer"></div>
+
+    <!-- Active Navigation Bottom Bar -->
+    <div id="activeNavBottom" class="active-nav-bottom">
+        <div class="active-nav-eta">
+            <div class="active-nav-eta-time" id="activeNavEtaTime">-- min</div>
+            <div class="active-nav-eta-dist" id="activeNavEtaDist">-- m</div>
+        </div>
+        <div class="active-nav-bottom-actions">
+            <button type="button" onclick="openStepsFromActive()" class="hud-tool-btn" title="View all steps">📋 Steps</button>
+            <button type="button" onclick="document.getElementById('hudRecenterBtn')?.click()" class="hud-recenter-btn" title="Recenter">🎯</button>
+            <button type="button" onclick="toggleStartNavigation(false)" class="btn-start-nav is-active" style="padding: 5px 10px; font-size: 11px;">Exit</button>
+        </div>
+    </div>
 
     <!-- Floating Legend -->
     <div class="route-legend">
@@ -43,6 +123,43 @@
 <script src="{{ asset('js/dijkstra.js') }}"></script>
 <script src="{{ asset('js/gis-map.js') }}"></script>
 <script>
+    let isUiCollapsed = true;
+    function toggleNavUiCollapse(forceOpen) {
+        isUiCollapsed = (typeof forceOpen === 'boolean') ? !forceOpen : !isUiCollapsed;
+        const viewport = document.getElementById('mapViewport');
+        const hud = document.getElementById('liveNavHud');
+        const label = document.getElementById('collapseLabel');
+        const icon = document.getElementById('collapseIcon');
+        if (viewport) viewport.classList.toggle('nav-ui-collapsed', isUiCollapsed);
+        if (hud) hud.style.display = isUiCollapsed ? 'none' : 'flex';
+        if (label) label.textContent = isUiCollapsed ? 'Steps' : 'Hide';
+        if (icon) icon.textContent = isUiCollapsed ? '▼' : '▲';
+    }
+    function toggleStartNavigation(forceState) {
+        if (window.toggleGISStartNavigation) window.toggleGISStartNavigation(forceState);
+    }
+    function toggleHeadingUpMode() {
+        if (window.toggleGISHeadingUp) window.toggleGISHeadingUp();
+    }
+    function openStepsFromActive() {
+        toggleNavUiCollapse(true);
+        const hud = document.getElementById('liveNavHud');
+        if (hud) hud.style.top = '126px';
+        const list = document.getElementById('navStepsList');
+        const chev = document.getElementById('navStepsChevron');
+        if (list) list.style.display = 'flex';
+        if (chev) chev.textContent = '▼';
+    }
+    function toggleStepsList() {
+        const list = document.getElementById('navStepsList');
+        const chev = document.getElementById('navStepsChevron');
+        if (list) {
+            const isHidden = list.style.display === 'none';
+            list.style.display = isHidden ? 'flex' : 'none';
+            if (chev) chev.textContent = isHidden ? '▼' : '▶';
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         const urlParams = new URLSearchParams(window.location.search);
         const tokenParam = urlParams.get('token');

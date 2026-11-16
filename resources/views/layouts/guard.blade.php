@@ -49,6 +49,10 @@
             </a>
             
             <div class="nav-section-label">Logs & Monitoring</div>
+            <a href="/guard/map" class="nav-item {{ request()->is('guard/map') ? 'active' : '' }}">
+                <span class="nav-icon">🗺️</span>
+                <span>Subdivision Radar</span>
+            </a>
             <a href="/guard/history" class="nav-item {{ request()->is('guard/history') ? 'active' : '' }}">
                 <span class="nav-icon">📋</span>
                 <span>Visitors</span>

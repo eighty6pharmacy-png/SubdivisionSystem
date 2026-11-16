@@ -396,3 +396,280 @@
         padding: 16px;
     }
 }
+
+/* ============================================================
+   INCIDENT REPORTING CALENDAR — ENTERPRISE CALENDAR SUITE
+   ============================================================ */
+
+.incident-cal-card {
+    background: #ffffff;
+    border-radius: 18px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
+    overflow: hidden;
+    margin-bottom: 0;
+}
+
+.incident-cal-toolbar {
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 14px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.incident-cal-nav-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.incident-cal-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.incident-cal-btn:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+    color: #0f172a;
+}
+
+.incident-cal-btn.active {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+}
+
+.incident-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: #e2e8f0;
+    gap: 1px;
+}
+
+.incident-cal-dow {
+    background: #f8fafc;
+    padding: 12px 10px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    text-align: center;
+}
+
+.incident-cal-day {
+    background: #ffffff;
+    min-height: 125px;
+    padding: 8px 9px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    position: relative;
+}
+
+.incident-cal-day:hover {
+    background: #f8fafc;
+}
+
+.incident-cal-day.today {
+    background: #f0f9ff;
+}
+
+.incident-cal-day.other-month {
+    background: #fafafa;
+    opacity: 0.45;
+}
+
+.incident-cal-day.selected {
+    box-shadow: inset 0 0 0 2px #0284c7;
+}
+
+.incident-cal-day-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2px;
+}
+
+.incident-cal-day-num {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+.incident-cal-day.today .incident-cal-day-num {
+    background: #0284c7;
+    color: #ffffff;
+    font-weight: 800;
+}
+
+.incident-cal-day-count {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+.incident-cal-events-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    overflow: hidden;
+}
+
+.incident-event-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.incident-event-chip:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+    z-index: 5;
+}
+
+.incident-event-chip.cat-security {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #b91c1c;
+}
+
+.incident-event-chip.cat-maintenance {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #b45309;
+}
+
+.incident-event-chip.cat-utilities {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+}
+
+.incident-event-chip.cat-others {
+    background: #f5f3ff;
+    border-color: #ddd6fe;
+    color: #6d28d9;
+}
+
+.incident-chip-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.incident-chip-status-dot.resolved {
+    background: #10b981;
+}
+
+.incident-chip-status-dot.progress {
+    background: #f59e0b;
+}
+
+.incident-cal-more-btn {
+    font-size: 10px;
+    font-weight: 800;
+    color: #0284c7;
+    background: #f0f9ff;
+    border: 1px dashed #bae6fd;
+    border-radius: 5px;
+    padding: 2px 5px;
+    text-align: center;
+    cursor: pointer;
+    margin-top: 2px;
+}
+
+.incident-cal-more-btn:hover {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+/* Day Agenda Drawer */
+.incident-agenda-drawer {
+    position: fixed;
+    top: 0;
+    right: -450px;
+    width: 440px;
+    max-width: 92vw;
+    height: 100vh;
+    background: #ffffff;
+    box-shadow: -10px 0 30px rgba(0,0,0,0.15);
+    z-index: 1060;
+    transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
+}
+
+.incident-agenda-drawer.open {
+    right: 0;
+}
+
+.incident-agenda-drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px);
+    z-index: 1055;
+    display: none;
+}
+
+.incident-agenda-drawer-overlay.open {
+    display: block;
+}
+
+/* Hover Tooltip for Calendar events */
+.incident-cal-tooltip {
+    position: fixed;
+    z-index: 9999;
+    background: #0f172a;
+    color: #ffffff;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 12px;
+    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
+    pointer-events: none;
+    max-width: 280px;
+    line-height: 1.4;
+    display: none;
+    animation: fadeIn 0.15s ease;
+}
+

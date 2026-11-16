@@ -738,3 +738,250 @@
         box-shadow: 0 10px 40px -10px rgba(0,0,0,0.3);
     }
 }
+
+/* ============================================================
+   ADMIN DASHBOARD DUAL CALENDARS (INCIDENTS & APPOINTMENTS)
+   ============================================================ */
+
+.dash-cal-card {
+    background: #ffffff;
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: var(--radius-lg, 16px);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.05));
+    transition: box-shadow 0.2s, transform 0.2s;
+    display: flex;
+    flex-direction: column;
+}
+
+.dash-cal-card:hover {
+    box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0,0,0,0.1));
+}
+
+.dash-cal-toolbar {
+    background: #f8fafc;
+    border-bottom: 1px solid var(--border, #e2e8f0);
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.dash-cal-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--text-dark, #0f172a);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dash-cal-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.dash-cal-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.dash-cal-btn:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #94a3b8;
+}
+
+.dash-cal-legend-bar {
+    padding: 10px 18px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    background: #ffffff;
+    font-size: 11px;
+}
+
+.dash-cal-legend-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 10.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.dash-cal-legend-pill:hover {
+    transform: translateY(-1px);
+}
+
+.dash-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: #e2e8f0;
+    gap: 1px;
+}
+
+.dash-cal-dow {
+    background: #f8fafc;
+    padding: 8px 4px;
+    font-size: 10.5px;
+    font-weight: 800;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    text-align: center;
+}
+
+.dash-cal-cell {
+    background: #ffffff;
+    min-height: 80px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+
+.dash-cal-cell:hover {
+    background: #f8fafc;
+}
+
+.dash-cal-cell.today {
+    background: #f0f9ff;
+}
+
+.dash-cal-cell.other-month {
+    background: #fafafa;
+    opacity: 0.42;
+}
+
+.dash-cal-cell-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2px;
+}
+
+.dash-cal-num {
+    font-size: 11px;
+    font-weight: 700;
+    color: #1e293b;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+.dash-cal-cell.today .dash-cal-num {
+    background: #0284c7;
+    color: #ffffff;
+    font-weight: 800;
+}
+
+.dash-cal-badge {
+    font-size: 9.5px;
+    font-weight: 800;
+    padding: 0 5px;
+    border-radius: 999px;
+    line-height: 16px;
+}
+
+.dash-event-chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 5px;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.12s ease;
+}
+
+.dash-event-chip:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+}
+
+.dash-cal-more {
+    font-size: 9px;
+    font-weight: 800;
+    color: #0284c7;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: #eff6ff;
+    text-align: center;
+    cursor: pointer;
+}
+
+/* Tooltip */
+.dash-cal-tooltip {
+    position: fixed;
+    z-index: 9999;
+    background: #0f172a;
+    color: #ffffff;
+    padding: 9px 13px;
+    border-radius: 8px;
+    font-size: 11.5px;
+    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
+    pointer-events: none;
+    max-width: 260px;
+    line-height: 1.35;
+    display: none;
+    animation: fadeIn 0.15s ease;
+}
+
+/* Dashboard Day Details Modal */
+.dash-day-modal {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 1050;
+    padding: 16px;
+}
+
+.dash-day-modal-content {
+    background: #ffffff;
+    border-radius: 18px;
+    width: 100%;
+    max-width: 520px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+}
+

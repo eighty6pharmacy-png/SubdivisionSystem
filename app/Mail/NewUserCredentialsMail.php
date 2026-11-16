@@ -16,14 +16,39 @@ class NewUserCredentialsMail extends Mailable
 
     public $user;
     public $password;
+    public string $roleName;
+    public string $recipientName;
+    public string $websiteUrl;
+    public string $loginUrl;
+    public string $roleIntroduction;
 
     /**
      * Create a new message instance.
      */
-    public function __construct(User $user, string $password)
+    public function __construct(User $user, string $password, ?string $roleName = null)
     {
         $this->user = $user;
         $this->password = $password;
+        $this->roleName = $roleName ?: ($user->getRoleNames()->first() ?: 'Member');
+        $this->recipientName = trim($user->name ?: ($user->first_name ?: 'Valued Member'));
+        $this->websiteUrl = url('/');
+        $this->loginUrl = url('/login');
+        $this->roleIntroduction = $this->introductionForRole($this->roleName);
+    }
+
+    /**
+     * Get a tailored introduction message for the user's role.
+     */
+    private function introductionForRole(string $role): string
+    {
+        return match ($role) {
+            'Admin' => 'Welcome to the Althesa Subdivision Management System. Your administrator account gives you full access to manage community operations, user accounts, announcements, and subdivision records.',
+            'Resident' => 'Welcome to the Althesa Subdivision Portal! Your resident account connects you with our community—allowing you to view announcements, manage bills and visitor passes, and stay updated with subdivision services.',
+            'Buyer' => 'Welcome to the Althesa Subdivision Buyer Portal! Your account allows you to track your property acquisition, view payment schedules and financing records, and stay connected with our management office.',
+            'Security Guard' => 'Welcome to the Althesa Subdivision Security Portal. Your account provides access to gate operations, visitor verification, and community safety logs.',
+            'Finance Officer' => 'Welcome to the Althesa Subdivision Finance Portal. Your account provides access to billing management, payment verification, and financial reporting tools.',
+            default => 'Welcome to the Althesa Subdivision Portal! Your account has been set up so you can conveniently access subdivision services, updates, and your personalized dashboard online.',
+        };
     }
 
     /**
@@ -42,26 +67,7 @@ class NewUserCredentialsMail extends Mailable
     public function content(): Content
     {
         return new Content(
-            htmlString: "
-            <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff;'>
-                <div style='background: #3b82f6; padding: 20px; border-radius: 12px; text-align: center;'>
-                    <h2 style='color: #ffffff; margin: 0;'>Althesa Subdivision</h2>
-                    <p style='color: #eff6ff; margin: 4px 0 0 0; font-size: 13px;'>Account Access Details</p>
-                </div>
-                <div style='padding: 20px 0;'>
-                    <p style='font-size: 16px; color: #0f172a;'>Hello <strong>{$this->user->name}</strong>,</p>
-                    <p style='color: #475569;'>Your account has been successfully created. You can now log in to the system using the following credentials:</p>
-                    <div style='background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; margin: 20px 0;'>
-                        <p style='margin: 0; color: #334155;'><strong>Email:</strong> {$this->user->email}</p>
-                        <p style='margin: 8px 0 0 0; color: #334155;'><strong>Password:</strong> <span style='font-family: monospace; font-size: 16px; background: #e2e8f0; padding: 2px 6px; border-radius: 4px;'>{$this->password}</span></p>
-                    </div>
-                    <p style='color: #475569; font-size: 13px;'>For security reasons, please log in and change your password immediately.</p>
-                </div>
-                <div style='border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 12px; color: #94a3b8; text-align: center;'>
-                    Althesa Subdivision Management Office
-                </div>
-            </div>
-            "
+            view: 'emails.new-user-credentials',
         );
     }
 

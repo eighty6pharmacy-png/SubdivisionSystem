@@ -34,12 +34,12 @@ class HighwayNavigationController extends Controller
         $eLng = (float) $endLng;
 
         // Cache route responses by ~15m grid resolution for 2 hours for instant load times
-        $cacheKey = sprintf('hwy_nav_route_%.4f_%.4f_%.4f_%.4f', $sLat, $sLng, $eLat, $eLng);
+        $cacheKey = sprintf('hwy_nav_route_v2_%.4f_%.4f_%.4f_%.4f', $sLat, $sLng, $eLat, $eLng);
 
         $cachedData = Cache::remember($cacheKey, 7200, function () use ($sLat, $sLng, $eLat, $eLng) {
             try {
                 $url = sprintf(
-                    'https://router.project-osrm.org/route/v1/driving/%.6f,%.6f;%.6f,%.6f?overview=full&geometries=geojson&alternatives=true',
+                    'https://router.project-osrm.org/route/v1/driving/%.6f,%.6f;%.6f,%.6f?overview=full&geometries=geojson&alternatives=true&steps=true',
                     $sLng,
                     $sLat,
                     $eLng,

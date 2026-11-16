@@ -92,11 +92,48 @@
         </div>
     </div>
 
-    <!-- Incident List -->
+    <!-- Incident List & Calendar View Container -->
     <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-        <div style="padding: 20px 24px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
-            <h2 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 0;">My Reported Incidents</h2>
+        <div style="padding: 18px 24px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+                <h2 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 0;">My Reported Incidents</h2>
+                <p style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">View your past reports in a list or track them on the interactive monthly calendar.</p>
+            </div>
+            <div style="display: inline-flex; background: #e2e8f0; padding: 3px; border-radius: 10px; gap: 3px;">
+                <button type="button" id="resTabListBtn" onclick="switchResidentView('list')" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 12px; font-weight: 700; border-radius: 7px; border: none; cursor: pointer; transition: all 0.15s; background: #fff; color: #0f172a; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    List View
+                </button>
+                <button type="button" id="resTabCalBtn" onclick="switchResidentView('calendar')" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 12px; font-weight: 700; border-radius: 7px; border: none; cursor: pointer; transition: all 0.15s; background: transparent; color: #64748b;">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    Calendar View
+                </button>
+            </div>
         </div>
+
+        <!-- Resident Calendar View -->
+        <div id="residentIncidentCalendar" style="display: none; padding: 20px 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button type="button" class="btn btn-outline" onclick="resCalPrev()" style="padding: 6px 12px; font-size: 13px; font-weight: 700;">‹ Prev</button>
+                    <button type="button" class="btn btn-outline" onclick="resCalToday()" style="padding: 6px 12px; font-size: 13px; font-weight: 700;">Today</button>
+                    <button type="button" class="btn btn-outline" onclick="resCalNext()" style="padding: 6px 12px; font-size: 13px; font-weight: 700;">Next ›</button>
+                    <span id="resCalMonthTitle" style="font-size: 18px; font-weight: 800; color: #0f172a; margin-left: 8px;"></span>
+                </div>
+                <div style="display: flex; gap: 8px; font-size: 12px; align-items: center;">
+                    <span style="display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: #2563eb;">
+                        <span style="width: 8px; height: 8px; border-radius: 50%; background: #3b82f6;"></span> In Progress
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: #059669; margin-left: 8px;">
+                        <span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span> Resolved
+                    </span>
+                </div>
+            </div>
+            <div class="res-cal-grid" id="resCalGrid">
+                <!-- JS populated -->
+            </div>
+        </div>
+
         <div id="residentIncidentList" style="padding: 12px 24px;">
             @forelse($incidents as $inc)
             @php
@@ -180,6 +217,24 @@
                     </div>
                     <input type="hidden" id="reportType">
                 </div>
+
+                <!-- Incident Date & Time with Calendar Picker -->
+                <div class="form-group" style="margin-top: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="margin: 0; font-size: 13px; font-weight: 700; color: #1e293b;">Incident Date &amp; Time</label>
+                        <span style="font-size: 11px; color: #64748b; font-weight: 600;">When did this incident happen?</span>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;">
+                        <button type="button" class="incident-time-preset-btn active" id="presetNow" onclick="setIncidentTimePreset('now')">⚡ Just Now</button>
+                        <button type="button" class="incident-time-preset-btn" id="preset1h" onclick="setIncidentTimePreset('1h')">🕒 1 Hour Ago</button>
+                        <button type="button" class="incident-time-preset-btn" id="presetMorning" onclick="setIncidentTimePreset('today_morning')">🌅 Earlier Today</button>
+                        <button type="button" class="incident-time-preset-btn" id="presetYesterday" onclick="setIncidentTimePreset('yesterday')">📅 Yesterday</button>
+                    </div>
+                    <div style="position: relative;">
+                        <input type="datetime-local" id="reportIncidentDateTime" class="form-input" style="padding: 10px 14px; font-size: 13px; font-weight: 600; width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff;" max="{{ now()->format('Y-m-d\TH:i') }}">
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label>Incident Subject</label>
                     <input type="text" id="reportSubject" class="form-input" placeholder="e.g., Streetlight out near Gate 1">
@@ -422,6 +477,169 @@
         });
     }
 
+    function setIncidentTimePreset(preset) {
+        document.querySelectorAll('.incident-time-preset-btn').forEach(btn => btn.classList.remove('active'));
+        const input = document.getElementById('reportIncidentDateTime');
+        if (!input) return;
+        const now = new Date();
+        let target = new Date();
+
+        if (preset === 'now') {
+            document.getElementById('presetNow')?.classList.add('active');
+            target = now;
+        } else if (preset === '1h') {
+            document.getElementById('preset1h')?.classList.add('active');
+            target = new Date(now.getTime() - 60 * 60 * 1000);
+        } else if (preset === 'today_morning') {
+            document.getElementById('presetMorning')?.classList.add('active');
+            target.setHours(9, 0, 0, 0);
+            if (target > now) target = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+        } else if (preset === 'yesterday') {
+            document.getElementById('presetYesterday')?.classList.add('active');
+            target.setDate(target.getDate() - 1);
+        }
+
+        const yyyy = target.getFullYear();
+        const mm = String(target.getMonth() + 1).padStart(2, '0');
+        const dd = String(target.getDate()).padStart(2, '0');
+        const hh = String(target.getHours()).padStart(2, '0');
+        const min = String(target.getMinutes()).padStart(2, '0');
+        input.value = `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+    }
+
+    let resCalDate = new Date();
+    let resCurrentView = 'list';
+
+    function switchResidentView(mode) {
+        resCurrentView = mode;
+        const listEl = document.getElementById('residentIncidentList');
+        const calEl = document.getElementById('residentIncidentCalendar');
+        const btnList = document.getElementById('resTabListBtn');
+        const btnCal = document.getElementById('resTabCalBtn');
+
+        if (mode === 'calendar') {
+            listEl.style.display = 'none';
+            calEl.style.display = 'block';
+            btnList.style.background = 'transparent';
+            btnList.style.color = '#64748b';
+            btnList.style.boxShadow = 'none';
+            btnCal.style.background = '#fff';
+            btnCal.style.color = '#0f172a';
+            btnCal.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+            renderResidentCalendar();
+        } else {
+            listEl.style.display = 'block';
+            calEl.style.display = 'none';
+            btnCal.style.background = 'transparent';
+            btnCal.style.color = '#64748b';
+            btnCal.style.boxShadow = 'none';
+            btnList.style.background = '#fff';
+            btnList.style.color = '#0f172a';
+            btnList.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+        }
+    }
+
+    function resCalPrev() {
+        resCalDate.setMonth(resCalDate.getMonth() - 1);
+        renderResidentCalendar();
+    }
+
+    function resCalNext() {
+        resCalDate.setMonth(resCalDate.getMonth() + 1);
+        renderResidentCalendar();
+    }
+
+    function resCalToday() {
+        resCalDate = new Date();
+        renderResidentCalendar();
+    }
+
+    function renderResidentCalendar() {
+        const titleEl = document.getElementById('resCalMonthTitle');
+        const gridEl = document.getElementById('resCalGrid');
+        if (!gridEl) return;
+
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const year = resCalDate.getFullYear();
+        const month = resCalDate.getMonth();
+
+        if (titleEl) {
+            titleEl.textContent = `${monthNames[month]} ${year}`;
+        }
+
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const startDayIndex = firstDay.getDay();
+        const totalDays = lastDay.getDate();
+        const prevMonthLastDay = new Date(year, month, 0).getDate();
+
+        const incidentsByDate = {};
+        (mappedIncidents || []).forEach(inc => {
+            if (!inc.date) return;
+            const d = new Date(inc.date);
+            if (isNaN(d.getTime())) return;
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            if (!incidentsByDate[key]) incidentsByDate[key] = [];
+            incidentsByDate[key].push(inc);
+        });
+
+        const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        let html = dow.map(d => `<div class="res-cal-dow">${d}</div>`).join('');
+
+        const today = new Date();
+        const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+
+        for (let i = startDayIndex - 1; i >= 0; i--) {
+            const dNum = prevMonthLastDay - i;
+            html += `<div class="res-cal-day other-month"><div class="res-cal-day-num">${dNum}</div></div>`;
+        }
+
+        for (let d = 1; d <= totalDays; d++) {
+            const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const isToday = isCurrentMonth && today.getDate() === d;
+            const dayIncidents = incidentsByDate[dateKey] || [];
+
+            let incChips = '';
+            dayIncidents.slice(0, 3).forEach(inc => {
+                const isResolved = (inc.status || '').toLowerCase() === 'resolved';
+                const bg = isResolved ? '#d1fae5' : '#dbeafe';
+                const color = isResolved ? '#065f46' : '#1e40af';
+                const border = isResolved ? '#a7f3d0' : '#bfdbfe';
+                incChips += `
+                    <div onclick="event.stopPropagation(); openDetailsModal('${inc.id}')" style="background: ${bg}; border: 1px solid ${border}; color: ${color}; padding: 2px 6px; border-radius: 6px; font-size: 10px; font-weight: 700; display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; cursor: pointer;" title="${escapeHtml(inc.sub)}">
+                        <span style="width: 5px; height: 5px; border-radius: 50%; background: ${isResolved ? '#10b981' : '#3b82f6'}; flex-shrink: 0;"></span>
+                        <span style="overflow: hidden; text-overflow: ellipsis;">${escapeHtml(inc.sub)}</span>
+                    </div>
+                `;
+            });
+
+            if (dayIncidents.length > 3) {
+                incChips += `<div style="font-size: 9px; font-weight: 800; color: #3b82f6; margin-top: 2px;">+${dayIncidents.length - 3} more</div>`;
+            }
+
+            html += `
+                <div class="res-cal-day ${isToday ? 'today' : ''}" onclick="if(${dayIncidents.length}>0) openDetailsModal('${dayIncidents[0].id}')">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div class="res-cal-day-num">${d}</div>
+                        ${dayIncidents.length > 0 ? `<span style="font-size: 9px; font-weight: 800; background: #eff6ff; color: #1d4ed8; padding: 1px 5px; border-radius: 999px;">${dayIncidents.length}</span>` : ''}
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 2px; overflow: hidden;">
+                        ${incChips}
+                    </div>
+                </div>
+            `;
+        }
+
+        const currentCells = startDayIndex + totalDays;
+        const totalCellsNeeded = currentCells > 35 ? 42 : 35;
+        const remaining = totalCellsNeeded - currentCells;
+        for (let r = 1; r <= remaining; r++) {
+            html += `<div class="res-cal-day other-month"><div class="res-cal-day-num">${r}</div></div>`;
+        }
+
+        gridEl.innerHTML = html;
+    }
+
     function openReportModal() {
         if (new URLSearchParams(window.location.search).get('action') !== 'report') {
             window.history.pushState(null, '', '?action=report');
@@ -434,6 +652,7 @@
         document.getElementById('reportSubject').value = '';
         document.getElementById('reportDesc').value = '';
         document.getElementById('reportPhotos').value = '';
+        setIncidentTimePreset('now');
         selectedPhotoFiles = [];
         renderPhotoPreview();
         removeVideo();
@@ -954,6 +1173,10 @@
         formData.append('subject', subject);
         formData.append('type', type);
         formData.append('description', desc);
+        const incDateVal = document.getElementById('reportIncidentDateTime')?.value;
+        if (incDateVal) {
+            formData.append('incident_date', incDateVal);
+        }
         selectedPhotoFiles.forEach(file => {
             formData.append('photos[]', file);
         });
