@@ -542,7 +542,6 @@
                         <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     </button>
                 </div>
-                <p style="font-size: 10px; color: #94a3b8; margin-top: 4px;">* Password is encrypted and hidden by default. Click the eye button to view the password.</p>
             </div>
 
             <div style="display: flex; gap: 12px; margin-top: 12px; border-top: 1px solid #f1f5f9; padding-top: 20px;">

@@ -638,16 +638,16 @@ async function initGISMap(mapElementId, options = {}) {
         showCalibration: true, // Enabled so we can visually verify & align on satellite view
     }, options);
 
-    // Load Raw GeoJSONs, Database Lots, and Saved Settings in parallel
+    // Load Raw GeoJSONs, Database Lots, and Saved Settings in parallel (revalidate cache on deploy)
     const [rawAmenities, rawBufferedRoads, rawHouses, rawNetwork, rawEntrance, rawHouseNodes, lotsData, appSettings] = await Promise.all([
-        fetch('/gis-data/amenities.geojson').then(r => r.json()).catch(() => ({ features: [] })),
-        fetch('/gis-data/buffered_road_design.geojson').then(r => r.json()).catch(() => ({ features: [] })),
-        fetch('/gis-data/houses.geojson').then(r => r.json()).catch(() => ({ features: [] })),
-        fetch('/gis-data/roads.geojson').then(r => r.json()).catch(() => ({ features: [] })),
-        fetch('/gis-data/entrance_point.geojson').then(r => r.json()).catch(() => ({})),
-        fetch('/gis-data/house_nodes.geojson').then(r => r.json()).catch(() => ({})),
-        fetch('/api/lots').then(r => r.ok ? r.json() : []).catch(() => []),
-        fetch('/api/settings').then(r => r.ok ? r.json() : {}).catch(() => ({}))
+        fetch('/gis-data/amenities.geojson', { cache: 'no-cache' }).then(r => r.json()).catch(() => ({ features: [] })),
+        fetch('/gis-data/buffered_road_design.geojson', { cache: 'no-cache' }).then(r => r.json()).catch(() => ({ features: [] })),
+        fetch('/gis-data/houses.geojson', { cache: 'no-cache' }).then(r => r.json()).catch(() => ({ features: [] })),
+        fetch('/gis-data/roads.geojson', { cache: 'no-cache' }).then(r => r.json()).catch(() => ({ features: [] })),
+        fetch('/gis-data/entrance_point.geojson', { cache: 'no-cache' }).then(r => r.json()).catch(() => ({})),
+        fetch('/gis-data/house_nodes.geojson', { cache: 'no-cache' }).then(r => r.json()).catch(() => ({})),
+        fetch('/api/lots', { cache: 'no-cache' }).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch('/api/settings', { cache: 'no-cache' }).then(r => r.ok ? r.json() : {}).catch(() => ({}))
     ]);
 
     // Ensure ONLY the outer encircling road is stripped while keeping the entrance-to-inside road polygon

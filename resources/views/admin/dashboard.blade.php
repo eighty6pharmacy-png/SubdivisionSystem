@@ -69,15 +69,131 @@
         </div>
     </div>
 
+    <!-- Community Utilities & Consumption Analytics Section (Electricity & Water) -->
+    <div class="fade-up-2" style="margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+            <div>
+                <div style="font-size: 18px; font-weight: 800; color: var(--text-dark, #0f172a);">
+                    <span>Utility Consumption &amp; Billing Analytics</span>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 8px;">
+                <a href="/admin/billing" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 12px; border-radius: 8px;">
+                    <span>⚡</span> Electricity Billing &rarr;
+                </a>
+                <a href="/admin/water" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 12px; border-radius: 8px;">
+                    <span>💧</span> Water Billing &rarr;
+                </a>
+            </div>
+        </div>
+
+        <div class="responsive-grid grid-2" style="gap: 20px;">
+            <!-- Electricity Analytics Card -->
+            <div class="card" style="padding: 20px; border-radius: 16px; background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 38px; height: 38px; border-radius: 10px; background: #fef3c7; color: #d97706; display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0;">
+                            ⚡
+                        </div>
+                        <div>
+                            <div style="font-size: 15px; font-weight: 800; color: #0f172a; line-height: 1.2;">Electricity Consumption</div>
+                            <div style="font-size: 12px; color: #64748b; font-weight: 600; margin-top: 2px;">Monthly kWh Usage vs. Billed Revenue</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <span style="background: #fffbeb; color: #b45309; border: 1px solid #fef3c7; padding: 4px 8px; border-radius: 8px; font-size: 11px; font-weight: 700;">
+                            Rate: ₱{{ number_format($elecSummary['rate'] ?? 13, 2) }}/kWh
+                        </span>
+                        <div style="display: inline-flex; background: #f1f5f9; padding: 2px; border-radius: 8px; gap: 2px;">
+                            <button type="button" onclick="switchElecChartMetric('both')" id="btnElecBoth" style="padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: #fff; color: #0f172a; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">Both</button>
+                            <button type="button" onclick="switchElecChartMetric('usage')" id="btnElecUsage" style="padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: transparent; color: #64748b;">kWh</button>
+                            <button type="button" onclick="switchElecChartMetric('amount')" id="btnElecAmount" style="padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: transparent; color: #64748b;">₱ Billed</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Electricity Stat Badges -->
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
+                    <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 10px 12px;">
+                        <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Total Recorded</div>
+                        <div style="font-size: 15px; font-weight: 800; color: #d97706; margin-top: 2px;">{{ number_format($elecSummary['total_usage'] ?? 0, 1) }} <span style="font-size: 11px; font-weight: 600;">kWh</span></div>
+                    </div>
+                    <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 10px 12px;">
+                        <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Total Billed</div>
+                        <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 2px;">₱ {{ number_format($elecSummary['total_billed'] ?? 0, 2) }}</div>
+                    </div>
+                    <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 10px 12px;">
+                        <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Account Status</div>
+                        <div style="font-size: 12.5px; font-weight: 800; color: #059669; margin-top: 3px;">
+                            {{ $elecSummary['paid_count'] ?? 0 }} Paid <span style="color: #94a3b8; font-weight: 500;">/</span> <span style="color: #dc2626;">{{ $elecSummary['pending_count'] ?? 0 }} Unpaid</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Electricity Chart Canvas -->
+                <div style="height: 220px; position: relative; width: 100%; margin-top: auto;">
+                    <canvas id="dashboardElectricityChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Water Analytics Card -->
+            <div class="card" style="padding: 20px; border-radius: 16px; background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 38px; height: 38px; border-radius: 10px; background: #e0f2fe; color: #0284c7; display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0;">
+                            💧
+                        </div>
+                        <div>
+                            <div style="font-size: 15px; font-weight: 800; color: #0f172a; line-height: 1.2;">Water Consumption</div>
+                            <div style="font-size: 12px; color: #64748b; font-weight: 600; margin-top: 2px;">Monthly m³ Volume vs. Billed Revenue</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <span style="background: #f0f9ff; color: #0369a1; border: 1px solid #e0f2fe; padding: 4px 8px; border-radius: 8px; font-size: 11px; font-weight: 700;">
+                            Rate: ₱{{ number_format($waterSummary['rate'] ?? 15, 2) }}/m³
+                        </span>
+                        <div style="display: inline-flex; background: #f1f5f9; padding: 2px; border-radius: 8px; gap: 2px;">
+                            <button type="button" onclick="switchWaterChartMetric('both')" id="btnWaterBoth" style="padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: #fff; color: #0f172a; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">Both</button>
+                            <button type="button" onclick="switchWaterChartMetric('usage')" id="btnWaterUsage" style="padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: transparent; color: #64748b;">m³</button>
+                            <button type="button" onclick="switchWaterChartMetric('amount')" id="btnWaterAmount" style="padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: transparent; color: #64748b;">₱ Billed</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Water Stat Badges -->
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
+                    <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 10px 12px;">
+                        <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Total Recorded</div>
+                        <div style="font-size: 15px; font-weight: 800; color: #0284c7; margin-top: 2px;">{{ number_format($waterSummary['total_usage'] ?? 0, 1) }} <span style="font-size: 11px; font-weight: 600;">m³</span></div>
+                    </div>
+                    <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 10px 12px;">
+                        <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Total Billed</div>
+                        <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 2px;">₱ {{ number_format($waterSummary['total_billed'] ?? 0, 2) }}</div>
+                    </div>
+                    <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 10px 12px;">
+                        <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Account Status</div>
+                        <div style="font-size: 12.5px; font-weight: 800; color: #059669; margin-top: 3px;">
+                            {{ $waterSummary['paid_count'] ?? 0 }} Paid <span style="color: #94a3b8; font-weight: 500;">/</span> <span style="color: #dc2626;">{{ $waterSummary['pending_count'] ?? 0 }} Unpaid</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Water Chart Canvas -->
+                <div style="height: 220px; position: relative; width: 100%; margin-top: auto;">
+                    <canvas id="dashboardWaterChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Operations Calendars Section: Incident & Appointment Dual Suite -->
     <div class="fade-up-2" style="margin-bottom: 24px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
             <div>
-                <div style="font-size: 18px; font-weight: 800; color: var(--text-dark, #0f172a); display: flex; align-items: center; gap: 8px;">
+                <div style="font-size: 18px; font-weight: 800; color: var(--text-dark, #0f172a);">
                     <span>Operations &amp; Schedule Calendars</span>
-                    <span class="badge" style="background: #eff6ff; color: #1d4ed8; font-weight: 700; font-size: 11px; padding: 2px 8px; border-radius: 999px;">Live Overview</span>
                 </div>
-                <p style="font-size: 12.5px; color: var(--text-mid, #64748b); margin: 3px 0 0 0;">Interactive calendar tracking for reported community incidents and incoming buyer lot inquiries.</p>
             </div>
             
             <div style="display: inline-flex; background: #e2e8f0; padding: 3px; border-radius: 10px; gap: 3px;">
@@ -315,7 +431,266 @@
 
             // Initialize Dual Dashboard Calendars
             initDashboardCalendars();
+
+            // Initialize Community Electricity Analytics Chart
+            const elecCanvas = document.getElementById('dashboardElectricityChart');
+            if (elecCanvas) {
+                const elecCtx = elecCanvas.getContext('2d');
+                window.elecChartInstance = new Chart(elecCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: {!! json_encode($utilityMonthsLabels ?? []) !!},
+                        datasets: [
+                            {
+                                type: 'bar',
+                                label: 'Electricity Usage (kWh)',
+                                data: {!! json_encode($elecUsageSeries ?? []) !!},
+                                backgroundColor: 'rgba(245, 158, 11, 0.75)',
+                                borderColor: '#f59e0b',
+                                borderWidth: 1,
+                                borderRadius: 5,
+                                yAxisID: 'y',
+                                order: 2
+                            },
+                            {
+                                type: 'line',
+                                label: 'Billed Revenue (₱)',
+                                data: {!! json_encode($elecAmountSeries ?? []) !!},
+                                borderColor: '#10b981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                borderWidth: 2.5,
+                                pointBackgroundColor: '#10b981',
+                                pointBorderColor: '#ffffff',
+                                pointBorderWidth: 1.5,
+                                pointRadius: 3.5,
+                                pointHoverRadius: 5,
+                                fill: false,
+                                tension: 0.35,
+                                yAxisID: 'y1',
+                                order: 1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: {
+                                    boxWidth: 12,
+                                    font: { weight: '600', size: 11 },
+                                    color: '#475569'
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(ctx) {
+                                        if (ctx.datasetIndex === 0) {
+                                            return ' Usage: ' + Number(ctx.raw || 0).toLocaleString() + ' kWh';
+                                        }
+                                        return ' Billed: ₱' + Number(ctx.raw || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                beginAtZero: true,
+                                title: { display: true, text: 'kWh', color: '#b45309', font: { weight: '700', size: 10 } },
+                                ticks: {
+                                    font: { weight: '600', size: 10 },
+                                    color: '#64748b'
+                                },
+                                grid: { color: '#f1f5f9' }
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                beginAtZero: true,
+                                title: { display: true, text: '₱ Billed', color: '#047857', font: { weight: '700', size: 10 } },
+                                ticks: {
+                                    font: { weight: '600', size: 10 },
+                                    color: '#64748b',
+                                    callback: function(v) { return '₱' + (v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v); }
+                                },
+                                grid: { drawOnChartArea: false }
+                            },
+                            x: {
+                                ticks: { font: { weight: '600', size: 11 }, color: '#64748b' },
+                                grid: { display: false }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Initialize Community Water Analytics Chart
+            const waterCanvas = document.getElementById('dashboardWaterChart');
+            if (waterCanvas) {
+                const waterCtx = waterCanvas.getContext('2d');
+                window.waterChartInstance = new Chart(waterCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: {!! json_encode($utilityMonthsLabels ?? []) !!},
+                        datasets: [
+                            {
+                                type: 'bar',
+                                label: 'Water Volume (m³)',
+                                data: {!! json_encode($waterUsageSeries ?? []) !!},
+                                backgroundColor: 'rgba(2, 132, 199, 0.75)',
+                                borderColor: '#0284c7',
+                                borderWidth: 1,
+                                borderRadius: 5,
+                                yAxisID: 'y',
+                                order: 2
+                            },
+                            {
+                                type: 'line',
+                                label: 'Billed Revenue (₱)',
+                                data: {!! json_encode($waterAmountSeries ?? []) !!},
+                                borderColor: '#6366f1',
+                                backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                                borderWidth: 2.5,
+                                pointBackgroundColor: '#6366f1',
+                                pointBorderColor: '#ffffff',
+                                pointBorderWidth: 1.5,
+                                pointRadius: 3.5,
+                                pointHoverRadius: 5,
+                                fill: false,
+                                tension: 0.35,
+                                yAxisID: 'y1',
+                                order: 1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: {
+                                    boxWidth: 12,
+                                    font: { weight: '600', size: 11 },
+                                    color: '#475569'
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(ctx) {
+                                        if (ctx.datasetIndex === 0) {
+                                            return ' Volume: ' + Number(ctx.raw || 0).toLocaleString() + ' m³';
+                                        }
+                                        return ' Billed: ₱' + Number(ctx.raw || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                beginAtZero: true,
+                                title: { display: true, text: 'm³', color: '#0369a1', font: { weight: '700', size: 10 } },
+                                ticks: {
+                                    font: { weight: '600', size: 10 },
+                                    color: '#64748b'
+                                },
+                                grid: { color: '#f1f5f9' }
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                beginAtZero: true,
+                                title: { display: true, text: '₱ Billed', color: '#4338ca', font: { weight: '700', size: 10 } },
+                                ticks: {
+                                    font: { weight: '600', size: 10 },
+                                    color: '#64748b',
+                                    callback: function(v) { return '₱' + (v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v); }
+                                },
+                                grid: { drawOnChartArea: false }
+                            },
+                            x: {
+                                ticks: { font: { weight: '600', size: 11 }, color: '#64748b' },
+                                grid: { display: false }
+                            }
+                        }
+                    }
+                });
+            }
         });
+
+        // Utility Chart Metric Toggle Switchers
+        function switchElecChartMetric(mode) {
+            if (!window.elecChartInstance) return;
+            const btnBoth = document.getElementById('btnElecBoth');
+            const btnUsage = document.getElementById('btnElecUsage');
+            const btnAmount = document.getElementById('btnElecAmount');
+            const activeStyle = 'padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: #fff; color: #0f172a; box-shadow: 0 1px 2px rgba(0,0,0,0.05);';
+            const inactiveStyle = 'padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: transparent; color: #64748b;';
+            if (btnBoth) btnBoth.style = mode === 'both' ? activeStyle : inactiveStyle;
+            if (btnUsage) btnUsage.style = mode === 'usage' ? activeStyle : inactiveStyle;
+            if (btnAmount) btnAmount.style = mode === 'amount' ? activeStyle : inactiveStyle;
+
+            if (mode === 'both') {
+                window.elecChartInstance.setDatasetVisibility(0, true);
+                window.elecChartInstance.setDatasetVisibility(1, true);
+                window.elecChartInstance.options.scales.y.display = true;
+                window.elecChartInstance.options.scales.y1.display = true;
+            } else if (mode === 'usage') {
+                window.elecChartInstance.setDatasetVisibility(0, true);
+                window.elecChartInstance.setDatasetVisibility(1, false);
+                window.elecChartInstance.options.scales.y.display = true;
+                window.elecChartInstance.options.scales.y1.display = false;
+            } else if (mode === 'amount') {
+                window.elecChartInstance.setDatasetVisibility(0, false);
+                window.elecChartInstance.setDatasetVisibility(1, true);
+                window.elecChartInstance.options.scales.y.display = false;
+                window.elecChartInstance.options.scales.y1.display = true;
+            }
+            window.elecChartInstance.update();
+        }
+
+        function switchWaterChartMetric(mode) {
+            if (!window.waterChartInstance) return;
+            const btnBoth = document.getElementById('btnWaterBoth');
+            const btnUsage = document.getElementById('btnWaterUsage');
+            const btnAmount = document.getElementById('btnWaterAmount');
+            const activeStyle = 'padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: #fff; color: #0f172a; box-shadow: 0 1px 2px rgba(0,0,0,0.05);';
+            const inactiveStyle = 'padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: transparent; color: #64748b;';
+            if (btnBoth) btnBoth.style = mode === 'both' ? activeStyle : inactiveStyle;
+            if (btnUsage) btnUsage.style = mode === 'usage' ? activeStyle : inactiveStyle;
+            if (btnAmount) btnAmount.style = mode === 'amount' ? activeStyle : inactiveStyle;
+
+            if (mode === 'both') {
+                window.waterChartInstance.setDatasetVisibility(0, true);
+                window.waterChartInstance.setDatasetVisibility(1, true);
+                window.waterChartInstance.options.scales.y.display = true;
+                window.waterChartInstance.options.scales.y1.display = true;
+            } else if (mode === 'usage') {
+                window.waterChartInstance.setDatasetVisibility(0, true);
+                window.waterChartInstance.setDatasetVisibility(1, false);
+                window.waterChartInstance.options.scales.y.display = true;
+                window.waterChartInstance.options.scales.y1.display = false;
+            } else if (mode === 'amount') {
+                window.waterChartInstance.setDatasetVisibility(0, false);
+                window.waterChartInstance.setDatasetVisibility(1, true);
+                window.waterChartInstance.options.scales.y.display = false;
+                window.waterChartInstance.options.scales.y1.display = true;
+            }
+            window.waterChartInstance.update();
+        }
 
         // ==========================================
         // DUAL DASHBOARD CALENDARS JAVASCRIPT LOGIC

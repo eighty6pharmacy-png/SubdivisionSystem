@@ -896,6 +896,73 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $dashboardIncidents = getIncidents();
         $dashboardAppointments = getAppointments();
 
+        // 10. Utility Consumption & Billed Revenue Analytics (Electricity & Water)
+        $utilityMonthsLabels = [];
+        $elecUsageSeries = [];
+        $elecAmountSeries = [];
+        $waterUsageSeries = [];
+        $waterAmountSeries = [];
+
+        $allUtilityBills = \Illuminate\Support\Facades\Schema::hasTable('utility_bills') 
+            ? \App\Models\UtilityBill::all() 
+            : collect();
+
+        for ($i = 11; $i >= 0; $i--) {
+            $monthDate = \Carbon\Carbon::now()->subMonths($i);
+            $mKey = $monthDate->format('Y-m');
+            $utilityMonthsLabels[] = $monthDate->format('M');
+
+            $mElecBills = $allUtilityBills->where('type', 'electricity')->filter(function ($b) use ($mKey) {
+                $raw = $b->billing_period ?: $b->created_at;
+                return $raw && \Carbon\Carbon::parse($raw)->format('Y-m') === $mKey;
+            });
+            $elecUsageSeries[] = round((float) $mElecBills->sum('usage_value'), 2);
+            $elecAmountSeries[] = round((float) $mElecBills->sum('amount'), 2);
+
+            $mWaterBills = $allUtilityBills->where('type', 'water')->filter(function ($b) use ($mKey) {
+                $raw = $b->billing_period ?: $b->created_at;
+                return $raw && \Carbon\Carbon::parse($raw)->format('Y-m') === $mKey;
+            });
+            $waterUsageSeries[] = round((float) $mWaterBills->sum('usage_value'), 2);
+            $waterAmountSeries[] = round((float) $mWaterBills->sum('amount'), 2);
+        }
+
+        $elecBillsAll = $allUtilityBills->where('type', 'electricity');
+        $waterBillsAll = $allUtilityBills->where('type', 'water');
+
+        $curMonthKey = \Carbon\Carbon::now()->format('Y-m');
+        $curElecBills = $elecBillsAll->filter(function ($b) use ($curMonthKey) {
+            $raw = $b->billing_period ?: $b->created_at;
+            return $raw && \Carbon\Carbon::parse($raw)->format('Y-m') === $curMonthKey;
+        });
+        $curWaterBills = $waterBillsAll->filter(function ($b) use ($curMonthKey) {
+            $raw = $b->billing_period ?: $b->created_at;
+            return $raw && \Carbon\Carbon::parse($raw)->format('Y-m') === $curMonthKey;
+        });
+
+        $elecRate = (float) (\App\Models\Setting::find('elec_rate')?->value ?? 13);
+        $waterRate = (float) (\App\Models\Setting::find('water_rate')?->value ?? 15);
+
+        $elecSummary = [
+            'rate' => $elecRate,
+            'total_usage' => (float) $elecBillsAll->sum('usage_value'),
+            'total_billed' => (float) $elecBillsAll->sum('amount'),
+            'current_usage' => (float) $curElecBills->sum('usage_value'),
+            'current_billed' => (float) $curElecBills->sum('amount'),
+            'paid_count' => $elecBillsAll->where('status', 'paid')->count(),
+            'pending_count' => $elecBillsAll->whereIn('status', ['unpaid', 'pending', 'overdue'])->count(),
+        ];
+
+        $waterSummary = [
+            'rate' => $waterRate,
+            'total_usage' => (float) $waterBillsAll->sum('usage_value'),
+            'total_billed' => (float) $waterBillsAll->sum('amount'),
+            'current_usage' => (float) $curWaterBills->sum('usage_value'),
+            'current_billed' => (float) $curWaterBills->sum('amount'),
+            'paid_count' => $waterBillsAll->where('status', 'paid')->count(),
+            'pending_count' => $waterBillsAll->whereIn('status', ['unpaid', 'pending', 'overdue'])->count(),
+        ];
+
         return view('admin.dashboard', compact(
             'openIncidentsCount', 
             'appointmentsTodayCount', 
@@ -911,7 +978,14 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'todaysAppointmentsList',
             'notifications',
             'dashboardIncidents',
-            'dashboardAppointments'
+            'dashboardAppointments',
+            'utilityMonthsLabels',
+            'elecUsageSeries',
+            'elecAmountSeries',
+            'waterUsageSeries',
+            'waterAmountSeries',
+            'elecSummary',
+            'waterSummary'
         ));
     });
 

@@ -98,8 +98,8 @@
             margin-top: 4px;
         }
         .report-table th {
-            background: #000000;
-            color: #ffffff;
+            background: #ffffff;
+            color: #000000;
             font-size: 8.5px;
             font-weight: bold;
             text-transform: uppercase;

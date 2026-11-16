@@ -4,7 +4,7 @@
 
 @section('content')
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="{{ asset('css/views/visitor-routing.css') }}">
+<link rel="stylesheet" href="{{ asset('css/views/visitor-routing.css') }}?v={{ filemtime(public_path('css/views/visitor-routing.css')) }}">
 
 <div class="routing-viewport nav-ui-collapsed" id="mapViewport">
     <!-- Floating Destination Info -->
@@ -120,8 +120,8 @@
 @section('scripts')
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
-<script src="{{ asset('js/dijkstra.js') }}"></script>
-<script src="{{ asset('js/gis-map.js') }}"></script>
+<script src="{{ asset('js/dijkstra.js') }}?v={{ filemtime(public_path('js/dijkstra.js')) }}"></script>
+<script src="{{ asset('js/gis-map.js') }}?v={{ filemtime(public_path('js/gis-map.js')) }}"></script>
 <script>
     let isUiCollapsed = true;
     function toggleNavUiCollapse(forceOpen) {

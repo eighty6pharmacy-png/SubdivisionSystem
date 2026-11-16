@@ -161,8 +161,8 @@
 @section('scripts')
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
-<script src="{{ asset('js/dijkstra.js') }}"></script>
-<script src="{{ asset('js/gis-map.js') }}"></script>
+<script src="{{ asset('js/dijkstra.js') }}?v={{ filemtime(public_path('js/dijkstra.js')) }}"></script>
+<script src="{{ asset('js/gis-map.js') }}?v={{ filemtime(public_path('js/gis-map.js')) }}"></script>
 <script>
     // Pin input behavior
     const pinInput = document.getElementById('pin-input');
