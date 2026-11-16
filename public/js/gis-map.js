@@ -635,7 +635,7 @@ async function initGISMap(mapElementId, options = {}) {
         startNode: null,
         endNode: null,
         adminView: false,
-        showCalibration: true, // Enabled so we can visually verify & align on satellite view
+        showCalibration: false, // Opt-in only (resident/admin calibration); never shown on guard/visitor views
     }, options);
 
     // Load Raw GeoJSONs, Database Lots, and Saved Settings in parallel (revalidate cache on deploy)
@@ -1767,6 +1767,15 @@ async function initGISMap(mapElementId, options = {}) {
 
                 if (active) {
                     autoFollow = true;
+                    // Enable Heading-Up POV mode automatically when starting active navigation
+                    if (typeof map.setBearing === 'function') {
+                        isHeadingUp = true;
+                        const hBtn = document.getElementById('btnHeadingUp');
+                        if (hBtn) hBtn.textContent = '🧭 Heading';
+                    }
+                    if (typeof requestDeviceOrientationPermission === 'function') {
+                        requestDeviceOrientationPermission();
+                    }
                     // Collapse HUD dropdown when entering active turn-by-turn mode so the map is unobstructed
                     if (typeof window.toggleNavUiCollapse === 'function') {
                         window.toggleNavUiCollapse(false);
@@ -1781,11 +1790,16 @@ async function initGISMap(mapElementId, options = {}) {
                         map.setView(focusTarget, targetZoom, { animate: true });
                         lastPanCoord = focusTarget;
                     }
+                    if (isHeadingUp && currentHeading !== null && typeof map.setBearing === 'function') {
+                        map.setBearing(-currentHeading);
+                        syncHeadingConeToMapBearing();
+                    }
                 } else {
                     if (hud) hud.style.top = '';
                     if (isHeadingUp && typeof map.setBearing === 'function') {
                         isHeadingUp = false;
                         map.setBearing(0);
+                        syncHeadingConeToMapBearing();
                         const hBtn = document.getElementById('btnHeadingUp');
                         if (hBtn) hBtn.textContent = '🧭 North';
                     }
@@ -1801,12 +1815,16 @@ async function initGISMap(mapElementId, options = {}) {
                 isHeadingUp = !isHeadingUp;
                 const hBtn = document.getElementById('btnHeadingUp');
                 if (hBtn) hBtn.textContent = isHeadingUp ? '🧭 Heading' : '🧭 North';
+                if (isHeadingUp && typeof requestDeviceOrientationPermission === 'function') {
+                    requestDeviceOrientationPermission();
+                }
                 if (typeof map.setBearing === 'function') {
                     if (isHeadingUp && currentHeading !== null) {
                         map.setBearing(-currentHeading);
                     } else {
                         map.setBearing(0);
                     }
+                    syncHeadingConeToMapBearing();
                 }
             };
 
@@ -2068,26 +2086,44 @@ async function initGISMap(mapElementId, options = {}) {
                 };
             }
 
+            let wasInsideSubdivision = false;
             function checkIfInside(lat, lng) {
+                const enterPad = wasInsideSubdivision ? 6 : 0; // hysteresis to prevent boundary flickering
                 // 1. Proximity to entrance gate
-                if (map.distance([lat, lng], entranceCoord) <= 45) return true;
+                if (map.distance([lat, lng], entranceCoord) <= (24 + enterPad)) {
+                    wasInsideSubdivision = true;
+                    return true;
+                }
 
-                // 2. Proximity to any internal subdivision road segment (tolerance for GPS jitter)
+                // 2. Proximity to any internal subdivision road segment
                 const pt = [lat, lng];
+                const segLimit = 20 + enterPad;
                 for (let i = 0; i < segments.length; i++) {
                     const proj = projectPointToSegment(pt, segments[i].p1, segments[i].p2);
-                    if (proj.dist <= 35) return true;
+                    if (proj.dist <= segLimit) {
+                        wasInsideSubdivision = true;
+                        return true;
+                    }
                 }
 
                 // 3. Proximity to destination house
-                if (map.distance([lat, lng], [destCoord.lat, destCoord.lng]) <= 50) return true;
+                if (map.distance([lat, lng], [destCoord.lat, destCoord.lng]) <= (35 + enterPad)) {
+                    wasInsideSubdivision = true;
+                    return true;
+                }
 
+                wasInsideSubdivision = false;
                 return false;
             }
 
-            // Point of View (POV) Directional Guide (Compass & Moving Bearing)
+            // Point of View (POV) Directional Guide (Google Maps-grade Tilt-Compensated Compass & Bearing)
             let currentHeading = null;
+            let targetHeading = null;
             let lastCoordForHeading = null;
+            let hasAbsoluteCompass = false;
+            let hasCompassSensor = false;
+            let lastHeadingFrameMs = 0;
+            let headingRafId = null;
 
             function calculateBearing(lat1, lon1, lat2, lon2) {
                 const toRad = Math.PI / 180;
@@ -2098,39 +2134,207 @@ async function initGISMap(mapElementId, options = {}) {
                 return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
             }
 
+            function shortestAngleDiff(target, current) {
+                return ((target - current + 540) % 360) - 180;
+            }
+
+            function getConeScreenAngle() {
+                if (currentHeading === null) return 0;
+                // leaflet-rotate counter-rotates L.marker icons to stay upright on screen,
+                // so add map.getBearing() to keep the cone pointing in the true compass direction.
+                const mapBearing = (typeof map.getBearing === 'function') ? map.getBearing() : 0;
+                return ((currentHeading + mapBearing) % 360 + 360) % 360;
+            }
+
+            function syncHeadingConeToMapBearing() {
+                const cone = document.getElementById('userHeadingCone');
+                if (cone && currentHeading !== null) {
+                    cone.style.transform = `rotate(${getConeScreenAngle().toFixed(2)}deg)`;
+                }
+            }
+
+            function stepHeadingAnimation(nowMs) {
+                headingRafId = null;
+                if (targetHeading === null) return;
+
+                if (currentHeading === null) {
+                    currentHeading = targetHeading;
+                } else {
+                    const dt = lastHeadingFrameMs ? Math.min((nowMs - lastHeadingFrameMs) / 1000, 0.1) : 0.016;
+                    const diff = shortestAngleDiff(targetHeading, currentHeading);
+                    // Deadband: ignore sub-1.2 deg magnetometer shimmer when nearly still
+                    if (Math.abs(diff) < 1.2) {
+                        lastHeadingFrameMs = nowMs;
+                        return;
+                    }
+                    // Time-constant exponential low-pass filter (~140ms response)
+                    const smoothAlpha = 1 - Math.exp(-dt / 0.14);
+                    currentHeading = ((currentHeading + diff * smoothAlpha) % 360 + 360) % 360;
+
+                    if (Math.abs(shortestAngleDiff(targetHeading, currentHeading)) >= 1.2) {
+                        headingRafId = requestAnimationFrame(stepHeadingAnimation);
+                    }
+                }
+                lastHeadingFrameMs = nowMs;
+
+                if (isHeadingUp && typeof map.setBearing === 'function') {
+                    const curBearing = (typeof map.getBearing === 'function') ? map.getBearing() : 0;
+                    const desiredBearing = -currentHeading;
+                    if (Math.abs(shortestAngleDiff(desiredBearing, curBearing)) >= 0.35) {
+                        map.setBearing(desiredBearing);
+                    }
+                }
+                syncHeadingConeToMapBearing();
+            }
+
             function updateHeadingCone(h) {
                 if (h == null || isNaN(h)) return;
-                currentHeading = (h % 360 + 360) % 360;
-                const cone = document.getElementById('userHeadingCone');
-                if (cone) {
-                    cone.style.transform = `rotate(${currentHeading}deg)`;
+                const normalized = ((h % 360) + 360) % 360;
+                if (targetHeading === null) {
+                    targetHeading = normalized;
+                    currentHeading = normalized;
+                    if (isHeadingUp && typeof map.setBearing === 'function') {
+                        map.setBearing(-currentHeading);
+                    }
+                    syncHeadingConeToMapBearing();
+                    return;
                 }
-                if (isNavStarted && isHeadingUp && typeof map.setBearing === 'function') {
-                    map.setBearing(-currentHeading);
+                // Ignore tiny raw jitter before scheduling animation
+                if (Math.abs(shortestAngleDiff(normalized, targetHeading)) < 1.0) return;
+                targetHeading = normalized;
+                if (!headingRafId) {
+                    lastHeadingFrameMs = performance.now();
+                    headingRafId = requestAnimationFrame(stepHeadingAnimation);
                 }
+            }
+
+            function getScreenOrientationAngle() {
+                if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
+                    return window.screen.orientation.angle;
+                }
+                if (typeof window.orientation === 'number') {
+                    return window.orientation;
+                }
+                return 0;
+            }
+
+            // 3D tilt-compensated compass heading from Z-X'-Y'' Euler angles (alpha, beta, gamma)
+            function computeTiltCompensatedHeading(alpha, beta, gamma) {
+                const toRad = Math.PI / 180;
+                const a = alpha * toRad;
+                const b = (beta || 0) * toRad;
+                const g = (gamma || 0) * toRad;
+
+                const cA = Math.cos(a), sA = Math.sin(a);
+                const cB = Math.cos(b), sB = Math.sin(b);
+                const cG = Math.cos(g), sG = Math.sin(g);
+
+                let east, north;
+                if (Math.abs(cB) > 0.5) {
+                    // Phone is mostly flat (|beta| < 60 deg): project device +Y (top edge) onto horizontal plane
+                    east = -sA * cB;
+                    north = cA * cB;
+                } else {
+                    // Phone is held upright (|beta| >= 60 deg): project device -Z (back of phone) onto horizontal plane
+                    east = -cA * sG - sA * sB * cG;
+                    north = -sA * sG + cA * sB * cG;
+                }
+
+                if (Math.hypot(east, north) < 1e-4) return null;
+                return (Math.atan2(east, north) * 180 / Math.PI + 360) % 360;
             }
 
             function onDeviceOrientation(e) {
                 let h = null;
                 if (e.webkitCompassHeading !== undefined && e.webkitCompassHeading !== null) {
+                    // iOS Safari: already tilt-compensated clockwise from North
+                    if (typeof e.webkitCompassAccuracy === 'number' && (e.webkitCompassAccuracy < 0 || e.webkitCompassAccuracy > 50)) {
+                        return;
+                    }
+                    hasAbsoluteCompass = true;
+                    hasCompassSensor = true;
                     h = e.webkitCompassHeading;
-                } else if (e.alpha !== null && e.alpha !== undefined) {
-                    h = 360 - e.alpha;
+                } else if (e.type === 'deviceorientationabsolute' || e.absolute === true) {
+                    if (e.alpha !== null && e.alpha !== undefined) {
+                        hasAbsoluteCompass = true;
+                        hasCompassSensor = true;
+                        h = computeTiltCompensatedHeading(e.alpha, e.beta, e.gamma);
+                    }
+                } else if (!hasAbsoluteCompass && e.alpha !== null && e.alpha !== undefined) {
+                    // Relative fallback only if device never emits absolute orientation
+                    hasCompassSensor = true;
+                    h = computeTiltCompensatedHeading(e.alpha, e.beta, e.gamma);
                 }
-                if (h !== null && !isNaN(h)) updateHeadingCone(h);
+                if (h !== null && !isNaN(h)) {
+                    h = (h + getScreenOrientationAngle() + 360) % 360;
+                    updateHeadingCone(h);
+                }
             }
-            if (window.DeviceOrientationEvent) {
+
+            let orientationListenersAttached = false;
+            function attachOrientationListeners() {
+                if (orientationListenersAttached || !window.DeviceOrientationEvent) return;
+                orientationListenersAttached = true;
+                if ('ondeviceorientationabsolute' in window) {
+                    window.addEventListener('deviceorientationabsolute', onDeviceOrientation, false);
+                }
                 window.addEventListener('deviceorientation', onDeviceOrientation, false);
             }
+
+            function requestDeviceOrientationPermission() {
+                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    DeviceOrientationEvent.requestPermission()
+                        .then(state => {
+                            if (state === 'granted') {
+                                attachOrientationListeners();
+                            }
+                        })
+                        .catch(() => {});
+                } else {
+                    attachOrientationListeners();
+                }
+            }
+
+            // Attach immediately on browsers that do not require an explicit user-gesture permission (Android/Desktop)
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission !== 'function') {
+                attachOrientationListeners();
+            }
+            map.on('rotate', syncHeadingConeToMapBearing);
 
             // Professional Navigation Stability & Anti-Jumping State
             let lastAcceptedPos = null;
             let lastAcceptedTime = 0;
             let isArrivedLocked = false;
             let lastPanCoord = null;
-            const ROAD_CORRIDOR_METERS = 7.5; // Walkable corridor considered on-road
+            let latestPositionSeq = 0;
+            const ROAD_CORRIDOR_METERS = 4.5; // Tight street-width corridor considered on-road inside subdivision
+
+            // Google Maps-style dotted walking connector when user is off-road / outside the street
+            function drawGoogleDottedConnector(fromPt, toPt, targetGroup) {
+                if (!fromPt || !toPt) return;
+                // Crisp dark-slate dots with a white-haloed grey junction anchor (matching Google Maps)
+                L.polyline([fromPt, toPt], {
+                    color: '#475569',
+                    weight: 4.5,
+                    opacity: 0.9,
+                    dashArray: '1, 9',
+                    lineCap: 'round',
+                    interactive: false,
+                    className: 'gmaps-offroad-dots'
+                }).addTo(targetGroup);
+
+                L.circleMarker(toPt, {
+                    radius: 4.5,
+                    fillColor: '#94a3b8',
+                    color: '#ffffff',
+                    weight: 2,
+                    fillOpacity: 1,
+                    interactive: false
+                }).addTo(targetGroup);
+            }
 
             async function handlePosition(rawLat, rawLng, rawAccuracy, headingVal) {
+                const mySeq = ++latestPositionSeq;
                 const now = Date.now();
                 const rawDistToDest = map.distance([rawLat, rawLng], [destCoord.lat, destCoord.lng]);
 
@@ -2149,7 +2353,7 @@ async function initGISMap(mapElementId, options = {}) {
                     }
                 }
 
-                if (rawDistToDest < 12) {
+                if (rawDistToDest < 12 && (!rawAccuracy || rawAccuracy <= 25)) {
                     isArrivedLocked = true;
                     osrmLayerGroup.clearLayers();
                     routingLayerGroup.clearLayers();
@@ -2162,7 +2366,7 @@ async function initGISMap(mapElementId, options = {}) {
                     if (timeValEl) timeValEl.textContent = '0 min';
                     if (stepInstEl) stepInstEl.innerHTML = `Welcome to <strong>${destinationName}</strong>! You have reached your destination.`;
                     if (simTipEl) simTipEl.innerHTML = '📍 Arrived at destination • Location locked';
-                    renderNavStepsUI([{ icon: '🏁', instruction: `Arrived at ${destinationName}`, distance: 0, location: [destCoord.lat, destCoord.lng] }], 0, 0, curLat, curLng);
+                    renderNavStepsUI([{ icon: '🏁', instruction: `Arrived at ${destinationName}`, distance: 0, location: [destCoord.lat, destCoord.lng] }], 0, 0, rawLat, rawLng);
 
                     L.circle([destCoord.lat, destCoord.lng], {
                         radius: 12, color: '#16a34a', weight: 3, fillColor: '#86efac', fillOpacity: 0.5
@@ -2170,7 +2374,13 @@ async function initGISMap(mapElementId, options = {}) {
                     return;
                 }
 
-                // 2. ACCURACY GATING: Filter noisy indoor readings (multipath reflections through tin roofs & concrete)
+                // 2. ACCURACY GATING: Filter noisy indoor/coarse readings
+                if (!lastAcceptedPos && rawAccuracy && rawAccuracy > 85) {
+                    if (simTipEl) {
+                        simTipEl.innerHTML = `🛰️ Refining GPS signal (±${Math.round(rawAccuracy)}m)...`;
+                    }
+                    return; // Wait for a usable initial fix instead of anchoring to a coarse cell/Wi-Fi jump
+                }
                 if (lastAcceptedPos && rawAccuracy && rawAccuracy > 30) {
                     if (simTipEl) {
                         simTipEl.innerHTML = `⚠️ Low GPS signal indoors (±${Math.round(rawAccuracy)}m) • Holding steady location`;
@@ -2189,16 +2399,18 @@ async function initGISMap(mapElementId, options = {}) {
                     const dt = (now - lastAcceptedTime) / 1000;
                     if (dt > 0.4 && dt < 12) {
                         const speed = jumpM / dt;
-                        // Pedestrian walking in subdivision is < 2.5 m/s. Suppress impossible indoor teleport spikes:
-                        if (speed > 6.5 && jumpM > 20) {
+                        // Suppress impossible indoor teleport spikes
+                        if (speed > 8.0 && jumpM > 20) {
                             if (simTipEl) {
                                 simTipEl.innerHTML = '🛰️ Suppressing indoor GPS multipath bounce...';
                             }
                             return;
                         }
                     }
-                    // Exponential Moving Average (EMA) low-pass smoothing
-                    const alpha = jumpM < 4.0 ? 0.35 : 0.70;
+                    // Accuracy-aware Exponential Moving Average (EMA) low-pass smoothing
+                    const baseAlpha = jumpM < 3.0 ? 0.28 : (jumpM < 12.0 ? 0.45 : 0.65);
+                    const accScale = (rawAccuracy && rawAccuracy > 18) ? 0.7 : 1.0;
+                    const alpha = baseAlpha * accScale;
                     curLat = lastAcceptedPos.lat + alpha * (rawLat - lastAcceptedPos.lat);
                     curLng = lastAcceptedPos.lng + alpha * (rawLng - lastAcceptedPos.lng);
                 }
@@ -2206,25 +2418,27 @@ async function initGISMap(mapElementId, options = {}) {
                 lastAcceptedTime = now;
                 userPos = { lat: curLat, lng: curLng, accuracy: rawAccuracy };
 
-                // Update heading from GPS or motion bearing
-                if (headingVal !== null && headingVal !== undefined && !isNaN(headingVal)) {
-                    updateHeadingCone(headingVal);
-                } else if (lastCoordForHeading) {
-                    const d = map.distance([lastCoordForHeading.lat, lastCoordForHeading.lng], [curLat, curLng]);
-                    if (d > 2.0) {
-                        const b = calculateBearing(lastCoordForHeading.lat, lastCoordForHeading.lng, curLat, curLng);
-                        updateHeadingCone(b);
+                // Update heading from GPS/motion ONLY if device compass sensor is not active
+                if (!hasCompassSensor) {
+                    if (headingVal !== null && headingVal !== undefined && !isNaN(headingVal)) {
+                        updateHeadingCone(headingVal);
+                    } else if (lastCoordForHeading) {
+                        const d = map.distance([lastCoordForHeading.lat, lastCoordForHeading.lng], [curLat, curLng]);
+                        if (d > 4.0) {
+                            const b = calculateBearing(lastCoordForHeading.lat, lastCoordForHeading.lng, curLat, curLng);
+                            updateHeadingCone(b);
+                            lastCoordForHeading = { lat: curLat, lng: curLng };
+                        }
+                    } else {
                         lastCoordForHeading = { lat: curLat, lng: curLng };
                     }
-                } else {
-                    lastCoordForHeading = { lat: curLat, lng: curLng };
                 }
 
                 const beaconIcon = L.divIcon({
                     className: 'subdivision-live-marker-container',
                     html: `
                         <div class="subdivision-live-beacon">
-                            <div class="user-heading-cone" id="userHeadingCone" style="transform: rotate(${currentHeading || 0}deg);">
+                            <div class="user-heading-cone" id="userHeadingCone" style="transform: rotate(${getConeScreenAngle()}deg);">
                                 <svg width="60" height="60" viewBox="0 0 60 60" style="display:block;">
                                     <defs>
                                         <radialGradient id="userBeamGlow" cx="50%" cy="50%" r="50%">
@@ -2283,6 +2497,7 @@ async function initGISMap(mapElementId, options = {}) {
 
                     const osrmTarget = internalRoadLatLngs.length > 0 ? internalRoadLatLngs[0] : highwayEntryCoord;
                     const osrm = await fetchOSRM(curLat, curLng, osrmTarget[0], osrmTarget[1]);
+                    if (mySeq !== latestPositionSeq) return; // Discard stale async OSRM response
 
                     // MERGE INTO CONTINUOUS PRIMARY ROAD ROUTE
                     const fullRouteLatLngs = [];
@@ -2331,26 +2546,17 @@ async function initGISMap(mapElementId, options = {}) {
                         handlePosition(rawLat, rawLng, rawAccuracy, headingVal);
                     });
 
-                    // Highway Map Matching: snap to active highway centerline if within 14 meters
-                    let displayCoord = [curLat, curLng];
-                    if (activeRoute.length > 1) {
-                        let minHwyDist = Infinity;
-                        let closestHwyPt = null;
-                        for (let i = 0; i < activeRoute.length - 1; i++) {
-                            const proj = projectPointToSegment([curLat, curLng], activeRoute[i], activeRoute[i + 1]);
-                            if (proj.dist < minHwyDist) {
-                                minHwyDist = proj.dist;
-                                closestHwyPt = proj.point;
-                            }
-                        }
-                        if (minHwyDist <= 14) {
-                            displayCoord = closestHwyPt;
-                        }
+                    // Outside subdivision roads: NEVER magnet/snap user marker to highway; keep true filtered GPS position
+                    const displayCoord = [curLat, curLng];
+                    const roadEntryPt = (activeRoute && activeRoute.length > 0) ? activeRoute[0] : null;
+                    const offRoadGap = roadEntryPt ? map.distance(displayCoord, roadEntryPt) : 0;
+                    if (roadEntryPt && offRoadGap > 4.0) {
+                        drawGoogleDottedConnector(displayCoord, roadEntryPt, routingLayerGroup);
                     }
 
                     if (!liveGpsMarker) {
                         liveGpsMarker = L.marker(displayCoord, { icon: beaconIcon, zIndexOffset: 1000 }).addTo(liveNavGroup);
-                        accuracyCircle = L.circle(displayCoord, {
+                        accuracyCircle = L.circle([curLat, curLng], {
                             radius: Math.min(rawAccuracy || 10, 45),
                             color: '#3b82f6',
                             weight: 1,
@@ -2359,15 +2565,19 @@ async function initGISMap(mapElementId, options = {}) {
                         }).addTo(liveNavGroup);
                     } else {
                         liveGpsMarker.setLatLng(displayCoord);
-                        accuracyCircle.setLatLng(displayCoord);
+                        accuracyCircle.setLatLng([curLat, curLng]);
                         accuracyCircle.setRadius(Math.min(rawAccuracy || 10, 45));
                     }
                     liveGpsMarker.bindTooltip('📍 Your Live Location', { direction: 'top', offset: [0, -10] });
 
                     if (simTipEl) {
-                        simTipEl.innerHTML = (preferAlternative && fullAltLatLngs)
-                            ? '🛰️ Highway Navigation • Alternative route selected'
-                            : '🛰️ Highway Navigation Active • En route to Althesa Residences';
+                        if (offRoadGap > 6.0) {
+                            simTipEl.innerHTML = '🚶 Head to nearest road • Dotted line shows walking path';
+                        } else {
+                            simTipEl.innerHTML = (preferAlternative && fullAltLatLngs)
+                                ? '🛰️ Highway Navigation • Alternative route selected'
+                                : '🛰️ Highway Navigation Active • En route to Althesa Residences';
+                        }
                     }
 
                     if (autoFollow) {
@@ -2392,7 +2602,7 @@ async function initGISMap(mapElementId, options = {}) {
                     }).addTo(routingLayerGroup).bindTooltip('📍 Destination (' + destinationName + ')');
 
                     // Compute active distance and duration
-                    let totalDist = 0;
+                    let totalDist = offRoadGap > 4.0 ? offRoadGap : 0;
                     for (let i = 0; i < activeRoute.length - 1; i++) {
                         totalDist += map.distance(activeRoute[i], activeRoute[i + 1]);
                     }
@@ -2428,7 +2638,7 @@ async function initGISMap(mapElementId, options = {}) {
                     }
 
                 } else {
-                    // INSIDE SUBDIVISION NAVIGATION (Google Maps Architecture: Clean Road Polyline + Corridor Map Matching)
+                    // INSIDE SUBDIVISION NAVIGATION (Google Maps Architecture: Clean Road Polyline + Dotted Off-Road Connector)
                     osrmLayerGroup.clearLayers();
                     routingLayerGroup.clearLayers();
 
@@ -2468,13 +2678,13 @@ async function initGISMap(mapElementId, options = {}) {
                         handlePosition(rawLat, rawLng, rawAccuracy, headingVal);
                     });
 
-                    // MAP MATCHING: If user is within walkable road corridor (<= 7.5m), lock visual marker to road centerline!
-                    const isOnRoad = userSnap && (userSnap.dist <= ROAD_CORRIDOR_METERS);
+                    // MAP MATCHING: Only lock to internal subdivision road when accurately within the tight street corridor
+                    const isOnRoad = userSnap && (userSnap.dist <= ROAD_CORRIDOR_METERS) && (!rawAccuracy || rawAccuracy <= 15);
                     const displayCoord = (isOnRoad && userSnap) ? userSnap.point : [curLat, curLng];
 
                     if (!liveGpsMarker) {
                         liveGpsMarker = L.marker(displayCoord, { icon: beaconIcon, zIndexOffset: 1000 }).addTo(liveNavGroup);
-                        accuracyCircle = L.circle(displayCoord, {
+                        accuracyCircle = L.circle([curLat, curLng], {
                             radius: Math.min(rawAccuracy || 10, 45),
                             color: '#3b82f6',
                             weight: 1,
@@ -2483,7 +2693,7 @@ async function initGISMap(mapElementId, options = {}) {
                         }).addTo(liveNavGroup);
                     } else {
                         liveGpsMarker.setLatLng(displayCoord);
-                        accuracyCircle.setLatLng(displayCoord);
+                        accuracyCircle.setLatLng([curLat, curLng]);
                         accuracyCircle.setRadius(Math.min(rawAccuracy || 10, 45));
                     }
                     liveGpsMarker.bindTooltip('📍 Your Live Location', { direction: 'top', offset: [0, -10] });
@@ -2492,7 +2702,7 @@ async function initGISMap(mapElementId, options = {}) {
                         const altNotice = (preferAlternative && altRoadLatLngs.length > 0) ? ' • Alt route' : '';
                         simTipEl.innerHTML = isOnRoad
                             ? `🛣️ Road-Lock Active • Street centerline${altNotice}`
-                            : `🚶 Walking Guide Active • Navigating towards street${altNotice}`;
+                            : `🚶 Walking Guide Active • Dotted line to street${altNotice}`;
                     }
 
                     if (autoFollow) {
@@ -2510,15 +2720,9 @@ async function initGISMap(mapElementId, options = {}) {
                     const dOffDist = destSnap ? map.distance(destSnap.point, [destCoord.lat, destCoord.lng]) : 0;
                     const remainingDist = roadDist + uOffDist + dOffDist;
 
-                    // 2. Off-Road Walking Dotted Line ONLY if genuinely off the road corridor (> 7.5m)!
-                    if (!isOnRoad && userSnap && userSnap.dist > ROAD_CORRIDOR_METERS) {
-                        L.polyline([[curLat, curLng], userSnap.point], {
-                            color: '#2563eb', weight: 3.5, opacity: 0.9, dashArray: '3, 7', lineCap: 'round', interactive: false
-                        }).addTo(routingLayerGroup);
-
-                        L.circleMarker(userSnap.point, {
-                            radius: 3.5, fillColor: '#ffffff', color: '#2563eb', weight: 2, fillOpacity: 1
-                        }).addTo(routingLayerGroup);
+                    // 2. Google Maps-style Off-Road Dotted Line when off the subdivision road corridor
+                    if (!isOnRoad && userSnap && userSnap.dist > 2.5) {
+                        drawGoogleDottedConnector([curLat, curLng], userSnap.point, routingLayerGroup);
                     }
 
                     // 3. Off-Road Walking Dotted Line from Front Road to Destination House Lot
@@ -2629,7 +2833,7 @@ async function initGISMap(mapElementId, options = {}) {
                             }
                         }
                     },
-                    { enableHighAccuracy: true, timeout: 12000, maximumAge: 3000 }
+                    { enableHighAccuracy: true, timeout: 12000, maximumAge: 1000 }
                 );
             } else {
                 if (simTipEl) {
@@ -2642,12 +2846,18 @@ async function initGISMap(mapElementId, options = {}) {
                     if (watchId !== null && navigator.geolocation) {
                         navigator.geolocation.clearWatch(watchId);
                     }
+                    if (headingRafId) {
+                        cancelAnimationFrame(headingRafId);
+                        headingRafId = null;
+                    }
                     if (recenterBtn) {
                         recenterBtn.removeEventListener('click', onRecenterClick);
                     }
                     if (window.DeviceOrientationEvent) {
+                        window.removeEventListener('deviceorientationabsolute', onDeviceOrientation, false);
                         window.removeEventListener('deviceorientation', onDeviceOrientation, false);
                     }
+                    map.off('rotate', syncHeadingConeToMapBearing);
                     map.off('dragstart', onMapDragStart);
                     map.off('zoomend', onZoomEndUpdateWeights);
                     osrmLayerGroup.clearLayers();

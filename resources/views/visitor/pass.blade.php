@@ -511,10 +511,12 @@
 
     function startVisitorGpsTracking() {
         if (!navigator.geolocation || !accessToken) return;
-        if (window._visitorTrackingWatchId) return;
+        if (mapInitialized || window._visitorTrackingWatchId) return;
 
         window._visitorTrackingWatchId = navigator.geolocation.watchPosition(
             (pos) => {
+                if (mapInitialized) return;
+                if (pos.coords.accuracy && pos.coords.accuracy > 50) return;
                 const nowTs = Date.now();
                 if (!window._lastPassGpsPing || (nowTs - window._lastPassGpsPing >= 3500)) {
                     window._lastPassGpsPing = nowTs;
@@ -530,7 +532,7 @@
                 }
             },
             (err) => console.warn('Visitor GPS notice:', err.message),
-            { enableHighAccuracy: true, timeout: 12000, maximumAge: 3000 }
+            { enableHighAccuracy: true, timeout: 12000, maximumAge: 1000 }
         );
     }
 
