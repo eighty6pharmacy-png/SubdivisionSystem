@@ -623,6 +623,8 @@ if (!function_exists('getReservationFees')) {
                         'amount' => $res->amount,
                         'date' => \Carbon\Carbon::parse($res->reservation_date)->format('Y-m-d'),
                         'deadline' => $res->deadline_date ? \Carbon\Carbon::parse($res->deadline_date)->format('Y-m-d') : null,
+                        'expiry_reminder_5d_sent_at' => $res->expiry_reminder_5d_sent_at?->format('M d, Y h:i A'),
+                        'expired_reminder_sent_at' => $res->expired_reminder_sent_at?->format('M d, Y h:i A'),
                         'status' => $res->status,
                         'agent' => 'Admin',
                         'notes' => 'Database record',

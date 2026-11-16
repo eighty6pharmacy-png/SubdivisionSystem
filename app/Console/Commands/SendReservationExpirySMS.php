@@ -23,7 +23,7 @@ class SendReservationExpirySMS extends Command
      *
      * @var string
      */
-    protected $description = 'Send SMS reminders to buyers when their reservation deadline is 3 days away or 1 day past due.';
+    protected $description = 'Send automated SMS reminders to buyers 5 days before their reservation deadline or 1 day past due.';
 
     /**
      * Execute the console command.
@@ -37,14 +37,15 @@ class SendReservationExpirySMS extends Command
 
         $sentCount = 0;
 
-        // 1. Reservations expiring in exactly 3 days
-        $expiringIn3Days = Reservation::whereIn('status', $activeStatuses)
+        // 1. Reservations expiring in exactly 5 days (not yet reminded)
+        $expiringIn5Days = Reservation::whereIn('status', $activeStatuses)
             ->whereNotNull('deadline_date')
-            ->whereDate('deadline_date', Carbon::now()->addDays(3)->toDateString())
+            ->whereNull('expiry_reminder_5d_sent_at')
+            ->whereDate('deadline_date', Carbon::now()->addDays(5)->toDateString())
             ->with(['lot', 'buyerMasterList', 'user'])
             ->get();
 
-        foreach ($expiringIn3Days as $reservation) {
+        foreach ($expiringIn5Days as $reservation) {
             $phone = $this->resolveContactNumber($reservation);
             if (! $phone) {
                 continue;
@@ -54,16 +55,18 @@ class SendReservationExpirySMS extends Command
             $lotLabel = $this->resolveLotLabel($reservation);
             $deadlineStr = Carbon::parse($reservation->deadline_date)->format('M d, Y');
 
-            $msg = "Althesa Subd Reminder: Hi {$buyerName}, your lot reservation for {$lotLabel} will expire in 3 days on {$deadlineStr}. Please complete your downpayment or contact the Admin office to avoid cancellation.";
+            $msg = "Althesa Subd Reminder: Hi {$buyerName}, your lot reservation for {$lotLabel} will expire in 5 days on {$deadlineStr}. Please complete your downpayment or contact the Admin office to avoid cancellation.";
 
             if ($this->dispatchSms($phone, $msg)) {
+                $reservation->update(['expiry_reminder_5d_sent_at' => now()]);
                 $sentCount++;
             }
         }
 
-        // 2. Reservations that expired yesterday (1 day past deadline)
+        // 2. Reservations that expired yesterday (1 day past deadline, not yet reminded)
         $expiredYesterday = Reservation::whereIn('status', $activeStatuses)
             ->whereNotNull('deadline_date')
+            ->whereNull('expired_reminder_sent_at')
             ->whereDate('deadline_date', Carbon::now()->subDays(1)->toDateString())
             ->with(['lot', 'buyerMasterList', 'user'])
             ->get();
@@ -81,6 +84,7 @@ class SendReservationExpirySMS extends Command
             $msg = "URGENT - Althesa Subd: Hi {$buyerName}, your reservation for {$lotLabel} expired yesterday ({$deadlineStr}). Please contact the Admin office immediately to renew or proceed with your downpayment.";
 
             if ($this->dispatchSms($phone, $msg)) {
+                $reservation->update(['expired_reminder_sent_at' => now()]);
                 $sentCount++;
             }
         }

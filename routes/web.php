@@ -1942,6 +1942,34 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             ->where('status', '!=', \App\Enums\ReservationStatus::Converted->value)
             ->update(['status' => \App\Enums\ReservationStatus::Converted->value]);
 
+        // Trigger automated 5-day-before-expiry & 1-day-overdue SMS reminders after response
+        // if any active reservations are due today and haven't been reminded yet (works even without cron).
+        $hasPendingAutoSms = \App\Models\Reservation::whereIn('status', [
+                \App\Enums\ReservationStatus::Pending->value,
+                \App\Enums\ReservationStatus::Reserved->value,
+            ])
+            ->whereNotNull('deadline_date')
+            ->where(function ($q) {
+                $q->where(function ($sub) {
+                    $sub->whereNull('expiry_reminder_5d_sent_at')
+                        ->whereDate('deadline_date', now()->addDays(5)->toDateString());
+                })->orWhere(function ($sub) {
+                    $sub->whereNull('expired_reminder_sent_at')
+                        ->whereDate('deadline_date', now()->subDays(1)->toDateString());
+                });
+            })
+            ->exists();
+
+        if ($hasPendingAutoSms && \Illuminate\Support\Facades\Cache::add('reservation_expiry_sms_dispatch_lock', true, now()->addMinutes(5))) {
+            dispatch(function () {
+                try {
+                    \Illuminate\Support\Facades\Artisan::call('sms:reservation-expiry');
+                } finally {
+                    \Illuminate\Support\Facades\Cache::forget('reservation_expiry_sms_dispatch_lock');
+                }
+            })->afterResponse();
+        }
+
         $yearly_stats = [
             '2026' => [
                 'May' => 400000,

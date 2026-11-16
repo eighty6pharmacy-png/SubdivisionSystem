@@ -33,6 +33,9 @@
             <div
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
                 <h2 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0;">Reservation Pipeline Summary</h2>
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; background: #ecfeff; border: 1px solid #a5f3fc; color: #0e7490; font-size: 12px; font-weight: 700;">
+                    📱 Auto SMS: Active (5 days before expiry &amp; 1 day overdue)
+                </span>
             </div>
 
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px;">
@@ -195,6 +198,11 @@
                                         {{ !empty($bill['deadline']) ? date('M d, Y', strtotime($bill['deadline'])) : '—' }}
                                     </div>
                                     <div style="font-size: 11px; margin-top: 4px; font-weight: 700; color: {{ $deadlineOverdue ? '#dc2626' : '#64748b' }};">{{ $deadlineNote }}</div>
+                                    @if(!empty($bill['expiry_reminder_5d_sent_at']))
+                                        <div style="font-size: 10px; margin-top: 3px; font-weight: 700; color: #0369a1;">✓ 5-day Auto-SMS sent</div>
+                                    @elseif($statusKey === 'active' && !empty($bill['deadline']) && isset($daysLeft) && $daysLeft >= 5)
+                                        <div style="font-size: 10px; margin-top: 3px; font-weight: 600; color: #0e7490;">Auto-SMS: {{ \Carbon\Carbon::parse($bill['deadline'])->subDays(5)->format('M d') }}</div>
+                                    @endif
                                 </td>
                                 <td class="status-cell">
                                     @if($statusKey === 'active')
@@ -260,6 +268,7 @@
                             <span style="font-size: 12px; color: #64748b;">Deadline</span>
                             <div id="modalDeadline" style="font-size: 24px; font-weight: 700; color: #0f172a; margin-top: 4px;"></div>
                             <div id="modalDeadlineNote" style="font-size: 13px; font-weight: 700; margin-top: 8px;"></div>
+                            <div id="modalAutoSmsNote" style="font-size: 12px; font-weight: 600; margin-top: 6px; color: #0369a1;"></div>
                         </div>
                     </div>
 
@@ -602,7 +611,9 @@
             document.getElementById('modalDate').textContent = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
             const deadlineEl = document.getElementById('modalDeadline');
             const deadlineNoteEl = document.getElementById('modalDeadlineNote');
+            const autoSmsNoteEl = document.getElementById('modalAutoSmsNote');
             const deadlineCard = document.getElementById('modalDeadlineCard');
+            autoSmsNoteEl.textContent = '';
             if (bill.deadline) {
                 const deadlineObj = new Date(bill.deadline + 'T00:00:00');
                 const today = new Date();
@@ -625,6 +636,17 @@
                     deadlineNoteEl.style.color = '#047857';
                     deadlineCard.style.borderColor = '#e2e8f0';
                     deadlineCard.style.background = '#f8fafc';
+                }
+
+                if (bill.expiry_reminder_5d_sent_at) {
+                    autoSmsNoteEl.textContent = `✓ Automated 5-day SMS reminder sent on ${bill.expiry_reminder_5d_sent_at}.`;
+                } else if (bill.status === 'Reserved' || bill.status === 'Pending') {
+                    if (days >= 5) {
+                        const autoDate = new Date(deadlineObj);
+                        autoDate.setDate(autoDate.getDate() - 5);
+                        const autoDateStr = autoDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        autoSmsNoteEl.textContent = `📱 Automated SMS reminder scheduled for ${autoDateStr} (5 days before expiration).`;
+                    }
                 }
             } else {
                 deadlineEl.textContent = '—';

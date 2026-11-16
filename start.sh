@@ -12,6 +12,9 @@ chmod -R a+rX storage/app/public
 echo "🚀 Starting Laravel Queue Worker..."
 php artisan queue:work --sleep=3 --tries=3 &
 
+echo "⏰ Starting Laravel Scheduler..."
+php artisan schedule:work &
+
 echo "🌐 Starting Web Server..."
 # Check if Nixpacks generated the production Nginx config
 if [ -f /assets/nginx.conf ]; then

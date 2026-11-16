@@ -20,6 +20,8 @@ class Reservation extends Model
         'status',
         'reservation_date',
         'deadline_date',
+        'expiry_reminder_5d_sent_at',
+        'expired_reminder_sent_at',
         'amount',
         'notes',
         'first_name',
@@ -30,6 +32,9 @@ class Reservation extends Model
     {
         return [
             'reservation_date' => 'date',
+            'deadline_date' => 'date',
+            'expiry_reminder_5d_sent_at' => 'datetime',
+            'expired_reminder_sent_at' => 'datetime',
         ];
     }
 
