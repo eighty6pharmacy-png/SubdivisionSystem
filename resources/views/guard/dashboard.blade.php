@@ -480,7 +480,8 @@
                         showRouting: !!targetNode,
                         endNode: targetNode,
                         showCalibration: false,
-                        liveNavigation: false
+                        liveNavigation: false,
+                        bearing: -125.35
                     }).then(mapInstance => {
                         window.activeGuardMap = mapInstance;
                     }).catch(err => {

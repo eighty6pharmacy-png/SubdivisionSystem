@@ -778,6 +778,8 @@ async function initGISMap(mapElementId, options = {}) {
         scrollWheelZoom: config.interactive,
         doubleClickZoom: config.interactive,
         touchZoom: config.interactive ? 'center' : false,
+        zoomSnap: 0,
+        zoomDelta: 0.5,
         maxZoom: 22,
         rotate: true,
         touchRotate: false, // Disabled leaflet-rotate's hyper-sensitive TouchRotate; handled below with deadband
@@ -1539,6 +1541,47 @@ async function initGISMap(mapElementId, options = {}) {
             return snap ? snap.nodeId : null;
         }
 
+        // Google Maps-style dotted grey walking connector (off-road to/from street)
+        function drawGoogleDottedConnector(fromPt, toPt, targetGroup) {
+            if (!fromPt || !toPt) return;
+            L.polyline([fromPt, toPt], {
+                color: '#5f6368',
+                weight: 4,
+                opacity: 0.9,
+                dashArray: '1, 8',
+                lineCap: 'round',
+                interactive: false,
+                className: 'gmaps-offroad-dots'
+            }).addTo(targetGroup);
+
+            L.circleMarker(toPt, {
+                radius: 4,
+                fillColor: '#9aa0a6',
+                color: '#ffffff',
+                weight: 2,
+                fillOpacity: 1,
+                interactive: false
+            }).addTo(targetGroup);
+        }
+
+        // Google Maps-style red teardrop location pin on the destination house
+        function createGoogleDestPinMarker(latlng, tooltipText) {
+            const pinIcon = L.divIcon({
+                className: 'gmaps-dest-pin-icon',
+                html: `<svg width="32" height="40" viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));display:block;">
+                    <path d="M16 1C8.268 1 2 7.268 2 15c0 9.75 14 23.5 14 23.5S30 24.75 30 15C30 7.268 23.732 1 16 1z" fill="#EA4335" stroke="#B31412" stroke-width="1.5"/>
+                    <circle cx="16" cy="15" r="5.5" fill="#7A0C06" fill-opacity="0.22"/>
+                    <circle cx="16" cy="15" r="4.5" fill="#FFFFFF"/>
+                </svg>`,
+                iconSize: [32, 40],
+                iconAnchor: [16, 39],
+                tooltipAnchor: [0, -36]
+            });
+            const m = L.marker(latlng, { icon: pinIcon, zIndexOffset: 900 }).addTo(routingLayerGroup);
+            if (tooltipText) m.bindTooltip(tooltipText, { direction: 'top' });
+            return m;
+        }
+
         // Smooths intersection turns with a natural vehicle turning radius (prevents sharp needle/wiggle artifacts)
         function smoothTurnRoute(rawCoords, maxRadius = 3.5) {
             if (!rawCoords || rawCoords.length < 3) return rawCoords || [];
@@ -2014,11 +2057,13 @@ async function initGISMap(mapElementId, options = {}) {
 
             function getRouteStrokeWidth(z) {
                 const zoom = (z !== undefined && z !== null) ? z : map.getZoom();
-                if (zoom >= 19) return { activeCore: 5.5, activeCasing: 8.5, altCore: 4.5, altCasing: 7.5 };
-                if (zoom >= 17) return { activeCore: 4.5, activeCasing: 7.0, altCore: 3.5, altCasing: 6.0 };
-                if (zoom >= 15) return { activeCore: 3.5, activeCasing: 5.5, altCore: 2.8, altCasing: 4.8 };
-                if (zoom >= 13) return { activeCore: 2.5, activeCasing: 4.2, altCore: 2.0, altCasing: 3.5 };
-                return { activeCore: 2.0, activeCasing: 3.2, altCore: 1.5, altCasing: 2.5 };
+                if (zoom >= 20) return { activeCore: 10.0, activeCasing: 12.4, altCore: 8.0, altCasing: 10.2 };
+                if (zoom >= 19) return { activeCore: 8.5,  activeCasing: 10.8, altCore: 6.8, altCasing: 8.8 };
+                if (zoom >= 18) return { activeCore: 7.2,  activeCasing: 9.4,  altCore: 5.8, altCasing: 7.8 };
+                if (zoom >= 17) return { activeCore: 6.0,  activeCasing: 8.0,  altCore: 4.8, altCasing: 6.6 };
+                if (zoom >= 15) return { activeCore: 5.0,  activeCasing: 7.0,  altCore: 4.0, altCasing: 5.8 };
+                if (zoom >= 13) return { activeCore: 4.2,  activeCasing: 6.0,  altCore: 3.4, altCasing: 5.0 };
+                return { activeCore: 3.5, activeCasing: 5.2, altCore: 2.8, altCasing: 4.4 };
             }
 
             // Dual Route Visual Renderer (Vibrant blue active route + clickable slate/grey alternative route)
@@ -2048,21 +2093,21 @@ async function initGISMap(mapElementId, options = {}) {
                 const secondaryCoords = rawSecondary ? smoothTurnRoute(rawSecondary, 3.5) : null;
                 const strokeW = getRouteStrokeWidth(map.getZoom());
 
-                // 1. Draw Alternative / Secondary route underneath in slate/grey
+                // 1. Draw Alternative / Secondary route underneath in Google Maps grey
                 if (secondaryCoords && secondaryCoords.length > 1) {
                     const casing = L.polyline(secondaryCoords, {
-                        color: '#475569',
+                        color: '#70757a',
                         weight: strokeW.altCasing,
-                        opacity: 0.85,
+                        opacity: 0.9,
                         lineCap: 'round',
                         lineJoin: 'round',
                         className: 'route-alt-polyline route-alt-casing'
                     }).addTo(routingLayerGroup);
 
                     const core = L.polyline(secondaryCoords, {
-                        color: '#64748b',
+                        color: '#bdc1c6',
                         weight: strokeW.altCore,
-                        opacity: 0.95,
+                        opacity: 0.98,
                         lineCap: 'round',
                         lineJoin: 'round',
                         className: 'route-alt-polyline route-alt-core'
@@ -2082,12 +2127,12 @@ async function initGISMap(mapElementId, options = {}) {
                     core.on('click', handleAltClick);
                 }
 
-                // 2. Draw Active / Suggested route on top in vibrant blue
+                // 2. Draw Active / Suggested route on top in Google Maps deep blue (#1F3BFF) with thin dark border (#0B1033)
                 if (activeCoords && activeCoords.length > 1) {
                     L.polyline(activeCoords, {
-                        color: '#1d4ed8',
+                        color: '#0b1033',
                         weight: strokeW.activeCasing,
-                        opacity: 0.95,
+                        opacity: 0.9,
                         lineCap: 'round',
                         lineJoin: 'round',
                         interactive: false,
@@ -2095,7 +2140,7 @@ async function initGISMap(mapElementId, options = {}) {
                     }).addTo(routingLayerGroup);
 
                     L.polyline(activeCoords, {
-                        color: '#2563eb',
+                        color: '#1f3bff',
                         weight: strokeW.activeCore,
                         opacity: 1,
                         lineCap: 'round',
@@ -2147,25 +2192,18 @@ async function initGISMap(mapElementId, options = {}) {
                     initDist += map.distance(activeLatLngs[i], activeLatLngs[i + 1]);
                 }
 
-                // Dotted off-road walking line from road centerline to house (Google Maps style)
+                // Dotted grey walking line from road centerline to house (Google Maps style)
                 const lastRoadPt = activeLatLngs[activeLatLngs.length - 1];
                 if (lastRoadPt) {
                     const offRoadDist = map.distance(lastRoadPt, [destCoord.lat, destCoord.lng]);
                     initDist += offRoadDist;
                     if (offRoadDist > 1.5) {
-                        L.polyline([lastRoadPt, [destCoord.lat, destCoord.lng]], {
-                            color: '#ef4444', weight: 3.5, opacity: 0.9, dashArray: '3, 7', lineCap: 'round', interactive: false
-                        }).addTo(routingLayerGroup);
-                        L.circleMarker(lastRoadPt, {
-                            radius: 3.5, fillColor: '#ffffff', color: '#ef4444', weight: 2, fillOpacity: 1
-                        }).addTo(routingLayerGroup);
+                        drawGoogleDottedConnector([destCoord.lat, destCoord.lng], lastRoadPt, routingLayerGroup);
                     }
                 }
 
-                // Destination Marker
-                L.circleMarker([destCoord.lat, destCoord.lng], {
-                    radius: 9, fillColor: '#ef4444', color: '#ffffff', weight: 3, fillOpacity: 1
-                }).addTo(routingLayerGroup).bindTooltip(`📍 Destination (${destinationName})`);
+                // Google Maps Red Location Pin on Destination House
+                createGoogleDestPinMarker([destCoord.lat, destCoord.lng], `📍 Destination (${destinationName})`);
 
                 if (distValEl) distValEl.textContent = fmtDist(initDist);
                 if (timeValEl) timeValEl.textContent = fmtTime(initDist / 4.16);
@@ -2366,16 +2404,20 @@ async function initGISMap(mapElementId, options = {}) {
                 } else {
                     const dt = lastHeadingFrameMs ? Math.min((nowMs - lastHeadingFrameMs) / 1000, 0.1) : 0.016;
                     const diff = shortestAngleDiff(targetHeading, currentHeading);
-                    // Deadband: ignore sub-1.2 deg magnetometer shimmer when nearly still
-                    if (Math.abs(diff) < 1.2) {
+                    // Tight deadband (0.5 deg) + fast 55ms response for real-time Google Maps-like POV
+                    if (Math.abs(diff) < 0.5) {
+                        currentHeading = targetHeading;
                         lastHeadingFrameMs = nowMs;
+                        if (isHeadingUp && typeof map.setBearing === 'function') {
+                            map.setBearing(-currentHeading);
+                        }
+                        syncHeadingConeToMapBearing();
                         return;
                     }
-                    // Time-constant exponential low-pass filter (~140ms response)
-                    const smoothAlpha = 1 - Math.exp(-dt / 0.14);
+                    const smoothAlpha = 1 - Math.exp(-dt / 0.055);
                     currentHeading = ((currentHeading + diff * smoothAlpha) % 360 + 360) % 360;
 
-                    if (Math.abs(shortestAngleDiff(targetHeading, currentHeading)) >= 1.2) {
+                    if (Math.abs(shortestAngleDiff(targetHeading, currentHeading)) >= 0.5) {
                         headingRafId = requestAnimationFrame(stepHeadingAnimation);
                     }
                 }
@@ -2384,7 +2426,7 @@ async function initGISMap(mapElementId, options = {}) {
                 if (isHeadingUp && typeof map.setBearing === 'function') {
                     const curBearing = (typeof map.getBearing === 'function') ? map.getBearing() : 0;
                     const desiredBearing = -currentHeading;
-                    if (Math.abs(shortestAngleDiff(desiredBearing, curBearing)) >= 0.35) {
+                    if (Math.abs(shortestAngleDiff(desiredBearing, curBearing)) >= 0.25) {
                         map.setBearing(desiredBearing);
                     }
                 }
@@ -2403,8 +2445,7 @@ async function initGISMap(mapElementId, options = {}) {
                     syncHeadingConeToMapBearing();
                     return;
                 }
-                // Ignore tiny raw jitter before scheduling animation
-                if (Math.abs(shortestAngleDiff(normalized, targetHeading)) < 1.0) return;
+                if (Math.abs(shortestAngleDiff(normalized, targetHeading)) < 0.5) return;
                 targetHeading = normalized;
                 if (!headingRafId) {
                     lastHeadingFrameMs = performance.now();
@@ -2434,12 +2475,12 @@ async function initGISMap(mapElementId, options = {}) {
                 const cG = Math.cos(g), sG = Math.sin(g);
 
                 let east, north;
-                if (Math.abs(cB) > 0.5) {
-                    // Phone is mostly flat (|beta| < 60 deg): project device +Y (top edge) onto horizontal plane
+                if (Math.abs(cB) > 0.25) {
+                    // Phone is mostly flat/tilted in hand (|beta| < 75 deg): project device +Y (top edge) onto horizontal plane
                     east = -sA * cB;
                     north = cA * cB;
                 } else {
-                    // Phone is held upright (|beta| >= 60 deg): project device -Z (back of phone) onto horizontal plane
+                    // Phone is held upright (|beta| >= 75 deg): project device -Z (back of phone) onto horizontal plane
                     east = -cA * sG - sA * sB * cG;
                     north = -sA * sG + cA * sB * cG;
                 }
@@ -2464,11 +2505,9 @@ async function initGISMap(mapElementId, options = {}) {
                         hasCompassSensor = true;
                         h = computeTiltCompensatedHeading(e.alpha, e.beta, e.gamma);
                     }
-                } else if (!hasAbsoluteCompass && e.alpha !== null && e.alpha !== undefined) {
-                    // Relative fallback only if device never emits absolute orientation
-                    hasCompassSensor = true;
-                    h = computeTiltCompensatedHeading(e.alpha, e.beta, e.gamma);
                 }
+                // Note: ignore relative (non-absolute) deviceorientation events so arbitrary starting angles
+                // never override true-North GPS course bearing.
                 if (h !== null && !isNaN(h)) {
                     h = (h + getScreenOrientationAngle() + 360) % 360;
                     updateHeadingCone(h);
@@ -2551,30 +2590,6 @@ async function initGISMap(mapElementId, options = {}) {
                         })
                     }).catch(() => {});
                 }
-            }
-
-            // Google Maps-style dotted walking connector when user is off-road / outside the street
-            function drawGoogleDottedConnector(fromPt, toPt, targetGroup) {
-                if (!fromPt || !toPt) return;
-                // Crisp dark-slate dots with a white-haloed grey junction anchor (matching Google Maps)
-                L.polyline([fromPt, toPt], {
-                    color: '#475569',
-                    weight: 4.5,
-                    opacity: 0.9,
-                    dashArray: '1, 9',
-                    lineCap: 'round',
-                    interactive: false,
-                    className: 'gmaps-offroad-dots'
-                }).addTo(targetGroup);
-
-                L.circleMarker(toPt, {
-                    radius: 4.5,
-                    fillColor: '#94a3b8',
-                    color: '#ffffff',
-                    weight: 2,
-                    fillOpacity: 1,
-                    interactive: false
-                }).addTo(targetGroup);
             }
 
             async function handlePosition(rawLat, rawLng, rawAccuracy, headingVal) {
@@ -2686,22 +2701,23 @@ async function initGISMap(mapElementId, options = {}) {
                     html: `
                         <div class="subdivision-live-beacon">
                             <div class="user-heading-cone" id="userHeadingCone" style="transform: rotate(${getConeScreenAngle()}deg);">
-                                <svg width="60" height="60" viewBox="0 0 60 60" style="display:block;">
+                                <svg width="84" height="84" viewBox="0 0 84 84" style="display:block;">
                                     <defs>
                                         <radialGradient id="userBeamGlow" cx="50%" cy="50%" r="50%">
-                                            <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.6" />
-                                            <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.0" />
+                                            <stop offset="0%" stop-color="#4285F4" stop-opacity="0.58" />
+                                            <stop offset="65%" stop-color="#4285F4" stop-opacity="0.22" />
+                                            <stop offset="100%" stop-color="#4285F4" stop-opacity="0.0" />
                                         </radialGradient>
                                     </defs>
-                                    <path d="M 30 30 L 12 2 A 32 32 0 0 1 48 2 Z" fill="url(#userBeamGlow)" />
+                                    <path d="M 42 42 L 13 6 A 44 44 0 0 1 71 6 Z" fill="url(#userBeamGlow)" />
                                 </svg>
                             </div>
                             <div class="pulse-ring"></div>
                             <div class="center-dot"></div>
                         </div>
                     `,
-                    iconSize: [60, 60],
-                    iconAnchor: [30, 30]
+                    iconSize: [84, 84],
+                    iconAnchor: [42, 42]
                 });
 
                 const inside = checkIfInside(curLat, curLng);
@@ -2835,19 +2851,12 @@ async function initGISMap(mapElementId, options = {}) {
                         }
                     }
 
-                    // Dotted off-road to house
+                    // Dotted grey walking line to house (Google Maps style)
                     if (destSnap && map.distance(destSnap.point, [destCoord.lat, destCoord.lng]) > 1.8) {
-                        L.polyline([destSnap.point, [destCoord.lat, destCoord.lng]], {
-                            color: '#ef4444', weight: 3.5, opacity: 0.9, dashArray: '3, 7', lineCap: 'round', interactive: false
-                        }).addTo(routingLayerGroup);
-                        L.circleMarker(destSnap.point, {
-                            radius: 3.5, fillColor: '#ffffff', color: '#ef4444', weight: 2, fillOpacity: 1
-                        }).addTo(routingLayerGroup);
+                        drawGoogleDottedConnector([destCoord.lat, destCoord.lng], destSnap.point, routingLayerGroup);
                     }
 
-                    L.circleMarker([destCoord.lat, destCoord.lng], {
-                        radius: 9, fillColor: '#ef4444', color: '#ffffff', weight: 3, fillOpacity: 1
-                    }).addTo(routingLayerGroup).bindTooltip('📍 Destination (' + destinationName + ')');
+                    createGoogleDestPinMarker([destCoord.lat, destCoord.lng], '📍 Destination (' + destinationName + ')');
 
                     // Compute active distance and duration
                     let totalDist = offRoadGap > 4.0 ? offRoadGap : 0;
@@ -2974,21 +2983,13 @@ async function initGISMap(mapElementId, options = {}) {
                         drawGoogleDottedConnector([curLat, curLng], userSnap.point, routingLayerGroup);
                     }
 
-                    // 3. Off-Road Walking Dotted Line from Front Road to Destination House Lot
+                    // 3. Off-Road Walking Dotted Grey Line from Front Road to Destination House Lot
                     if (destSnap && map.distance(destSnap.point, [destCoord.lat, destCoord.lng]) > 1.8) {
-                        L.polyline([destSnap.point, [destCoord.lat, destCoord.lng]], {
-                            color: '#ef4444', weight: 3.5, opacity: 0.9, dashArray: '3, 7', lineCap: 'round', interactive: false
-                        }).addTo(routingLayerGroup);
-
-                        L.circleMarker(destSnap.point, {
-                            radius: 3.5, fillColor: '#ffffff', color: '#ef4444', weight: 2, fillOpacity: 1
-                        }).addTo(routingLayerGroup);
+                        drawGoogleDottedConnector([destCoord.lat, destCoord.lng], destSnap.point, routingLayerGroup);
                     }
 
-                    // 4. Destination Marker at House
-                    L.circleMarker([destCoord.lat, destCoord.lng], {
-                        radius: 9, fillColor: '#ef4444', color: '#ffffff', weight: 3, fillOpacity: 1
-                    }).addTo(routingLayerGroup).bindTooltip('📍 Destination (' + destinationName + ')');
+                    // 4. Google Maps Red Location Pin at House
+                    createGoogleDestPinMarker([destCoord.lat, destCoord.lng], '📍 Destination (' + destinationName + ')');
 
                     const remainingDuration = remainingDist / 4.16;
                     if (distValEl) distValEl.textContent = fmtDist(remainingDist);
@@ -3176,17 +3177,10 @@ async function initGISMap(mapElementId, options = {}) {
 
                         const lastRoadPt = latlngs[latlngs.length - 1];
                         if (lastRoadPt && map.distance(lastRoadPt, [destCoord.lat, destCoord.lng]) > 1.8) {
-                            L.polyline([lastRoadPt, [destCoord.lat, destCoord.lng]], {
-                                color: '#2563eb', weight: 3.5, opacity: 0.9, dashArray: '3, 7', lineCap: 'round', interactive: false
-                            }).addTo(routingLayerGroup);
-                            L.circleMarker(lastRoadPt, {
-                                radius: 3.5, fillColor: '#ffffff', color: '#2563eb', weight: 2, fillOpacity: 1
-                            }).addTo(routingLayerGroup);
+                            drawGoogleDottedConnector([destCoord.lat, destCoord.lng], lastRoadPt, routingLayerGroup);
                         }
 
-                        L.circleMarker([destCoord.lat, destCoord.lng], {
-                            radius: 8, fillColor: '#2563eb', color: '#fff', weight: 3, fillOpacity: 1
-                        }).addTo(routingLayerGroup).bindTooltip('Destination (' + config.endNode + ')');
+                        createGoogleDestPinMarker([destCoord.lat, destCoord.lng], 'Destination (' + config.endNode + ')');
 
                         if (!config.interactive) {
                             map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });

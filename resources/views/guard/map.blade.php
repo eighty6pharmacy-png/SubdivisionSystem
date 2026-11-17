@@ -91,14 +91,6 @@
             <span id="activeVisitorsDedicatedCount" style="font-size: 13px; font-weight: 700; background: #0f172a; color: #38bdf8; padding: 8px 16px; border-radius: 20px; border: 1px solid #334155;">
                 0 Active Visitors
             </span>
-            <div style="display: inline-flex; align-items: center; gap: 4px; background: #f1f5f9; padding: 4px; border-radius: 8px; border: 1px solid #cbd5e1;" title="Rotate Map (or Shift+Drag / Two-finger twist)">
-                <button type="button" onclick="rotateDedicatedMap(-45)" class="btn btn-secondary" style="padding: 4px 10px; font-size: 13px; font-weight: 700; border-radius: 6px;">↺</button>
-                <button type="button" onclick="resetDedicatedMapRotation()" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px; font-weight: 700; border-radius: 6px;">🧭 0°</button>
-                <button type="button" onclick="rotateDedicatedMap(45)" class="btn btn-secondary" style="padding: 4px 10px; font-size: 13px; font-weight: 700; border-radius: 6px;">↻</button>
-            </div>
-            <button type="button" onclick="centerDedicatedMap()" class="btn btn-secondary" style="padding: 8px 14px; font-size: 13px; font-weight: 700; border-radius: 8px;">
-                🎯 Center Map
-            </button>
             <a href="/guard/dashboard" class="btn btn-primary" style="padding: 8px 16px; font-size: 13px; font-weight: 700; border-radius: 8px; background: var(--guard-primary);">
                 🛡️ Gate Scanner
             </a>
@@ -214,17 +206,6 @@
             t.textContent = text;
             b.style.display = 'flex';
         }
-    }
-
-    function rotateDedicatedMap(deltaDeg) {
-        if (!dedicatedMapInstance || typeof dedicatedMapInstance.setBearing !== 'function') return;
-        const current = typeof dedicatedMapInstance.getBearing === 'function' ? dedicatedMapInstance.getBearing() : 0;
-        dedicatedMapInstance.setBearing(current + deltaDeg);
-    }
-
-    function resetDedicatedMapRotation() {
-        if (!dedicatedMapInstance || typeof dedicatedMapInstance.setBearing !== 'function') return;
-        dedicatedMapInstance.setBearing(0);
     }
 
     function getVisitorAlertState(vis) {
@@ -347,7 +328,8 @@
                 interactive: true,
                 showRouting: false,
                 showCalibration: false,
-                liveNavigation: false
+                liveNavigation: false,
+                bearing: -125.35
             });
             setTimeout(() => {
                 if (dedicatedMapInstance) dedicatedMapInstance.invalidateSize();
@@ -357,20 +339,6 @@
         } catch (err) {
             console.warn('Dedicated map init error:', err);
             initPusher();
-        }
-    }
-
-    function centerDedicatedMap() {
-        if (!dedicatedMapInstance) return;
-        if (liveVisitorMarkers.size > 0) {
-            const group = [];
-            liveVisitorMarkers.forEach(item => {
-                const latlng = item.marker.getLatLng();
-                group.push([latlng.lat, latlng.lng]);
-            });
-            dedicatedMapInstance.fitBounds(L.latLngBounds(group), { padding: [60, 60], maxZoom: 19 });
-        } else {
-            dedicatedMapInstance.setView([13.5855, 123.2730], 18);
         }
     }
 
@@ -523,12 +491,28 @@
         fetch('/api/guard/live-visitors')
             .then(res => res.json())
             .then(visitors => {
-                if (Array.isArray(visitors)) {
-                    visitors.forEach(v => {
-                        if (v.lat && v.lng) {
-                            onVisitorLocationUpdate(v);
+                if (!Array.isArray(visitors)) return;
+
+                const activeIds = new Set(visitors.map(v => v.visitor_id));
+                let removed = false;
+                liveVisitorMarkers.forEach((entry, vId) => {
+                    if (!activeIds.has(vId)) {
+                        if (dedicatedMapInstance && entry.marker) {
+                            dedicatedMapInstance.removeLayer(entry.marker);
                         }
-                    });
+                        liveVisitorMarkers.delete(vId);
+                        removed = true;
+                    }
+                });
+
+                visitors.forEach(v => {
+                    if (v.lat && v.lng) {
+                        onVisitorLocationUpdate(v);
+                    }
+                });
+
+                if (removed) {
+                    renderDedicatedVisitorsList();
                 }
             })
             .catch(err => console.warn('Fetch live visitors notice:', err));

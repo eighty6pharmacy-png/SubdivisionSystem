@@ -33,6 +33,13 @@ class Visitor extends Model
         'is_at_destination',
     ];
 
+    protected $casts = [
+        'last_ping_at' => 'datetime',
+        'is_at_destination' => 'boolean',
+        'current_lat' => 'float',
+        'current_lng' => 'float',
+    ];
+
     public function host(): BelongsTo
     {
         return $this->belongsTo(User::class, 'resident_id');
