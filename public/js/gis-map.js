@@ -747,8 +747,32 @@ async function initGISMap(mapElementId, options = {}) {
         });
     }
 
+    // Ensure L.Renderer (SVG/Canvas) keeps leaflet-zoom-animated on Leaflet 1.9.4+ with leaflet-rotate
+    // and does NOT re-project/reposition on every mid-gesture 'rotate' frame (prevents floating over basemap tiles)
+    if (typeof L !== 'undefined' && L.Renderer && !L.Renderer.prototype.__althesaRotatePatched) {
+        L.Renderer.prototype.__althesaRotatePatched = true;
+        const origRendererOnAdd = L.Renderer.prototype.onAdd;
+        L.Renderer.prototype.onAdd = function () {
+            origRendererOnAdd.apply(this, arguments);
+            if (this._map && this._map._rotate && this._zoomAnimated && this._container) {
+                this._container.classList.add('leaflet-zoom-animated');
+            }
+        };
+        const origGetEvents = L.Renderer.prototype.getEvents;
+        L.Renderer.prototype.getEvents = function () {
+            const events = origGetEvents.apply(this, arguments);
+            if (events && events.rotate) {
+                delete events.rotate;
+                events.rotateend = this._update;
+            }
+            return events;
+        };
+    }
+
     // Initialize Leaflet Map at Real-World Subdivision Coordinates (North-Up bearing: 0 for true satellite alignment)
     const map = L.map(mapElementId, {
+        preferCanvas: true,
+        renderer: L.canvas({ padding: 0.6 }),
         zoomControl: config.interactive,
         dragging: config.interactive,
         scrollWheelZoom: config.interactive,
@@ -756,7 +780,7 @@ async function initGISMap(mapElementId, options = {}) {
         touchZoom: config.interactive ? 'center' : false,
         maxZoom: 22,
         rotate: true,
-        touchRotate: true,
+        touchRotate: false, // Disabled leaflet-rotate's hyper-sensitive TouchRotate; handled below with deadband
         shiftKeyRotate: true,
         bearing: config.bearing !== undefined ? config.bearing : 0,
         rotateControl: {
@@ -765,31 +789,108 @@ async function initGISMap(mapElementId, options = {}) {
         },
     }).setView([calib.anchorLat, calib.anchorLng], 18);
 
-    // Prevent 2-finger rotate/pinch gestures from dragging or drifting the map
-    if (config.interactive && map.dragging) {
+    // Clean 2-finger gesture arbiter: separates pinch-zoom from intentional twist-rotate (>10 deg)
+    // and prevents TouchGestures / dragging from fighting setBearing()
+    if (config.interactive) {
         let multiTouchActive = false;
         let multiTouchCooldownTimer = null;
+        let gestureMode = null; // null | 'zoom' | 'rotate'
+        let startDist = 0;
+        let startAngle = 0;
+        let startBearing = 0;
+        let rotateRafId = null;
+        let pendingBearing = null;
         const mapEl = map.getContainer();
+
+        const getTouchMetrics = (t1, t2) => {
+            const dx = t2.clientX - t1.clientX;
+            const dy = t2.clientY - t1.clientY;
+            return {
+                dist: Math.hypot(dx, dy),
+                angle: Math.atan2(dy, dx) * (180 / Math.PI)
+            };
+        };
+
+        const normAngleDiff = (a, b) => ((a - b + 540) % 360) - 180;
 
         const onMapTouchStart = (e) => {
             if (e.touches && e.touches.length >= 2) {
                 multiTouchActive = true;
+                gestureMode = null;
                 if (multiTouchCooldownTimer) {
                     clearTimeout(multiTouchCooldownTimer);
                     multiTouchCooldownTimer = null;
                 }
-                if (map.dragging.enabled()) {
+                if (map.dragging && map.dragging.enabled()) {
                     map.dragging.disable();
+                }
+                if (typeof map._stop === 'function') {
+                    map._stop();
+                }
+                const m = getTouchMetrics(e.touches[0], e.touches[1]);
+                startDist = m.dist;
+                startAngle = m.angle;
+                startBearing = (typeof map.getBearing === 'function') ? map.getBearing() : 0;
+            }
+        };
+
+        const onMapTouchMove = (e) => {
+            if (!multiTouchActive || !e.touches || e.touches.length < 2) return;
+            const m = getTouchMetrics(e.touches[0], e.touches[1]);
+            const dDist = Math.abs(m.dist - startDist);
+            const dAngle = normAngleDiff(m.angle, startAngle);
+            const ROTATE_DEADBAND_DEG = 10;
+            const ZOOM_THRESHOLD_PX = 45;
+
+            if (!gestureMode) {
+                if (dDist >= ZOOM_THRESHOLD_PX) {
+                    gestureMode = 'zoom';
+                } else if (Math.abs(dAngle) >= ROTATE_DEADBAND_DEG) {
+                    gestureMode = 'rotate';
+                    if (map.touchZoom) {
+                        if (typeof map.touchZoom._onTouchEnd === 'function') {
+                            map.touchZoom._onTouchEnd();
+                        }
+                        if (map.touchZoom.enabled()) {
+                            map.touchZoom.disable();
+                        }
+                    }
+                }
+            }
+
+            if (gestureMode === 'rotate' && typeof map.setBearing === 'function') {
+                const effectiveAngle = dAngle - Math.sign(dAngle) * ROTATE_DEADBAND_DEG;
+                pendingBearing = startBearing + effectiveAngle;
+                if (!rotateRafId) {
+                    rotateRafId = requestAnimationFrame(() => {
+                        rotateRafId = null;
+                        if (pendingBearing !== null && typeof map.setBearing === 'function') {
+                            map.setBearing(pendingBearing);
+                        }
+                    });
                 }
             }
         };
 
         const onMapTouchEnd = (e) => {
             if (multiTouchActive && (!e.touches || e.touches.length === 0)) {
+                const wasRotating = (gestureMode === 'rotate');
+                gestureMode = null;
+                pendingBearing = null;
+                if (rotateRafId) {
+                    cancelAnimationFrame(rotateRafId);
+                    rotateRafId = null;
+                }
+                if (wasRotating) {
+                    map.fire('rotateend');
+                }
                 if (multiTouchCooldownTimer) clearTimeout(multiTouchCooldownTimer);
                 multiTouchCooldownTimer = setTimeout(() => {
                     multiTouchActive = false;
-                    if (config.interactive && !dragSubdivisionMode && !map.dragging.enabled()) {
+                    if (config.interactive && map.touchZoom && !map.touchZoom.enabled()) {
+                        map.touchZoom.enable();
+                    }
+                    if (config.interactive && !dragSubdivisionMode && map.dragging && !map.dragging.enabled()) {
                         map.dragging.enable();
                     }
                 }, 120);
@@ -797,6 +898,7 @@ async function initGISMap(mapElementId, options = {}) {
         };
 
         mapEl.addEventListener('touchstart', onMapTouchStart, { passive: true, capture: true });
+        mapEl.addEventListener('touchmove', onMapTouchMove, { passive: true, capture: true });
         mapEl.addEventListener('touchend', onMapTouchEnd, { passive: true, capture: true });
         mapEl.addEventListener('touchcancel', onMapTouchEnd, { passive: true, capture: true });
     }
