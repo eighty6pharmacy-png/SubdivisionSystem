@@ -478,7 +478,9 @@
                     initGISMap('guardMapContainer', {
                         interactive: true,
                         showRouting: !!targetNode,
-                        endNode: targetNode
+                        endNode: targetNode,
+                        showCalibration: false,
+                        liveNavigation: false
                     }).then(mapInstance => {
                         window.activeGuardMap = mapInstance;
                     }).catch(err => {

@@ -40,6 +40,10 @@
         background: #16a34a;
         box-shadow: 0 0 12px rgba(22,163,74,0.9);
     }
+    .visitor-pulse-beacon.alert {
+        background: #dc2626;
+        box-shadow: 0 0 12px rgba(220,38,38,0.9);
+    }
     .visitor-pulse-ring {
         position: absolute;
         width: 32px;
@@ -51,6 +55,9 @@
     }
     .visitor-pulse-beacon.arrived + .visitor-pulse-ring {
         background: rgba(22,163,74,0.4);
+    }
+    .visitor-pulse-beacon.alert + .visitor-pulse-ring {
+        background: rgba(220,38,38,0.45);
     }
     @keyframes radarPing {
         75%, 100% {
@@ -84,6 +91,11 @@
             <span id="activeVisitorsDedicatedCount" style="font-size: 13px; font-weight: 700; background: #0f172a; color: #38bdf8; padding: 8px 16px; border-radius: 20px; border: 1px solid #334155;">
                 0 Active Visitors
             </span>
+            <div style="display: inline-flex; align-items: center; gap: 4px; background: #f1f5f9; padding: 4px; border-radius: 8px; border: 1px solid #cbd5e1;" title="Rotate Map (or Shift+Drag / Two-finger twist)">
+                <button type="button" onclick="rotateDedicatedMap(-45)" class="btn btn-secondary" style="padding: 4px 10px; font-size: 13px; font-weight: 700; border-radius: 6px;">↺</button>
+                <button type="button" onclick="resetDedicatedMapRotation()" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px; font-weight: 700; border-radius: 6px;">🧭 0°</button>
+                <button type="button" onclick="rotateDedicatedMap(45)" class="btn btn-secondary" style="padding: 4px 10px; font-size: 13px; font-weight: 700; border-radius: 6px;">↻</button>
+            </div>
             <button type="button" onclick="centerDedicatedMap()" class="btn btn-secondary" style="padding: 8px 14px; font-size: 13px; font-weight: 700; border-radius: 8px;">
                 🎯 Center Map
             </button>
@@ -91,6 +103,15 @@
                 🛡️ Gate Scanner
             </a>
         </div>
+    </div>
+
+    <!-- Warning Alert Banner (GPS Stopped / Taking Too Long) -->
+    <div id="warningNoticeBannerDedicated" style="display: none; padding: 14px 24px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; color: #991b1b; font-size: 14px; font-weight: 700; margin-bottom: 16px; align-items: center; justify-content: space-between; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 20px;">🚨</span>
+            <span id="warningNoticeTextDedicated">Visitor monitoring alert!</span>
+        </div>
+        <button type="button" onclick="dismissWarningNoticeDedicated()" style="background: none; border: none; font-size: 18px; cursor: pointer; color: #b91c1c;">✕</button>
     </div>
 
     <!-- Arrival Notice Banner -->
@@ -116,7 +137,11 @@
                 </div>
                 <div style="display: flex; align-items: center; gap: 6px;">
                     <span style="width: 10px; height: 10px; border-radius: 50%; background: #22c55e; display: inline-block;"></span>
-                    Arrived at Destination
+                    Arrived (1m+ at House)
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="width: 10px; height: 10px; border-radius: 50%; background: #dc2626; display: inline-block;"></span>
+                    Alert (GPS Off / Delayed)
                 </div>
             </div>
         </div>
@@ -150,9 +175,125 @@
 <script>
     const PUSHER_KEY = @json(config('broadcasting.connections.pusher.key'));
     const PUSHER_CLUSTER = @json(config('broadcasting.connections.pusher.options.cluster', 'ap1'));
+    const GPS_TIMEOUT_MS = 30 * 1000;      // 30 seconds without GPS ping = GPS stopped
+    const MAX_TRANSIT_MS = 5 * 60 * 1000;  // 5 minutes en route without arriving = taking too long
     let dedicatedMapInstance = null;
     let liveVisitorMarkers = new Map();
     let hasAlertedFor = new Set();
+    let hasWarnedGpsFor = new Set();
+    let hasWarnedDelayFor = new Set();
+
+    function playWarningChime() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const now = ctx.currentTime;
+            [0, 0.22].forEach(offset => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, now + offset);
+                gain.gain.setValueAtTime(0.28, now + offset);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.18);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + offset);
+                osc.stop(now + offset + 0.18);
+            });
+        } catch(e) {}
+    }
+
+    function dismissWarningNoticeDedicated() {
+        const b = document.getElementById('warningNoticeBannerDedicated');
+        if (b) b.style.display = 'none';
+    }
+
+    function showWarningNoticeDedicated(text) {
+        const b = document.getElementById('warningNoticeBannerDedicated');
+        const t = document.getElementById('warningNoticeTextDedicated');
+        if (b && t) {
+            t.textContent = text;
+            b.style.display = 'flex';
+        }
+    }
+
+    function rotateDedicatedMap(deltaDeg) {
+        if (!dedicatedMapInstance || typeof dedicatedMapInstance.setBearing !== 'function') return;
+        const current = typeof dedicatedMapInstance.getBearing === 'function' ? dedicatedMapInstance.getBearing() : 0;
+        dedicatedMapInstance.setBearing(current + deltaDeg);
+    }
+
+    function resetDedicatedMapRotation() {
+        if (!dedicatedMapInstance || typeof dedicatedMapInstance.setBearing !== 'function') return;
+        dedicatedMapInstance.setBearing(0);
+    }
+
+    function getVisitorAlertState(vis) {
+        const isArrived = !!vis.is_at_destination;
+        if (isArrived) {
+            return { isArrived: true, isGpsStopped: false, isTakingTooLong: false, hasAlert: false };
+        }
+        const nowMs = Date.now();
+        const lastPingMs = vis.last_ping_ms ? Number(vis.last_ping_ms) : null;
+        const enteredMs = vis.entered_ms ? Number(vis.entered_ms) : null;
+        const isGpsStopped = lastPingMs !== null && (nowMs - lastPingMs >= GPS_TIMEOUT_MS);
+        const isTakingTooLong = enteredMs !== null && (nowMs - enteredMs >= MAX_TRANSIT_MS);
+        return {
+            isArrived: false,
+            isGpsStopped,
+            isTakingTooLong,
+            hasAlert: isGpsStopped || isTakingTooLong
+        };
+    }
+
+    function buildPulseIcon(state) {
+        const beaconClass = state.isArrived
+            ? 'visitor-pulse-beacon arrived'
+            : (state.hasAlert ? 'visitor-pulse-beacon alert' : 'visitor-pulse-beacon');
+        const customHtml = `
+            <div class="visitor-pulse-marker">
+                <div class="${beaconClass}"></div>
+                <div class="visitor-pulse-ring"></div>
+            </div>
+        `;
+        return L.divIcon({
+            html: customHtml,
+            className: '',
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+        });
+    }
+
+    function buildVisitorPopupHtml(vis, state) {
+        let statusColor = '#2563eb';
+        let statusText = '🚗 En Route';
+        if (state.isArrived) {
+            statusColor = '#16a34a';
+            statusText = '✅ Arrived at House';
+        } else if (state.isGpsStopped && state.isTakingTooLong) {
+            statusColor = '#dc2626';
+            statusText = '🚨 GPS Stopped & Delayed';
+        } else if (state.isGpsStopped) {
+            statusColor = '#dc2626';
+            statusText = '📡 GPS Signal Stopped';
+        } else if (state.isTakingTooLong) {
+            statusColor = '#d97706';
+            statusText = '⏱️ Taking Too Long (>5m)';
+        }
+
+        return `
+            <div style="font-family: sans-serif; font-size: 13px; min-width: 190px;">
+                <div style="font-weight: 800; color: #0f172a; font-size: 14px; margin-bottom: 4px;">${vis.visitor_name}</div>
+                <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Destination:</div>
+                <div style="color: #1e40af; font-weight: 700;">${vis.destination}</div>
+                <div style="font-size: 12px; color: #475569; margin-top: 4px;">Host: <strong>${vis.host_name}</strong></div>
+                ${vis.plate_number && vis.plate_number !== 'N/A' ? `<div style="font-size: 12px; color: #475569;">Plate: <code style="background:#f1f5f9; padding:2px 4px; border-radius:4px;">${vis.plate_number}</code></div>` : ''}
+                <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #e2e8f0; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 800; color: ${statusColor};">${statusText}</span>
+                    <span style="color: #94a3b8;">${vis.last_ping_at || 'Just now'}</span>
+                </div>
+            </div>
+        `;
+    }
 
     function playArrivalChime() {
         try {
@@ -245,43 +386,21 @@
     function onVisitorLocationUpdate(vis) {
         if (!vis || !vis.lat || !vis.lng) return;
         const vId = vis.visitor_id;
+        if (!vis.last_ping_ms) {
+            vis.last_ping_ms = Date.now();
+        }
+        const state = getVisitorAlertState(vis);
+        const pulseIcon = buildPulseIcon(state);
 
-        const isArrived = !!vis.is_at_destination;
-        const beaconClass = isArrived ? 'visitor-pulse-beacon arrived' : 'visitor-pulse-beacon';
-        const customHtml = `
-            <div class="visitor-pulse-marker">
-                <div class="${beaconClass}"></div>
-                <div class="visitor-pulse-ring"></div>
-            </div>
-        `;
-        const pulseIcon = L.divIcon({
-            html: customHtml,
-            className: '',
-            iconSize: [32, 32],
-            iconAnchor: [16, 16]
-        });
-
-        if (isArrived && !hasAlertedFor.has(vId)) {
+        if (state.isArrived && !hasAlertedFor.has(vId)) {
             hasAlertedFor.add(vId);
             playArrivalChime();
             showArrivalNoticeDedicated(`🎉 Visitor ${vis.visitor_name} has arrived at destination (${vis.destination})!`);
+        } else if (!state.isGpsStopped) {
+            hasWarnedGpsFor.delete(vId);
         }
 
-        const popupContent = `
-            <div style="font-family: sans-serif; font-size: 13px; min-width: 190px;">
-                <div style="font-weight: 800; color: #0f172a; font-size: 14px; margin-bottom: 4px;">${vis.visitor_name}</div>
-                <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Destination:</div>
-                <div style="color: #1e40af; font-weight: 700;">${vis.destination}</div>
-                <div style="font-size: 12px; color: #475569; margin-top: 4px;">Host: <strong>${vis.host_name}</strong></div>
-                ${vis.plate_number && vis.plate_number !== 'N/A' ? `<div style="font-size: 12px; color: #475569;">Plate: <code style="background:#f1f5f9; padding:2px 4px; border-radius:4px;">${vis.plate_number}</code></div>` : ''}
-                <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #e2e8f0; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-weight: 800; color: ${isArrived ? '#16a34a' : '#2563eb'};">
-                        ${isArrived ? '✅ Arrived at House' : '🚗 En Route'}
-                    </span>
-                    <span style="color: #94a3b8;">${vis.last_ping_at || 'Just now'}</span>
-                </div>
-            </div>
-        `;
+        const popupContent = buildVisitorPopupHtml(vis, state);
 
         if (liveVisitorMarkers.has(vId)) {
             const entry = liveVisitorMarkers.get(vId);
@@ -292,11 +411,40 @@
         } else if (dedicatedMapInstance) {
             const m = L.marker([vis.lat, vis.lng], { icon: pulseIcon }).addTo(dedicatedMapInstance);
             m.bindPopup(popupContent);
-            m.bindTooltip(`📍 ${vis.visitor_name} (${isArrived ? 'Arrived' : 'En Route'})`, { direction: 'top', offset: [0, -12] });
+            m.bindTooltip(`📍 ${vis.visitor_name} (${state.isArrived ? 'Arrived' : 'En Route'})`, { direction: 'top', offset: [0, -12] });
             liveVisitorMarkers.set(vId, { marker: m, data: vis });
         }
 
+        evaluateVisitorAlerts();
         renderDedicatedVisitorsList();
+    }
+
+    function evaluateVisitorAlerts() {
+        let stateChanged = false;
+        liveVisitorMarkers.forEach((entry, vId) => {
+            const vis = entry.data;
+            const state = getVisitorAlertState(vis);
+
+            if (state.isGpsStopped && !hasWarnedGpsFor.has(vId)) {
+                hasWarnedGpsFor.add(vId);
+                playWarningChime();
+                showWarningNoticeDedicated(`📡 GPS Signal Stopped: ${vis.visitor_name} stopped sharing location (Last ping: ${vis.last_ping_at || 'Unknown'} • Dest: ${vis.destination}).`);
+                stateChanged = true;
+            }
+            if (state.isTakingTooLong && !hasWarnedDelayFor.has(vId)) {
+                hasWarnedDelayFor.add(vId);
+                playWarningChime();
+                showWarningNoticeDedicated(`⏱️ Taking Too Long: ${vis.visitor_name} has been en route for over 5 minutes without arriving at ${vis.destination}.`);
+                stateChanged = true;
+            }
+
+            entry.marker.setIcon(buildPulseIcon(state));
+            entry.marker.setPopupContent(buildVisitorPopupHtml(vis, state));
+        });
+
+        if (stateChanged) {
+            renderDedicatedVisitorsList();
+        }
     }
 
     function renderDedicatedVisitorsList() {
@@ -321,13 +469,31 @@
         let html = '';
         liveVisitorMarkers.forEach((item, id) => {
             const d = item.data;
-            const isArrived = !!d.is_at_destination;
-            const statusBg = isArrived ? '#dcfce7' : '#eff6ff';
-            const statusColor = isArrived ? '#166534' : '#1e40af';
-            const statusLabel = isArrived ? '✅ Arrived at House' : '🚗 En Route';
+            const state = getVisitorAlertState(d);
+            let statusBg = '#eff6ff';
+            let statusColor = '#1e40af';
+            let statusLabel = '🚗 En Route';
+
+            if (state.isArrived) {
+                statusBg = '#dcfce7';
+                statusColor = '#166534';
+                statusLabel = '✅ Arrived at House';
+            } else if (state.isGpsStopped && state.isTakingTooLong) {
+                statusBg = '#fee2e2';
+                statusColor = '#991b1b';
+                statusLabel = '🚨 GPS Off & Delayed';
+            } else if (state.isGpsStopped) {
+                statusBg = '#fee2e2';
+                statusColor = '#991b1b';
+                statusLabel = '📡 GPS Stopped';
+            } else if (state.isTakingTooLong) {
+                statusBg = '#fef3c7';
+                statusColor = '#92400e';
+                statusLabel = '⏱️ Delayed (>5m)';
+            }
 
             html += `
-                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <div style="background: white; border: 1px solid ${state.hasAlert ? '#fca5a5' : '#e2e8f0'}; border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
                         <div>
                             <div style="font-weight: 800; font-size: 14px; color: #0f172a;">${d.visitor_name}</div>
@@ -420,6 +586,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         initDedicatedMap();
+        setInterval(evaluateVisitorAlerts, 5000);
     });
 </script>
 @endsection

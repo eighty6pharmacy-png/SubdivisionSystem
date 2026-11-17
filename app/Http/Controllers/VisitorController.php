@@ -422,6 +422,50 @@ class VisitorController extends Controller
         return response()->json(['success' => true]);
     }
 
+    private function formatLiveVisitorPayload(Visitor $visitor): array
+    {
+        $tz = config('app.timezone', 'Asia/Manila');
+        $block = 'N/A';
+        $lotNum = 'N/A';
+        $dest = 'General';
+        if ($visitor->host && $visitor->host->lots->count() > 0) {
+            $lot = $visitor->host->lots->first();
+            $block = $lot->block;
+            $lotNum = $lot->lot_number;
+            $dest = 'Block ' . $block . ', Lot ' . $lotNum;
+        }
+
+        $enteredMs = null;
+        if (!empty($visitor->arrival_time)) {
+            try {
+                $dateStr = ($visitor->updated_at ?? now())->copy()->setTimezone($tz)->toDateString();
+                $enteredMs = \Carbon\Carbon::parse("{$dateStr} {$visitor->arrival_time}", $tz)->getTimestampMs();
+            } catch (\Throwable $e) {
+                $enteredMs = $visitor->created_at?->getTimestampMs();
+            }
+        }
+
+        return [
+            'visitor_id' => $visitor->id,
+            'visitor_name' => $visitor->visitor_name,
+            'token' => $visitor->access_token,
+            'type' => $visitor->type,
+            'lat' => $visitor->current_lat !== null ? (float) $visitor->current_lat : null,
+            'lng' => $visitor->current_lng !== null ? (float) $visitor->current_lng : null,
+            'destination' => $dest,
+            'block' => $block,
+            'lot' => $lotNum,
+            'host_name' => $visitor->host?->name ?? ($visitor->host_name ?: 'Subdivision Resident'),
+            'plate_number' => $visitor->plate_number ?: 'N/A',
+            'status' => $visitor->status,
+            'arrival_time' => $visitor->arrival_time,
+            'is_at_destination' => (bool) $visitor->is_at_destination,
+            'last_ping_at' => $visitor->last_ping_at ? $visitor->last_ping_at->setTimezone($tz)->format('h:i:s A') : null,
+            'last_ping_ms' => $visitor->last_ping_at ? $visitor->last_ping_at->getTimestampMs() : null,
+            'entered_ms' => $enteredMs,
+        ];
+    }
+
     // Visitor transmits live GPS coordinates
     public function updateLocation(Request $request)
     {
@@ -446,31 +490,7 @@ class VisitorController extends Controller
             'is_at_destination' => $isAtDest || (bool) $visitor->is_at_destination,
         ]);
 
-        $dest = 'General';
-        $block = 'N/A';
-        $lotNum = 'N/A';
-        if ($visitor->host && $visitor->host->lots->count() > 0) {
-            $lot = $visitor->host->lots->first();
-            $dest = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
-            $block = $lot->block;
-            $lotNum = $lot->lot_number;
-        }
-
-        $payload = [
-            'visitor_id' => $visitor->id,
-            'visitor_name' => $visitor->visitor_name,
-            'token' => $visitor->access_token,
-            'lat' => (float) $request->lat,
-            'lng' => (float) $request->lng,
-            'destination' => $dest,
-            'block' => $block,
-            'lot' => $lotNum,
-            'host_name' => $visitor->host?->name ?? ($visitor->host_name ?: 'Subdivision Resident'),
-            'plate_number' => $visitor->plate_number ?: 'N/A',
-            'status' => $visitor->status,
-            'is_at_destination' => (bool) $visitor->is_at_destination,
-            'last_ping_at' => now()->setTimezone(config('app.timezone', 'Asia/Manila'))->format('h:i:s A'),
-        ];
+        $payload = $this->formatLiveVisitorPayload($visitor);
 
         try {
             event(new \App\Events\VisitorLocationUpdated($payload));
@@ -494,34 +514,7 @@ class VisitorController extends Controller
             ->where('status', 'Entered')
             ->whereDate('updated_at', $todayStr)
             ->get()
-            ->map(function ($vis) {
-                $block = 'N/A';
-                $lotNum = 'N/A';
-                $dest = 'General';
-                if ($vis->host && $vis->host->lots->count() > 0) {
-                    $lot = $vis->host->lots->first();
-                    $block = $lot->block;
-                    $lotNum = $lot->lot_number;
-                    $dest = 'Block ' . $block . ', Lot ' . $lotNum;
-                }
-
-                return [
-                    'visitor_id' => $vis->id,
-                    'visitor_name' => $vis->visitor_name,
-                    'token' => $vis->access_token,
-                    'lat' => $vis->current_lat !== null ? (float) $vis->current_lat : null,
-                    'lng' => $vis->current_lng !== null ? (float) $vis->current_lng : null,
-                    'destination' => $dest,
-                    'block' => $block,
-                    'lot' => $lotNum,
-                    'host_name' => $vis->host?->name ?? ($vis->host_name ?: 'Subdivision Resident'),
-                    'plate_number' => $vis->plate_number ?: 'N/A',
-                    'status' => $vis->status,
-                    'arrival_time' => $vis->arrival_time,
-                    'is_at_destination' => (bool) $vis->is_at_destination,
-                    'last_ping_at' => $vis->last_ping_at ? $vis->last_ping_at->setTimezone(config('app.timezone', 'Asia/Manila'))->format('h:i:s A') : null,
-                ];
-            });
+            ->map(fn ($vis) => $this->formatLiveVisitorPayload($vis));
 
         return response()->json($visitors);
     }

@@ -755,6 +755,8 @@ async function initGISMap(mapElementId, options = {}) {
         doubleClickZoom: config.interactive,
         maxZoom: 22,
         rotate: true,
+        touchRotate: true,
+        shiftKeyRotate: true,
         bearing: config.bearing !== undefined ? config.bearing : 0,
         rotateControl: {
             closeOnZeroBearing: false,
@@ -1345,10 +1347,52 @@ async function initGISMap(mapElementId, options = {}) {
                 return {
                     nodeId: roadNodeId,
                     point: closestProj,
-                    dist: minDist
+                    dist: minDist,
+                    segId1: closestSegment.id1,
+                    segId2: closestSegment.id2
                 };
             }
             return null;
+        }
+
+        function connectSameSegmentSnaps(snapA, snapB, targetGraph) {
+            if (!snapA || !snapB || !targetGraph) return;
+            if (snapA.segId1 === snapB.segId1 && snapA.segId2 === snapB.segId2) {
+                targetGraph.addEdge(snapA.nodeId, snapB.nodeId, map.distance(snapA.point, snapB.point));
+            }
+        }
+
+        function computeSubdivisionHull() {
+            const pts = [];
+            segments.forEach(s => {
+                pts.push(s.p1, s.p2);
+            });
+            if (houseLayer) {
+                houseLayer.eachLayer(layer => {
+                    if (layer.getBounds) {
+                        const b = layer.getBounds();
+                        pts.push([b.getSouth(), b.getWest()], [b.getSouth(), b.getEast()], [b.getNorth(), b.getEast()], [b.getNorth(), b.getWest()]);
+                    }
+                });
+            }
+            if (pts.length < 3) return [];
+            const sorted = pts.slice().sort((a, b) => (a[0] === b[0] ? a[1] - b[1] : a[0] - b[0]));
+            const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+            const lower = [];
+            for (let i = 0; i < sorted.length; i++) {
+                const p = sorted[i];
+                while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+                lower.push(p);
+            }
+            const upper = [];
+            for (let i = sorted.length - 1; i >= 0; i--) {
+                const p = sorted[i];
+                while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+                upper.push(p);
+            }
+            lower.pop();
+            upper.pop();
+            return lower.concat(upper);
         }
 
         function injectSnappedNode(lat, lng, prefix, targetGraph) {
@@ -1430,6 +1474,7 @@ async function initGISMap(mapElementId, options = {}) {
             const staticAltPathIds = opts.staticAltPathIds || [];
             const styles = opts.styles;
             const destinationName = opts.destinationName || 'Destination';
+            const subdivisionHull = opts.subdivisionHull || [];
             let preferAlternative = false;
 
             osrmLayerGroup.clearLayers();
@@ -2086,18 +2131,38 @@ async function initGISMap(mapElementId, options = {}) {
                 };
             }
 
+            function pointInSubdivisionHull(lat, lng) {
+                if (!subdivisionHull || subdivisionHull.length < 3) return false;
+                let inside = false;
+                for (let i = 0, j = subdivisionHull.length - 1; i < subdivisionHull.length; j = i++) {
+                    const xi = subdivisionHull[i][0], yi = subdivisionHull[i][1];
+                    const xj = subdivisionHull[j][0], yj = subdivisionHull[j][1];
+                    if (((yi > lng) !== (yj > lng)) && (lat < (xj - xi) * (lng - yi) / (yj - yi) + xi)) {
+                        inside = !inside;
+                    }
+                }
+                return inside;
+            }
+
             let wasInsideSubdivision = false;
             function checkIfInside(lat, lng) {
                 const enterPad = wasInsideSubdivision ? 6 : 0; // hysteresis to prevent boundary flickering
-                // 1. Proximity to entrance gate
-                if (map.distance([lat, lng], entranceCoord) <= (24 + enterPad)) {
+                // 0. Inside the subdivision perimeter polygon (prevents GPS drift inside blocks from triggering highway OSRM)
+                if (pointInSubdivisionHull(lat, lng)) {
+                    wasInsideSubdivision = true;
+                    return true;
+                }
+
+                // 1. Proximity to entrance gate (tight when entering from highway so passing traffic stays on OSRM)
+                const gateRadius = wasInsideSubdivision ? 18 : 12;
+                if (map.distance([lat, lng], entranceCoord) <= gateRadius) {
                     wasInsideSubdivision = true;
                     return true;
                 }
 
                 // 2. Proximity to any internal subdivision road segment
                 const pt = [lat, lng];
-                const segLimit = 20 + enterPad;
+                const segLimit = (wasInsideSubdivision ? 20 : 14) + enterPad;
                 for (let i = 0; i < segments.length; i++) {
                     const proj = projectPointToSegment(pt, segments[i].p1, segments[i].p2);
                     if (proj.dist <= segLimit) {
@@ -2107,7 +2172,7 @@ async function initGISMap(mapElementId, options = {}) {
                 }
 
                 // 3. Proximity to destination house
-                if (map.distance([lat, lng], [destCoord.lat, destCoord.lng]) <= (35 + enterPad)) {
+                if (map.distance([lat, lng], [destCoord.lat, destCoord.lng]) <= (28 + enterPad)) {
                     wasInsideSubdivision = true;
                     return true;
                 }
@@ -2307,7 +2372,47 @@ async function initGISMap(mapElementId, options = {}) {
             let isArrivedLocked = false;
             let lastPanCoord = null;
             let latestPositionSeq = 0;
-            const ROAD_CORRIDOR_METERS = 4.5; // Tight street-width corridor considered on-road inside subdivision
+            const ROAD_CORRIDOR_METERS = 8.5; // Street-width + normal in-car GPS tolerance inside subdivision
+
+            function streamVisitorLocation(curLat, curLng) {
+                if (!config.visitorToken) return;
+                const nowTs = Date.now();
+                const ARRIVAL_RADIUS_METERS = 20;
+                const ARRIVAL_DWELL_MS = 60000; // Must stay within 20m for 1 minute to confirm arrival
+
+                if (destCoord) {
+                    const distToHouse = map.distance([curLat, curLng], [destCoord.lat, destCoord.lng]);
+                    if (distToHouse <= ARRIVAL_RADIUS_METERS) {
+                        if (!window._visitorArrivedSinceTs) {
+                            window._visitorArrivedSinceTs = nowTs;
+                        }
+                    } else if (!window._visitorArrivalConfirmed) {
+                        // Left the 20m radius before 1 minute elapsed (e.g. just passing by) -> reset dwell timer
+                        window._visitorArrivedSinceTs = null;
+                    }
+                }
+
+                if (!window._lastLocationSendTime || (nowTs - window._lastLocationSendTime >= 3500)) {
+                    window._lastLocationSendTime = nowTs;
+                    let isAtDest = false;
+                    if (window._visitorArrivalConfirmed) {
+                        isAtDest = true;
+                    } else if (window._visitorArrivedSinceTs && (nowTs - window._visitorArrivedSinceTs >= ARRIVAL_DWELL_MS)) {
+                        window._visitorArrivalConfirmed = true;
+                        isAtDest = true;
+                    }
+                    fetch('/api/visitor/location', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            token: config.visitorToken,
+                            lat: curLat,
+                            lng: curLng,
+                            is_at_destination: isAtDest
+                        })
+                    }).catch(() => {});
+                }
+            }
 
             // Google Maps-style dotted walking connector when user is off-road / outside the street
             function drawGoogleDottedConnector(fromPt, toPt, targetGroup) {
@@ -2349,6 +2454,7 @@ async function initGISMap(mapElementId, options = {}) {
                         }
                         if (stepInstEl) stepInstEl.innerHTML = `Welcome to <strong>${destinationName}</strong>!`;
                         if (simTipEl) simTipEl.innerHTML = '📍 Arrived at destination • Location locked';
+                        streamVisitorLocation(rawLat, rawLng);
                         return;
                     }
                 }
@@ -2371,6 +2477,7 @@ async function initGISMap(mapElementId, options = {}) {
                     L.circle([destCoord.lat, destCoord.lng], {
                         radius: 12, color: '#16a34a', weight: 3, fillColor: '#86efac', fillOpacity: 0.5
                     }).addTo(routingLayerGroup);
+                    streamVisitorLocation(rawLat, rawLng);
                     return;
                 }
 
@@ -2399,8 +2506,9 @@ async function initGISMap(mapElementId, options = {}) {
                     const dt = (now - lastAcceptedTime) / 1000;
                     if (dt > 0.4 && dt < 12) {
                         const speed = jumpM / dt;
-                        // Suppress impossible indoor teleport spikes
-                        if (speed > 8.0 && jumpM > 20) {
+                        // Allow normal highway driving speeds outside; suppress impossible teleport spikes
+                        const maxReasonableSpeed = wasInsideSubdivision ? 16.0 : 45.0;
+                        if (speed > maxReasonableSpeed && jumpM > 25) {
                             if (simTipEl) {
                                 simTipEl.innerHTML = '🛰️ Suppressing indoor GPS multipath bounce...';
                             }
@@ -2473,6 +2581,7 @@ async function initGISMap(mapElementId, options = {}) {
                     const gateSnap = snapPointToRoad(highwayEntryCoord[0], highwayEntryCoord[1], 'gate', tempGraph);
                     const targetDestRoad = destFrontRoadCoord || destCoord;
                     const destSnap = snapPointToRoad(targetDestRoad.lat, targetDestRoad.lng, 'dest', tempGraph);
+                    connectSameSegmentSnaps(gateSnap, destSnap, tempGraph);
                     
                     const pathIds = (gateSnap && destSnap) ? tempGraph.dijkstra(gateSnap.nodeId, destSnap.nodeId) : [];
                     const altPathIds = (gateSnap && destSnap) ? tempGraph.alternativePath(gateSnap.nodeId, destSnap.nodeId) : [];
@@ -2651,6 +2760,7 @@ async function initGISMap(mapElementId, options = {}) {
                     const userSnap = snapPointToRoad(curLat, curLng, 'u', liveGraph);
                     const targetDestRoad = destFrontRoadCoord || destCoord;
                     const destSnap = snapPointToRoad(targetDestRoad.lat, targetDestRoad.lng, 'd', liveGraph);
+                    connectSameSegmentSnaps(userSnap, destSnap, liveGraph);
 
                     const livePathIds = (userSnap && destSnap) ? liveGraph.dijkstra(userSnap.nodeId, destSnap.nodeId) : [];
                     const liveAltPathIds = (userSnap && destSnap) ? liveGraph.alternativePath(userSnap.nodeId, destSnap.nodeId) : [];
@@ -2678,8 +2788,8 @@ async function initGISMap(mapElementId, options = {}) {
                         handlePosition(rawLat, rawLng, rawAccuracy, headingVal);
                     });
 
-                    // MAP MATCHING: Only lock to internal subdivision road when accurately within the tight street corridor
-                    const isOnRoad = userSnap && (userSnap.dist <= ROAD_CORRIDOR_METERS) && (!rawAccuracy || rawAccuracy <= 15);
+                    // MAP MATCHING: Lock to internal subdivision road when within the driving street corridor
+                    const isOnRoad = userSnap && (userSnap.dist <= ROAD_CORRIDOR_METERS) && (!rawAccuracy || rawAccuracy <= 25);
                     const displayCoord = (isOnRoad && userSnap) ? userSnap.point : [curLat, curLng];
 
                     if (!liveGpsMarker) {
@@ -2770,27 +2880,7 @@ async function initGISMap(mapElementId, options = {}) {
                 }
 
                 // If visitorToken is provided, stream live coordinates & arrival status to guard portal
-                if (config.visitorToken) {
-                    const nowTs = Date.now();
-                    if (!window._lastLocationSendTime || (nowTs - window._lastLocationSendTime >= 3500)) {
-                        window._lastLocationSendTime = nowTs;
-                        let isAtDest = false;
-                        if (destCoord) {
-                            const distToHouse = map.distance([curLat, curLng], [destCoord.lat, destCoord.lng]);
-                            isAtDest = distToHouse <= 20;
-                        }
-                        fetch('/api/visitor/location', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                token: config.visitorToken,
-                                lat: curLat,
-                                lng: curLng,
-                                is_at_destination: isAtDest
-                            })
-                        }).catch(() => {});
-                    }
-                }
+                streamVisitorLocation(curLat, curLng);
             }
 
             function onRecenterClick(e) {
@@ -2929,7 +3019,8 @@ async function initGISMap(mapElementId, options = {}) {
                         staticPathIds: pathNodeIds,
                         staticAltPathIds: altPathNodeIds,
                         styles: styles,
-                        destinationName: config.destinationName || config.endNode
+                        destinationName: config.destinationName || config.endNode,
+                        subdivisionHull: computeSubdivisionHull()
                     });
                 } else {
                     // Static fallback rendering for guard dashboard (Solid line on road + dotted off-road to house)

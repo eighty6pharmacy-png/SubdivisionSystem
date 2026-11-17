@@ -42,7 +42,8 @@
         window.gisMap = await initGISMap('residentMapContainer', {
             interactive: true,
             showRouting: true,
-            interactiveRouting: true // Enables point-to-point clicking
+            interactiveRouting: true, // Enables point-to-point clicking
+            showCalibration: true
         });
     });
 
