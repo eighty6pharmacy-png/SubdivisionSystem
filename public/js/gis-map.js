@@ -753,6 +753,7 @@ async function initGISMap(mapElementId, options = {}) {
         dragging: config.interactive,
         scrollWheelZoom: config.interactive,
         doubleClickZoom: config.interactive,
+        touchZoom: config.interactive ? 'center' : false,
         maxZoom: 22,
         rotate: true,
         touchRotate: true,
@@ -763,6 +764,42 @@ async function initGISMap(mapElementId, options = {}) {
             position: 'topleft'
         },
     }).setView([calib.anchorLat, calib.anchorLng], 18);
+
+    // Prevent 2-finger rotate/pinch gestures from dragging or drifting the map
+    if (config.interactive && map.dragging) {
+        let multiTouchActive = false;
+        let multiTouchCooldownTimer = null;
+        const mapEl = map.getContainer();
+
+        const onMapTouchStart = (e) => {
+            if (e.touches && e.touches.length >= 2) {
+                multiTouchActive = true;
+                if (multiTouchCooldownTimer) {
+                    clearTimeout(multiTouchCooldownTimer);
+                    multiTouchCooldownTimer = null;
+                }
+                if (map.dragging.enabled()) {
+                    map.dragging.disable();
+                }
+            }
+        };
+
+        const onMapTouchEnd = (e) => {
+            if (multiTouchActive && (!e.touches || e.touches.length === 0)) {
+                if (multiTouchCooldownTimer) clearTimeout(multiTouchCooldownTimer);
+                multiTouchCooldownTimer = setTimeout(() => {
+                    multiTouchActive = false;
+                    if (config.interactive && !dragSubdivisionMode && !map.dragging.enabled()) {
+                        map.dragging.enable();
+                    }
+                }, 120);
+            }
+        };
+
+        mapEl.addEventListener('touchstart', onMapTouchStart, { passive: true, capture: true });
+        mapEl.addEventListener('touchend', onMapTouchEnd, { passive: true, capture: true });
+        mapEl.addEventListener('touchcancel', onMapTouchEnd, { passive: true, capture: true });
+    }
 
     // Real-World Base Tile Layers (Always use crisp high-DPI retina tiles up to maxNativeZoom: 19 so tiles scale smoothly without white flashes)
     const googleStreetLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&scale=2', {
