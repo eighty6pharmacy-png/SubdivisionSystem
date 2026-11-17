@@ -2404,8 +2404,8 @@ async function initGISMap(mapElementId, options = {}) {
                 } else {
                     const dt = lastHeadingFrameMs ? Math.min((nowMs - lastHeadingFrameMs) / 1000, 0.1) : 0.016;
                     const diff = shortestAngleDiff(targetHeading, currentHeading);
-                    // Tight deadband (0.5 deg) + fast 55ms response for real-time Google Maps-like POV
-                    if (Math.abs(diff) < 0.5) {
+                    // Immediate response (35ms time constant, 0.3 deg deadband) like Google Maps
+                    if (Math.abs(diff) < 0.3) {
                         currentHeading = targetHeading;
                         lastHeadingFrameMs = nowMs;
                         if (isHeadingUp && typeof map.setBearing === 'function') {
@@ -2414,10 +2414,10 @@ async function initGISMap(mapElementId, options = {}) {
                         syncHeadingConeToMapBearing();
                         return;
                     }
-                    const smoothAlpha = 1 - Math.exp(-dt / 0.055);
+                    const smoothAlpha = 1 - Math.exp(-dt / 0.035);
                     currentHeading = ((currentHeading + diff * smoothAlpha) % 360 + 360) % 360;
 
-                    if (Math.abs(shortestAngleDiff(targetHeading, currentHeading)) >= 0.5) {
+                    if (Math.abs(shortestAngleDiff(targetHeading, currentHeading)) >= 0.3) {
                         headingRafId = requestAnimationFrame(stepHeadingAnimation);
                     }
                 }
@@ -2426,7 +2426,7 @@ async function initGISMap(mapElementId, options = {}) {
                 if (isHeadingUp && typeof map.setBearing === 'function') {
                     const curBearing = (typeof map.getBearing === 'function') ? map.getBearing() : 0;
                     const desiredBearing = -currentHeading;
-                    if (Math.abs(shortestAngleDiff(desiredBearing, curBearing)) >= 0.25) {
+                    if (Math.abs(shortestAngleDiff(desiredBearing, curBearing)) >= 0.2) {
                         map.setBearing(desiredBearing);
                     }
                 }
@@ -2445,7 +2445,7 @@ async function initGISMap(mapElementId, options = {}) {
                     syncHeadingConeToMapBearing();
                     return;
                 }
-                if (Math.abs(shortestAngleDiff(normalized, targetHeading)) < 0.5) return;
+                if (Math.abs(shortestAngleDiff(normalized, targetHeading)) < 0.3) return;
                 targetHeading = normalized;
                 if (!headingRafId) {
                     lastHeadingFrameMs = performance.now();
@@ -2464,6 +2464,7 @@ async function initGISMap(mapElementId, options = {}) {
             }
 
             // 3D tilt-compensated compass heading from Z-X'-Y'' Euler angles (alpha, beta, gamma)
+            // Smoothly handles flat, tilted, upright, and upside-down phone orientations
             function computeTiltCompensatedHeading(alpha, beta, gamma) {
                 const toRad = Math.PI / 180;
                 const a = alpha * toRad;
@@ -2474,25 +2475,66 @@ async function initGISMap(mapElementId, options = {}) {
                 const cB = Math.cos(b), sB = Math.sin(b);
                 const cG = Math.cos(g), sG = Math.sin(g);
 
+                // Device +Y (top of phone) projected onto world East/North
+                const yEast = -sA * cB;
+                const yNorth = cA * cB;
+                const yHoriz = Math.hypot(yEast, yNorth);
+
+                // Device -Z (back of phone) projected onto world East/North (used when phone is held upright)
+                const zEast = -cA * sG - sA * sB * cG;
+                const zNorth = -sA * sG + cA * sB * cG;
+                const zHoriz = Math.hypot(zEast, zNorth);
+
+                // Use whichever axis has stronger horizontal projection (prevents gimbal flip at any tilt/upside-down)
                 let east, north;
-                if (Math.abs(cB) > 0.25) {
-                    // Phone is mostly flat/tilted in hand (|beta| < 75 deg): project device +Y (top edge) onto horizontal plane
-                    east = -sA * cB;
-                    north = cA * cB;
+                if (yHoriz >= 0.35) {
+                    east = yEast;
+                    north = yNorth;
+                } else if (zHoriz >= 1e-4) {
+                    east = zEast;
+                    north = zNorth;
                 } else {
-                    // Phone is held upright (|beta| >= 75 deg): project device -Z (back of phone) onto horizontal plane
-                    east = -cA * sG - sA * sB * cG;
-                    north = -sA * sG + cA * sB * cG;
+                    return null;
                 }
 
-                if (Math.hypot(east, north) < 1e-4) return null;
                 return (Math.atan2(east, north) * 180 / Math.PI + 360) % 360;
             }
 
+            // Quaternion-based 3D heading for AbsoluteOrientationSensor (60Hz, zero gimbal lock at any angle)
+            function computeHeadingFromQuaternion(q) {
+                if (!q || q.length < 4) return null;
+                const x = q[0], y = q[1], z = q[2], w = q[3];
+                // Rotate device +Y = (0, 1, 0) into world ENU
+                const yEast  = 2 * (x * y - w * z);
+                const yNorth = 1 - 2 * (x * x + z * z);
+                // Rotate device -Z = (0, 0, -1) into world ENU
+                const zEast  = -2 * (x * z + w * y);
+                const zNorth = -2 * (y * z - w * x);
+
+                const yHoriz = Math.hypot(yEast, yNorth);
+                const zHoriz = Math.hypot(zEast, zNorth);
+                let east, north;
+                if (yHoriz >= 0.35) {
+                    east = yEast;
+                    north = yNorth;
+                } else if (zHoriz >= 1e-4) {
+                    east = zEast;
+                    north = zNorth;
+                } else {
+                    return null;
+                }
+                return (Math.atan2(east, north) * 180 / Math.PI + 360) % 360;
+            }
+
+            let absSensorInstance = null;
+            let relativeCompassOffset = 0;
+            let lastRelativeRawHeading = null;
+            const sensorStartMs = Date.now();
+
             function onDeviceOrientation(e) {
+                if (absSensorInstance) return; // AbsoluteOrientationSensor is already driving at 60Hz
                 let h = null;
                 if (e.webkitCompassHeading !== undefined && e.webkitCompassHeading !== null) {
-                    // iOS Safari: already tilt-compensated clockwise from North
                     if (typeof e.webkitCompassAccuracy === 'number' && (e.webkitCompassAccuracy < 0 || e.webkitCompassAccuracy > 50)) {
                         return;
                     }
@@ -2505,9 +2547,16 @@ async function initGISMap(mapElementId, options = {}) {
                         hasCompassSensor = true;
                         h = computeTiltCompensatedHeading(e.alpha, e.beta, e.gamma);
                     }
+                } else if (!hasAbsoluteCompass && e.alpha !== null && e.alpha !== undefined && (Date.now() - sensorStartMs > 600)) {
+                    // Fallback for Android devices that only emit relative deviceorientation:
+                    // keeps the cone 100% responsive to turns and aligns to GPS course when moving.
+                    const rawRel = computeTiltCompensatedHeading(e.alpha, e.beta, e.gamma);
+                    if (rawRel !== null) {
+                        hasCompassSensor = true;
+                        lastRelativeRawHeading = rawRel;
+                        h = (rawRel + relativeCompassOffset + 360) % 360;
+                    }
                 }
-                // Note: ignore relative (non-absolute) deviceorientation events so arbitrary starting angles
-                // never override true-North GPS course bearing.
                 if (h !== null && !isNaN(h)) {
                     h = (h + getScreenOrientationAngle() + 360) % 360;
                     updateHeadingCone(h);
@@ -2516,12 +2565,38 @@ async function initGISMap(mapElementId, options = {}) {
 
             let orientationListenersAttached = false;
             function attachOrientationListeners() {
-                if (orientationListenersAttached || !window.DeviceOrientationEvent) return;
+                if (orientationListenersAttached) return;
                 orientationListenersAttached = true;
-                if ('ondeviceorientationabsolute' in window) {
-                    window.addEventListener('deviceorientationabsolute', onDeviceOrientation, false);
+
+                // 1. Prefer W3C AbsoluteOrientationSensor (true North, 60Hz, zero gimbal lock)
+                if ('AbsoluteOrientationSensor' in window) {
+                    try {
+                        const sensor = new window.AbsoluteOrientationSensor({ frequency: 60, referenceFrame: 'screen' });
+                        sensor.addEventListener('reading', () => {
+                            const h = computeHeadingFromQuaternion(sensor.quaternion);
+                            if (h !== null && !isNaN(h)) {
+                                hasAbsoluteCompass = true;
+                                hasCompassSensor = true;
+                                updateHeadingCone(h);
+                            }
+                        });
+                        sensor.addEventListener('error', () => {
+                            absSensorInstance = null;
+                        });
+                        sensor.start();
+                        absSensorInstance = sensor;
+                    } catch (err) {
+                        absSensorInstance = null;
+                    }
                 }
-                window.addEventListener('deviceorientation', onDeviceOrientation, false);
+
+                // 2. Fallback to DeviceOrientationEvent
+                if (window.DeviceOrientationEvent) {
+                    if ('ondeviceorientationabsolute' in window) {
+                        window.addEventListener('deviceorientationabsolute', onDeviceOrientation, false);
+                    }
+                    window.addEventListener('deviceorientation', onDeviceOrientation, false);
+                }
             }
 
             function requestDeviceOrientationPermission() {
@@ -2538,9 +2613,15 @@ async function initGISMap(mapElementId, options = {}) {
                 }
             }
 
-            // Attach immediately on browsers that do not require an explicit user-gesture permission (Android/Desktop)
+            // Attach immediately on Android/Desktop, and on first touch for iOS 13+ permission
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission !== 'function') {
                 attachOrientationListeners();
+            } else {
+                const onFirstTouchForCompass = () => {
+                    requestDeviceOrientationPermission();
+                };
+                map.getContainer().addEventListener('touchstart', onFirstTouchForCompass, { once: true, passive: true });
+                map.getContainer().addEventListener('click', onFirstTouchForCompass, { once: true, passive: true });
             }
             map.on('rotate', syncHeadingConeToMapBearing);
 
@@ -2680,19 +2761,27 @@ async function initGISMap(mapElementId, options = {}) {
                 lastAcceptedTime = now;
                 userPos = { lat: curLat, lng: curLng, accuracy: rawAccuracy };
 
-                // Update heading from GPS/motion ONLY if device compass sensor is not active
-                if (!hasCompassSensor) {
-                    if (headingVal !== null && headingVal !== undefined && !isNaN(headingVal)) {
-                        updateHeadingCone(headingVal);
-                    } else if (lastCoordForHeading) {
-                        const d = map.distance([lastCoordForHeading.lat, lastCoordForHeading.lng], [curLat, curLng]);
-                        if (d > 4.0) {
-                            const b = calculateBearing(lastCoordForHeading.lat, lastCoordForHeading.lng, curLat, curLng);
-                            updateHeadingCone(b);
-                            lastCoordForHeading = { lat: curLat, lng: curLng };
-                        }
-                    } else {
+                // Update heading from GPS/motion when no absolute compass is active,
+                // or calibrate relative compass offset to true North when moving
+                let gpsCourse = null;
+                if (headingVal !== null && headingVal !== undefined && !isNaN(headingVal)) {
+                    gpsCourse = headingVal;
+                } else if (lastCoordForHeading) {
+                    const d = map.distance([lastCoordForHeading.lat, lastCoordForHeading.lng], [curLat, curLng]);
+                    if (d > 4.0) {
+                        gpsCourse = calculateBearing(lastCoordForHeading.lat, lastCoordForHeading.lng, curLat, curLng);
                         lastCoordForHeading = { lat: curLat, lng: curLng };
+                    }
+                } else {
+                    lastCoordForHeading = { lat: curLat, lng: curLng };
+                }
+
+                if (gpsCourse !== null) {
+                    if (!hasCompassSensor) {
+                        updateHeadingCone(gpsCourse);
+                    } else if (!hasAbsoluteCompass && lastRelativeRawHeading !== null) {
+                        // Align relative compass to true-North GPS course while moving
+                        relativeCompassOffset = ((gpsCourse - lastRelativeRawHeading) + 360) % 360;
                     }
                 }
 
@@ -3082,6 +3171,10 @@ async function initGISMap(mapElementId, options = {}) {
                     }
                     if (recenterBtn) {
                         recenterBtn.removeEventListener('click', onRecenterClick);
+                    }
+                    if (absSensorInstance && typeof absSensorInstance.stop === 'function') {
+                        try { absSensorInstance.stop(); } catch (e) {}
+                        absSensorInstance = null;
                     }
                     if (window.DeviceOrientationEvent) {
                         window.removeEventListener('deviceorientationabsolute', onDeviceOrientation, false);
