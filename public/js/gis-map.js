@@ -1648,6 +1648,8 @@ async function initGISMap(mapElementId, options = {}) {
             const entranceCoord = opts.entranceCoord;
             const destCoord = opts.destCoord;
             const destFrontRoadCoord = opts.destFrontRoadCoord;
+            const destHouseRing = Array.isArray(opts.destHouseRing) ? opts.destHouseRing : null;
+            const destHouseLayer = opts.destHouseLayer || null;
             const baseGraph = opts.graph;
             const coordinatesMap = opts.coordinatesMap;
             const segments = opts.segments;
@@ -1662,6 +1664,237 @@ async function initGISMap(mapElementId, options = {}) {
             osrmLayerGroup.clearLayers();
             liveNavGroup.clearLayers();
             routingLayerGroup.clearLayers();
+
+            // Dedicated layer for the focused House + Front-of-House arrival zone (persists across route redraws)
+            const destZoneGroup = L.layerGroup().addTo(liveNavGroup);
+
+            function pointInLocalPoly(pt, poly) {
+                if (!poly || poly.length < 3) return false;
+                let inside = false;
+                for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+                    const xi = poly[i].x, yi = poly[i].y;
+                    const xj = poly[j].x, yj = poly[j].y;
+                    if (((yi > pt.y) !== (yj > pt.y)) && (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi)) {
+                        inside = !inside;
+                    }
+                }
+                return inside;
+            }
+
+            function distPointToLocalSeg(pt, a, b) {
+                const dx = b.x - a.x;
+                const dy = b.y - a.y;
+                const l2 = dx * dx + dy * dy;
+                if (l2 === 0) return Math.hypot(pt.x - a.x, pt.y - a.y);
+                let t = ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / l2;
+                t = Math.max(0, Math.min(1, t));
+                return Math.hypot(pt.x - (a.x + t * dx), pt.y - (a.y + t * dy));
+            }
+
+            function distToLocalPoly(pt, poly) {
+                if (!poly || poly.length < 3) return Infinity;
+                if (pointInLocalPoly(pt, poly)) return 0;
+                let minD = Infinity;
+                for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+                    const d = distPointToLocalSeg(pt, poly[j], poly[i]);
+                    if (d < minD) minD = d;
+                }
+                return minD;
+            }
+
+            // Build a focused House + Front-of-House arrival zone aligned to the lot's own frontage
+            function buildDestinationArrivalZone(centerCoord, frontRoadCoord, houseRingLatLngs) {
+                const M_PER_DEG_LAT = 111320;
+                const M_PER_DEG_LNG = 111320 * Math.cos((centerCoord.lat * Math.PI) / 180);
+                const toLocalM = (lat, lng) => ({
+                    x: (lng - centerCoord.lng) * M_PER_DEG_LNG,
+                    y: (lat - centerCoord.lat) * M_PER_DEG_LAT
+                });
+                const fromLocalM = (x, y) => [
+                    centerCoord.lat + (y / M_PER_DEG_LAT),
+                    centerCoord.lng + (x / M_PER_DEG_LNG)
+                ];
+
+                let housePolyM = [];
+                if (Array.isArray(houseRingLatLngs) && houseRingLatLngs.length >= 3) {
+                    housePolyM = houseRingLatLngs
+                        .filter(pt => Array.isArray(pt) && Number.isFinite(pt[0]) && Number.isFinite(pt[1]))
+                        .map(pt => toLocalM(pt[0], pt[1]));
+                    if (housePolyM.length > 3) {
+                        const first = housePolyM[0];
+                        const last = housePolyM[housePolyM.length - 1];
+                        if (Math.hypot(first.x - last.x, first.y - last.y) < 0.05) {
+                            housePolyM.pop();
+                        }
+                    }
+                }
+
+                // Resolve front-road vector pointing from house center straight toward its street frontage
+                let roadTarget = frontRoadCoord;
+                if (!roadTarget && segments && segments.length > 0) {
+                    const pt = [centerCoord.lat, centerCoord.lng];
+                    let bestDist = Infinity;
+                    let bestProj = null;
+                    for (let i = 0; i < segments.length; i++) {
+                        const res = projectPointToSegment(pt, segments[i].p1, segments[i].p2);
+                        if (res.dist < bestDist) {
+                            bestDist = res.dist;
+                            bestProj = res.point;
+                        }
+                    }
+                    if (bestProj) {
+                        roadTarget = { lat: bestProj[0], lng: bestProj[1] };
+                    }
+                }
+
+                let frontPadPolyM = [];
+                let frontPadLatLngs = [];
+
+                if (roadTarget && Number.isFinite(roadTarget.lat) && Number.isFinite(roadTarget.lng)) {
+                    const roadM = toLocalM(roadTarget.lat, roadTarget.lng);
+                    const roadDist = Math.hypot(roadM.x, roadM.y);
+
+                    if (roadDist > 0.5) {
+                        const fwd = { x: roadM.x / roadDist, y: roadM.y / roadDist };
+                        const right = { x: fwd.y, y: -fwd.x };
+                        const mkLocalPt = (u, w) => ({
+                            x: u * fwd.x + w * right.x,
+                            y: u * fwd.y + w * right.y
+                        });
+
+                        let padWMin = -3.5;
+                        let padWMax = 3.5;
+                        let padBackU = 1.5;
+                        let padFrontU = Math.min(Math.max(roadDist + 0.8, 4.5), 8.0);
+
+                        if (housePolyM.length >= 3) {
+                            const proj = housePolyM.map(v => ({
+                                u: v.x * fwd.x + v.y * fwd.y,
+                                w: v.x * right.x + v.y * right.y
+                            }));
+                            const maxU = Math.max(...proj.map(p => p.u));
+                            const allWMin = Math.min(...proj.map(p => p.w));
+                            const allWMax = Math.max(...proj.map(p => p.w));
+                            const frontVerts = proj.filter(p => p.u >= maxU - 1.5);
+
+                            if (frontVerts.length >= 2) {
+                                padWMin = Math.min(...frontVerts.map(p => p.w));
+                                padWMax = Math.max(...frontVerts.map(p => p.w));
+                                if (padWMax - padWMin < 3.0) {
+                                    padWMin = allWMin;
+                                    padWMax = allWMax;
+                                }
+                            } else {
+                                padWMin = allWMin;
+                                padWMax = allWMax;
+                            }
+
+                            // Inset slightly from lot side edges so the frontage pad stays strictly in front of THIS lot
+                            const padWidth = padWMax - padWMin;
+                            if (padWidth > 3.5) {
+                                const inset = Math.min(0.35, (padWidth - 3.0) / 2);
+                                padWMin += inset;
+                                padWMax -= inset;
+                            }
+
+                            padBackU = Math.max(0, maxU - 0.35);
+                            padFrontU = Math.min(Math.max(roadDist + 0.8, maxU + 2.8), maxU + 5.5);
+                        }
+
+                        frontPadPolyM = [
+                            mkLocalPt(padBackU, padWMin),
+                            mkLocalPt(padBackU, padWMax),
+                            mkLocalPt(padFrontU, padWMax),
+                            mkLocalPt(padFrontU, padWMin)
+                        ];
+                        frontPadLatLngs = frontPadPolyM.map(p => fromLocalM(p.x, p.y));
+                    }
+                }
+
+                // Fallback compact box only if neither house polygon nor road frontage could be derived
+                if (housePolyM.length < 3 && frontPadPolyM.length < 3) {
+                    const half = 4.0;
+                    frontPadPolyM = [
+                        { x: -half, y: -half },
+                        { x: half, y: -half },
+                        { x: half, y: half },
+                        { x: -half, y: half }
+                    ];
+                    frontPadLatLngs = frontPadPolyM.map(p => fromLocalM(p.x, p.y));
+                }
+
+                const houseLatLngs = housePolyM.map(p => fromLocalM(p.x, p.y));
+
+                return {
+                    toLocalM,
+                    housePolyM,
+                    frontPadPolyM,
+                    houseLatLngs,
+                    frontPadLatLngs,
+                    getDistanceToZone: (lat, lng) => {
+                        const ptM = toLocalM(lat, lng);
+                        const dHouse = housePolyM.length >= 3 ? distToLocalPoly(ptM, housePolyM) : Infinity;
+                        const dFront = frontPadPolyM.length >= 3 ? distToLocalPoly(ptM, frontPadPolyM) : Infinity;
+                        const minD = Math.min(dHouse, dFront);
+                        return Number.isFinite(minD) ? minD : map.distance([lat, lng], [centerCoord.lat, centerCoord.lng]);
+                    }
+                };
+            }
+
+            const destArrivalZone = buildDestinationArrivalZone(destCoord, destFrontRoadCoord, destHouseRing);
+            let lastRenderedZoneArrived = null;
+
+            function renderDestinationZone(arrivedState) {
+                if (lastRenderedZoneArrived === arrivedState) return;
+                lastRenderedZoneArrived = arrivedState;
+
+                destZoneGroup.clearLayers();
+
+                // Highlight the destination house polygon itself (blue while approaching, emerald green on arrival)
+                if (destHouseLayer && typeof destHouseLayer.setStyle === 'function') {
+                    if (arrivedState) {
+                        destHouseLayer.setStyle({
+                            fillColor: '#22c55e',
+                            color: '#15803d',
+                            weight: 3,
+                            fillOpacity: 0.72
+                        });
+                    } else {
+                        destHouseLayer.setStyle({
+                            fillColor: '#2563eb',
+                            color: '#1d4ed8',
+                            weight: 2.5,
+                            fillOpacity: 0.95
+                        });
+                    }
+                } else if (destArrivalZone.houseLatLngs.length >= 3) {
+                    L.polygon(destArrivalZone.houseLatLngs, {
+                        color: arrivedState ? '#15803d' : '#1d4ed8',
+                        weight: arrivedState ? 3 : 2.5,
+                        fillColor: arrivedState ? '#22c55e' : '#2563eb',
+                        fillOpacity: arrivedState ? 0.65 : 0.45,
+                        interactive: false
+                    }).addTo(destZoneGroup);
+                }
+
+                // Render the compact Front-of-House arrival pad directly in front of the house (replaces giant circle radar)
+                if (destArrivalZone.frontPadLatLngs.length >= 3) {
+                    L.polygon(destArrivalZone.frontPadLatLngs, arrivedState ? {
+                        color: '#16a34a',
+                        weight: 2.5,
+                        fillColor: '#86efac',
+                        fillOpacity: 0.45,
+                        interactive: false
+                    } : {
+                        color: '#2563eb',
+                        weight: 1.8,
+                        dashArray: '5, 5',
+                        fillColor: '#93c5fd',
+                        fillOpacity: 0.24,
+                        interactive: false
+                    }).addTo(destZoneGroup);
+                }
+            }
 
             // 1. HUD element lookup or auto-creation
             let hud = document.getElementById('liveNavHud');
@@ -2222,6 +2455,7 @@ async function initGISMap(mapElementId, options = {}) {
             }
 
             drawInitialPreview();
+            renderDestinationZone(false);
 
             let lastOSRMTime = 0;
             let lastOSRMCoord = null;
@@ -2628,25 +2862,74 @@ async function initGISMap(mapElementId, options = {}) {
             // Professional Navigation Stability & Anti-Jumping State
             let lastAcceptedPos = null;
             let lastAcceptedTime = 0;
-            let isArrivedLocked = false;
+            let isArrived = false;
+            let wasArrivedRendered = false;
             let lastPanCoord = null;
             let latestPositionSeq = 0;
             const ROAD_CORRIDOR_METERS = 8.5; // Street-width + normal in-car GPS tolerance inside subdivision
+            const ARRIVAL_ENTER_BUFFER_M = 3.0; // Inside destination house/frontage pad or within 3m of its edge
+            const ARRIVAL_EXIT_BUFFER_M = 9.0;  // Exit arrival and resume routing once >9m away from house/frontage
+            const GUARD_ARRIVAL_BUFFER_M = 5.0; // Guard radar arrival tolerance around house + frontage pad
+
+            function updateLiveGpsVisuals(displayCoord, rawCoord, accuracy) {
+                const clampedRadius = Math.min(accuracy || 10, 45);
+                if (!liveGpsMarker) {
+                    const beaconIcon = L.divIcon({
+                        className: 'subdivision-live-marker-container',
+                        html: `
+                            <div class="subdivision-live-beacon">
+                                <div class="user-heading-cone" id="userHeadingCone" style="transform: rotate(${getConeScreenAngle()}deg);">
+                                    <svg width="84" height="84" viewBox="0 0 84 84" style="display:block;">
+                                        <defs>
+                                            <radialGradient id="userBeamGlow" cx="50%" cy="50%" r="50%">
+                                                <stop offset="0%" stop-color="#4285F4" stop-opacity="0.58" />
+                                                <stop offset="65%" stop-color="#4285F4" stop-opacity="0.22" />
+                                                <stop offset="100%" stop-color="#4285F4" stop-opacity="0.0" />
+                                            </radialGradient>
+                                        </defs>
+                                        <path d="M 42 42 L 13 6 A 44 44 0 0 1 71 6 Z" fill="url(#userBeamGlow)" />
+                                    </svg>
+                                </div>
+                                <div class="pulse-ring"></div>
+                                <div class="center-dot"></div>
+                            </div>
+                        `,
+                        iconSize: [84, 84],
+                        iconAnchor: [42, 42]
+                    });
+                    liveGpsMarker = L.marker(displayCoord, { icon: beaconIcon, zIndexOffset: 1000 }).addTo(liveNavGroup);
+                    liveGpsMarker.bindTooltip('📍 Your Live Location', { direction: 'top', offset: [0, -10] });
+                    accuracyCircle = L.circle(rawCoord, {
+                        radius: clampedRadius,
+                        color: '#3b82f6',
+                        weight: 1,
+                        fillColor: '#93c5fd',
+                        fillOpacity: 0.18,
+                        interactive: false
+                    }).addTo(liveNavGroup);
+                    syncHeadingConeToMapBearing();
+                } else {
+                    liveGpsMarker.setLatLng(displayCoord);
+                    if (accuracyCircle) {
+                        accuracyCircle.setLatLng(rawCoord);
+                        accuracyCircle.setRadius(clampedRadius);
+                    }
+                }
+            }
 
             function streamVisitorLocation(curLat, curLng) {
                 if (!config.visitorToken) return;
                 const nowTs = Date.now();
-                const ARRIVAL_RADIUS_METERS = 20;
-                const ARRIVAL_DWELL_MS = 60000; // Must stay within 20m for 1 minute to confirm arrival
+                const ARRIVAL_DWELL_MS = 60000; // Must stay at destination house/frontage for 1 minute to confirm arrival
 
                 if (destCoord) {
-                    const distToHouse = map.distance([curLat, curLng], [destCoord.lat, destCoord.lng]);
-                    if (distToHouse <= ARRIVAL_RADIUS_METERS) {
+                    const distToZone = destArrivalZone.getDistanceToZone(curLat, curLng);
+                    if (distToZone <= GUARD_ARRIVAL_BUFFER_M) {
                         if (!window._visitorArrivedSinceTs) {
                             window._visitorArrivedSinceTs = nowTs;
                         }
                     } else if (!window._visitorArrivalConfirmed) {
-                        // Left the 20m radius before 1 minute elapsed (e.g. just passing by) -> reset dwell timer
+                        // Left the house/frontage zone before 1 minute elapsed (e.g. just passing by) -> reset dwell timer
                         window._visitorArrivedSinceTs = null;
                     }
                 }
@@ -2674,66 +2957,28 @@ async function initGISMap(mapElementId, options = {}) {
             }
 
             async function handlePosition(rawLat, rawLng, rawAccuracy, headingVal) {
+                if (!Number.isFinite(rawLat) || !Number.isFinite(rawLng)) return;
                 const mySeq = ++latestPositionSeq;
                 const now = Date.now();
-                const rawDistToDest = map.distance([rawLat, rawLng], [destCoord.lat, destCoord.lng]);
 
-                // 1. ARRIVAL LOCK: Prevent indoor jumping when visiting or inside the destination house
-                if (isArrivedLocked) {
-                    if (rawDistToDest > 35 && rawAccuracy && rawAccuracy < 18) {
-                        isArrivedLocked = false;
-                    } else {
-                        if (badgeEl && !badgeEl.classList.contains('arrived')) {
-                            badgeEl.className = 'nav-hud-badge arrived';
-                            badgeTextEl.textContent = '🎉 You Have Arrived!';
-                        }
-                        if (stepInstEl) stepInstEl.innerHTML = `Welcome to <strong>${destinationName}</strong>!`;
-                        if (simTipEl) simTipEl.innerHTML = '📍 Arrived at destination • Location locked';
-                        streamVisitorLocation(rawLat, rawLng);
-                        return;
-                    }
-                }
-
-                if (rawDistToDest < 12 && (!rawAccuracy || rawAccuracy <= 25)) {
-                    isArrivedLocked = true;
-                    osrmLayerGroup.clearLayers();
-                    routingLayerGroup.clearLayers();
-
-                    if (badgeEl) {
-                        badgeEl.className = 'nav-hud-badge arrived';
-                        badgeTextEl.textContent = '🎉 You Have Arrived!';
-                    }
-                    if (distValEl) distValEl.textContent = '0 m';
-                    if (timeValEl) timeValEl.textContent = '0 min';
-                    if (stepInstEl) stepInstEl.innerHTML = `Welcome to <strong>${destinationName}</strong>! You have reached your destination.`;
-                    if (simTipEl) simTipEl.innerHTML = '📍 Arrived at destination • Location locked';
-                    renderNavStepsUI([{ icon: '🏁', instruction: `Arrived at ${destinationName}`, distance: 0, location: [destCoord.lat, destCoord.lng] }], 0, 0, rawLat, rawLng);
-
-                    L.circle([destCoord.lat, destCoord.lng], {
-                        radius: 12, color: '#16a34a', weight: 3, fillColor: '#86efac', fillOpacity: 0.5
-                    }).addTo(routingLayerGroup);
-                    streamVisitorLocation(rawLat, rawLng);
-                    return;
-                }
-
-                // 2. ACCURACY GATING: Filter noisy indoor/coarse readings
-                if (!lastAcceptedPos && rawAccuracy && rawAccuracy > 85) {
+                // 1. INITIAL & SEVERE ACCURACY GATING (never hard-freeze on normal 30-65m near-house readings)
+                if (!lastAcceptedPos && rawAccuracy && rawAccuracy > 100) {
                     if (simTipEl) {
                         simTipEl.innerHTML = `🛰️ Refining GPS signal (±${Math.round(rawAccuracy)}m)...`;
                     }
                     return; // Wait for a usable initial fix instead of anchoring to a coarse cell/Wi-Fi jump
                 }
-                if (lastAcceptedPos && rawAccuracy && rawAccuracy > 30) {
+                if (lastAcceptedPos && rawAccuracy && rawAccuracy > 65) {
                     if (simTipEl) {
-                        simTipEl.innerHTML = `⚠️ Low GPS signal indoors (±${Math.round(rawAccuracy)}m) • Holding steady location`;
+                        simTipEl.innerHTML = `⚠️ Weak GPS signal (±${Math.round(rawAccuracy)}m) • Holding steady position`;
                     }
                     if (accuracyCircle) {
                         accuracyCircle.setRadius(Math.min(rawAccuracy, 45));
                     }
-                    return; // Suppress indoor phantom jumps!
+                    return; // Ignore extreme cell-tower noise only
                 }
 
-                // 3. SPEED & TELEPORTATION SANITY CHECK
+                // 2. SPEED / TELEPORTATION SANITY CHECK & ACCURACY-AWARE EMA SMOOTHING
                 let curLat = rawLat;
                 let curLng = rawLng;
                 if (lastAcceptedPos) {
@@ -2741,19 +2986,29 @@ async function initGISMap(mapElementId, options = {}) {
                     const dt = (now - lastAcceptedTime) / 1000;
                     if (dt > 0.4 && dt < 12) {
                         const speed = jumpM / dt;
-                        // Allow normal highway driving speeds outside; suppress impossible teleport spikes
-                        const maxReasonableSpeed = wasInsideSubdivision ? 16.0 : 45.0;
-                        if (speed > maxReasonableSpeed && jumpM > 25) {
+                        // Allow normal highway driving speeds outside; suppress impossible multipath spikes
+                        const maxReasonableSpeed = wasInsideSubdivision ? 18.0 : 45.0;
+                        if (speed > maxReasonableSpeed && jumpM > 35) {
                             if (simTipEl) {
-                                simTipEl.innerHTML = '🛰️ Suppressing indoor GPS multipath bounce...';
+                                simTipEl.innerHTML = '🛰️ Suppressing GPS multipath spike...';
                             }
                             return;
                         }
                     }
-                    // Accuracy-aware Exponential Moving Average (EMA) low-pass smoothing
-                    const baseAlpha = jumpM < 3.0 ? 0.28 : (jumpM < 12.0 ? 0.45 : 0.65);
-                    const accScale = (rawAccuracy && rawAccuracy > 18) ? 0.7 : 1.0;
-                    const alpha = baseAlpha * accScale;
+
+                    // Smooth jitter without freezing: gentle damping when stationary/arrived or indoors, responsive when moving
+                    let baseAlpha;
+                    if (isArrived && jumpM < 1.5) {
+                        baseAlpha = 0.18;
+                    } else if (jumpM < 3.0) {
+                        baseAlpha = 0.28;
+                    } else if (jumpM < 12.0) {
+                        baseAlpha = 0.48;
+                    } else {
+                        baseAlpha = 0.68;
+                    }
+                    const accScale = (rawAccuracy && rawAccuracy > 30) ? 0.35 : ((rawAccuracy && rawAccuracy > 18) ? 0.7 : 1.0);
+                    const alpha = Math.max(0.12, baseAlpha * accScale);
                     curLat = lastAcceptedPos.lat + alpha * (rawLat - lastAcceptedPos.lat);
                     curLng = lastAcceptedPos.lng + alpha * (rawLng - lastAcceptedPos.lng);
                 }
@@ -2761,8 +3016,7 @@ async function initGISMap(mapElementId, options = {}) {
                 lastAcceptedTime = now;
                 userPos = { lat: curLat, lng: curLng, accuracy: rawAccuracy };
 
-                // Update heading from GPS/motion when no absolute compass is active,
-                // or calibrate relative compass offset to true North when moving
+                // 3. HEADING / COMPASS CALIBRATION (stays active even after arrival)
                 let gpsCourse = null;
                 if (headingVal !== null && headingVal !== undefined && !isNaN(headingVal)) {
                     gpsCourse = headingVal;
@@ -2785,29 +3039,67 @@ async function initGISMap(mapElementId, options = {}) {
                     }
                 }
 
-                const beaconIcon = L.divIcon({
-                    className: 'subdivision-live-marker-container',
-                    html: `
-                        <div class="subdivision-live-beacon">
-                            <div class="user-heading-cone" id="userHeadingCone" style="transform: rotate(${getConeScreenAngle()}deg);">
-                                <svg width="84" height="84" viewBox="0 0 84 84" style="display:block;">
-                                    <defs>
-                                        <radialGradient id="userBeamGlow" cx="50%" cy="50%" r="50%">
-                                            <stop offset="0%" stop-color="#4285F4" stop-opacity="0.58" />
-                                            <stop offset="65%" stop-color="#4285F4" stop-opacity="0.22" />
-                                            <stop offset="100%" stop-color="#4285F4" stop-opacity="0.0" />
-                                        </radialGradient>
-                                    </defs>
-                                    <path d="M 42 42 L 13 6 A 44 44 0 0 1 71 6 Z" fill="url(#userBeamGlow)" />
-                                </svg>
-                            </div>
-                            <div class="pulse-ring"></div>
-                            <div class="center-dot"></div>
-                        </div>
-                    `,
-                    iconSize: [84, 84],
-                    iconAnchor: [42, 42]
-                });
+                // 4. HOUSE + FRONT-OF-HOUSE ARRIVAL EVALUATION (Live marker NEVER freezes)
+                const distToZone = destArrivalZone.getDistanceToZone(curLat, curLng);
+                if (!isArrived) {
+                    if (distToZone <= ARRIVAL_ENTER_BUFFER_M && (!rawAccuracy || rawAccuracy <= 35)) {
+                        isArrived = true;
+                    }
+                } else if (distToZone > ARRIVAL_EXIT_BUFFER_M && (!rawAccuracy || rawAccuracy <= 35)) {
+                    isArrived = false;
+                    wasArrivedRendered = false;
+                }
+
+                if (isArrived) {
+                    wasInsideSubdivision = true;
+                    renderDestinationZone(true);
+
+                    if (!wasArrivedRendered) {
+                        wasArrivedRendered = true;
+                        osrmLayerGroup.clearLayers();
+                        routingLayerGroup.clearLayers();
+                        createGoogleDestPinMarker([destCoord.lat, destCoord.lng], '📍 Destination (' + destinationName + ')');
+                    }
+
+                    // Always keep the live GPS beacon moving smoothly in front of / inside the house
+                    const arrivedCoord = [curLat, curLng];
+                    updateLiveGpsVisuals(arrivedCoord, arrivedCoord, rawAccuracy);
+
+                    if (badgeEl && !badgeEl.classList.contains('arrived')) {
+                        badgeEl.className = 'nav-hud-badge arrived';
+                        badgeTextEl.textContent = '🎉 You Have Arrived!';
+                    }
+                    if (distValEl) distValEl.textContent = '0 m';
+                    if (timeValEl) timeValEl.textContent = '0 min';
+                    if (stepInstEl) stepInstEl.innerHTML = `Welcome to <strong>${destinationName}</strong>! You are right in front of your destination.`;
+                    if (simTipEl) {
+                        simTipEl.innerHTML = (rawAccuracy && rawAccuracy > 30)
+                            ? `📍 Arrived at ${destinationName} • Live GPS active (±${Math.round(rawAccuracy)}m)`
+                            : `📍 Arrived at ${destinationName} • Live GPS active`;
+                    }
+                    renderNavStepsUI(
+                        [{ icon: '🏁', instruction: `Arrived at ${destinationName}`, distance: 0, location: [destCoord.lat, destCoord.lng] }],
+                        0,
+                        0,
+                        curLat,
+                        curLng
+                    );
+
+                    if (!initialFitDone) {
+                        initialFitDone = true;
+                        map.setView(arrivedCoord, 20);
+                        lastPanCoord = arrivedCoord;
+                    } else if (autoFollow && (!lastPanCoord || map.distance(lastPanCoord, arrivedCoord) > 2.5)) {
+                        map.panTo(arrivedCoord, { animate: true });
+                        lastPanCoord = arrivedCoord;
+                    }
+
+                    streamVisitorLocation(curLat, curLng);
+                    return;
+                }
+
+                // En route: keep destination house + front-of-house pad highlighted in approach mode
+                renderDestinationZone(false);
 
                 const inside = checkIfInside(curLat, curLng);
 
@@ -2907,21 +3199,7 @@ async function initGISMap(mapElementId, options = {}) {
                         drawGoogleDottedConnector(displayCoord, roadEntryPt, routingLayerGroup);
                     }
 
-                    if (!liveGpsMarker) {
-                        liveGpsMarker = L.marker(displayCoord, { icon: beaconIcon, zIndexOffset: 1000 }).addTo(liveNavGroup);
-                        accuracyCircle = L.circle([curLat, curLng], {
-                            radius: Math.min(rawAccuracy || 10, 45),
-                            color: '#3b82f6',
-                            weight: 1,
-                            fillColor: '#93c5fd',
-                            fillOpacity: 0.18
-                        }).addTo(liveNavGroup);
-                    } else {
-                        liveGpsMarker.setLatLng(displayCoord);
-                        accuracyCircle.setLatLng([curLat, curLng]);
-                        accuracyCircle.setRadius(Math.min(rawAccuracy || 10, 45));
-                    }
-                    liveGpsMarker.bindTooltip('📍 Your Live Location', { direction: 'top', offset: [0, -10] });
+                    updateLiveGpsVisuals(displayCoord, [curLat, curLng], rawAccuracy);
 
                     if (simTipEl) {
                         if (offRoadGap > 6.0) {
@@ -3029,21 +3307,7 @@ async function initGISMap(mapElementId, options = {}) {
                     const isOnRoad = userSnap && (userSnap.dist <= ROAD_CORRIDOR_METERS) && (!rawAccuracy || rawAccuracy <= 25);
                     const displayCoord = (isOnRoad && userSnap) ? userSnap.point : [curLat, curLng];
 
-                    if (!liveGpsMarker) {
-                        liveGpsMarker = L.marker(displayCoord, { icon: beaconIcon, zIndexOffset: 1000 }).addTo(liveNavGroup);
-                        accuracyCircle = L.circle([curLat, curLng], {
-                            radius: Math.min(rawAccuracy || 10, 45),
-                            color: '#3b82f6',
-                            weight: 1,
-                            fillColor: '#93c5fd',
-                            fillOpacity: 0.18
-                        }).addTo(liveNavGroup);
-                    } else {
-                        liveGpsMarker.setLatLng(displayCoord);
-                        accuracyCircle.setLatLng([curLat, curLng]);
-                        accuracyCircle.setRadius(Math.min(rawAccuracy || 10, 45));
-                    }
-                    liveGpsMarker.bindTooltip('📍 Your Live Location', { direction: 'top', offset: [0, -10] });
+                    updateLiveGpsVisuals(displayCoord, [curLat, curLng], rawAccuracy);
 
                     if (simTipEl) {
                         const altNotice = (preferAlternative && altRoadLatLngs.length > 0) ? ' • Alt route' : '';
@@ -3183,6 +3447,9 @@ async function initGISMap(mapElementId, options = {}) {
                     map.off('rotate', syncHeadingConeToMapBearing);
                     map.off('dragstart', onMapDragStart);
                     map.off('zoomend', onZoomEndUpdateWeights);
+                    if (destHouseLayer && typeof destHouseLayer.setStyle === 'function') {
+                        destHouseLayer.setStyle({ fillColor: '#2563eb', color: '#1d4ed8', weight: 2.5, fillOpacity: 0.95 });
+                    }
                     osrmLayerGroup.clearLayers();
                     liveNavGroup.clearLayers();
                 }
@@ -3213,22 +3480,65 @@ async function initGISMap(mapElementId, options = {}) {
                 }
             }
 
-            if (!destCoord && houseLayer) {
+            // Match the exact destination house polygon layer (choosing closest to destCoord if duplicate B/L exists)
+            let destHouseLayer = null;
+            let destHouseRing = null;
+            if (houseLayer) {
+                let bestMatchDist = Infinity;
                 houseLayer.eachLayer(layer => {
-                    if (layer.feature.properties && layer.feature.properties.block_num) {
+                    if (layer.feature && layer.feature.properties && layer.feature.properties.block_num) {
                         const id = `B${layer.feature.properties.block_num} L${layer.feature.properties.lot_number}`;
                         if (id === config.endNode) {
-                            destCoord = layer.getBounds().getCenter();
+                            const center = layer.getBounds().getCenter();
+                            if (!destCoord) {
+                                destCoord = center;
+                            }
+                            const d = map.distance([destCoord.lat, destCoord.lng], [center.lat, center.lng]);
+                            if (d < bestMatchDist) {
+                                bestMatchDist = d;
+                                destHouseLayer = layer;
+                            }
                         }
                     }
                 });
+
+                if (destHouseLayer && destHouseLayer.feature && destHouseLayer.feature.geometry) {
+                    const geom = destHouseLayer.feature.geometry;
+                    const rawRing = geom.type === 'MultiPolygon'
+                        ? (geom.coordinates[0] && geom.coordinates[0][0])
+                        : (geom.type === 'Polygon' ? geom.coordinates[0] : null);
+                    if (Array.isArray(rawRing) && rawRing.length >= 3) {
+                        destHouseRing = rawRing
+                            .filter(c => Array.isArray(c) && c.length >= 2)
+                            .map(c => [c[1], c[0]]);
+                    }
+                }
             }
 
             let destRoadPoint = null;
             if (config.endNode && localHouseFrontRoad && localHouseFrontRoad[config.endNode]) {
                 const lfr = localHouseFrontRoad[config.endNode];
                 const trans = transformCoordPair([lfr.lng, lfr.lat], calib);
-                destRoadPoint = L.latLng(trans[1], trans[0]);
+                const candidateRoadPt = L.latLng(trans[1], trans[0]);
+                // Guard against duplicate block/lot mismatch by confirming road point is within 25m of destCoord
+                if (!destCoord || map.distance([destCoord.lat, destCoord.lng], [candidateRoadPt.lat, candidateRoadPt.lng]) <= 25) {
+                    destRoadPoint = candidateRoadPt;
+                }
+            }
+            if (!destRoadPoint && destCoord && segments.length > 0) {
+                const destPt = [destCoord.lat, destCoord.lng];
+                let minRoadD = Infinity;
+                let bestRoadProj = null;
+                for (let i = 0; i < segments.length; i++) {
+                    const res = projectPointToSegment(destPt, segments[i].p1, segments[i].p2);
+                    if (res.dist < minRoadD) {
+                        minRoadD = res.dist;
+                        bestRoadProj = res.point;
+                    }
+                }
+                if (bestRoadProj) {
+                    destRoadPoint = L.latLng(bestRoadProj[0], bestRoadProj[1]);
+                }
             }
 
             if (startNodeId && destCoord) {
@@ -3245,6 +3555,8 @@ async function initGISMap(mapElementId, options = {}) {
                         entranceCoord: entranceCoord,
                         destCoord: destCoord,
                         destFrontRoadCoord: destRoadPoint,
+                        destHouseRing: destHouseRing,
+                        destHouseLayer: destHouseLayer,
                         graph: graph,
                         coordinatesMap: coordinatesMap,
                         segments: segments,
