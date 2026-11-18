@@ -534,6 +534,7 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/api/visitors/{id}/approve', [\App\Http\Controllers\VisitorController::class, 'approve']);
     Route::put('/api/visitors/{id}/reject', [\App\Http\Controllers\VisitorController::class, 'reject']);
     Route::put('/api/visitors/{id}/enter', [\App\Http\Controllers\VisitorController::class, 'markEntered']);
+    Route::put('/api/visitors/{id}/exit', [\App\Http\Controllers\VisitorController::class, 'markExited']);
 });
 
 Route::post('/api/appointments', function (\Illuminate\Http\Request $request) {

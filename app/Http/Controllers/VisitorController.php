@@ -53,6 +53,7 @@ class VisitorController extends Controller
                 'validity' => $vis->validity,
                 'status' => $vis->status,
                 'arrival_time' => $vis->arrival_time,
+                'exit_time' => $vis->exit_time,
                 'type' => $vis->type,
                 'plate_number' => $vis->plate_number,
                 'visitor_address' => $vis->visitor_address,
@@ -244,6 +245,7 @@ class VisitorController extends Controller
             'validity' => $visitor->validity,
             'host_name' => $visitor->host?->name ?? ($visitor->host_name ?: 'Subdivision Resident'),
             'arrival_time' => $visitor->arrival_time,
+            'exit_time' => $visitor->exit_time,
         ]);
     }
     
@@ -402,6 +404,38 @@ class VisitorController extends Controller
         ]);
     }
 
+    // For Guard marking visitor as Exited (removes from live monitoring & records exit time)
+    public function markExited(Request $request, $id)
+    {
+        if (!auth()->check() || !auth()->user()->hasAnyRole(['Admin', 'Security Guard'])) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized. Only guards or administrators can record visitor exit.'], 403);
+        }
+
+        $visitor = Visitor::where('id', $id)->firstOrFail();
+
+        if ($visitor->status !== 'Exited') {
+            $tz = config('app.timezone', 'Asia/Manila');
+            $updateData = [
+                'status' => 'Exited',
+                'exit_time' => \Carbon\Carbon::now()->setTimezone($tz)->format('h:i A'),
+            ];
+
+            if (empty($visitor->guard_id)) {
+                $updateData['guard_id'] = auth()->user()->id;
+                $updateData['guard_name'] = auth()->user()->name;
+            }
+
+            $visitor->update($updateData);
+        }
+
+        return response()->json([
+            'success' => true,
+            'status' => $visitor->status,
+            'arrival_time' => $visitor->arrival_time,
+            'exit_time' => $visitor->exit_time,
+        ]);
+    }
+
     // For Admin rejecting a code
     public function reject($id)
     {
@@ -479,6 +513,14 @@ class VisitorController extends Controller
         $visitor = Visitor::where('access_token', $request->token)->with('host.lots')->first();
         if (!$visitor) {
             return response()->json(['error' => 'Invalid visitor token'], 404);
+        }
+
+        if (in_array($visitor->status, ['Exited', 'Rejected'], true)) {
+            return response()->json([
+                'success' => false,
+                'stopped' => true,
+                'status' => $visitor->status,
+            ]);
         }
 
         $isAtDest = (bool) $request->input('is_at_destination', false);

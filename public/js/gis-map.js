@@ -2952,7 +2952,24 @@ async function initGISMap(mapElementId, options = {}) {
                             lng: curLng,
                             is_at_destination: isAtDest
                         })
-                    }).catch(() => {});
+                    })
+                    .then(res => res.ok ? res.json() : null)
+                    .then(data => {
+                        if (data && data.stopped) {
+                            if (watchId !== null && navigator.geolocation) {
+                                navigator.geolocation.clearWatch(watchId);
+                                watchId = null;
+                            }
+                            if (badgeEl) {
+                                badgeEl.className = 'nav-hud-badge';
+                                if (badgeTextEl) badgeTextEl.textContent = '🚪 Visit Completed';
+                            }
+                            if (simTipEl) {
+                                simTipEl.innerHTML = '🚪 Gate exit recorded • Live GPS sharing turned off';
+                            }
+                        }
+                    })
+                    .catch(() => {});
                 }
             }
 

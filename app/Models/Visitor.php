@@ -21,6 +21,7 @@ class Visitor extends Model
         'purpose',
         'validity',
         'arrival_time',
+        'exit_time',
         'status',
         'plate_number',
         'type',

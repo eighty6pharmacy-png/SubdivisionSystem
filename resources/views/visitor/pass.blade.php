@@ -135,10 +135,11 @@
 @else
     @php
         $isEntered = ($visitor->status === 'Entered');
+        $isExited = ($visitor->status === 'Exited');
         $isPending = ($visitor->status === 'Pending' || $visitor->status === 'Awaiting Admin Approval');
         $isRejected = ($visitor->status === 'Rejected');
         // Step 5: Direct instant access to routing map for visitors without guard validation
-        $canViewMap = !$isRejected;
+        $canViewMap = !$isRejected && !$isExited;
     @endphp
 
     <!-- GATE PASS CARD (Can be toggled while viewing map) -->
@@ -170,6 +171,14 @@
                         <h3 style="font-size: 18px; font-weight: 800; color: #991b1b; margin: 0 0 8px;">Pass Declined</h3>
                         <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
                             This visitor access request was not approved by administration. Please coordinate with your resident host.
+                        </p>
+                    </div>
+                @elseif ($isExited)
+                    <div style="padding: 20px 0;">
+                        <div style="font-size: 40px; margin-bottom: 12px;">🚪</div>
+                        <h3 style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 0 0 8px;">Visit Completed</h3>
+                        <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
+                            Your gate exit was recorded{{ $visitor->exit_time ? ' at ' . $visitor->exit_time : '' }}. Live GPS tracking has been turned off.
                         </p>
                     </div>
                 @else
@@ -528,7 +537,15 @@
                             lat: pos.coords.latitude,
                             lng: pos.coords.longitude
                         })
-                    }).catch(() => {});
+                    })
+                    .then(res => res.ok ? res.json() : null)
+                    .then(data => {
+                        if (data && data.stopped && window._visitorTrackingWatchId) {
+                            navigator.geolocation.clearWatch(window._visitorTrackingWatchId);
+                            window._visitorTrackingWatchId = null;
+                        }
+                    })
+                    .catch(() => {});
                 }
             },
             (err) => console.warn('Visitor GPS notice:', err.message),
@@ -537,7 +554,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        if (currentStatus !== 'Rejected') {
+        if (currentStatus !== 'Rejected' && currentStatus !== 'Exited') {
             launchRoutingMap();
         }
         if (currentStatus === 'Entered') {

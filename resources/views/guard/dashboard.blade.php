@@ -194,7 +194,7 @@
             // 2. Pre-registered/Approved with validity today
             // 3. Or validity marked 'Today'
             const todaysVisitors = visitors.filter(pin => {
-                if (pin.status === 'Entered' && pin.date === todayStr) return true;
+                if ((pin.status === 'Entered' || pin.status === 'Exited') && pin.date === todayStr) return true;
                 if (pin.validity === 'Today') return true;
                 if (pin.date === todayStr) return true;
                 if (pin.status === 'Approved' && (!pin.validity || pin.validity === 'Today' || pin.validity.includes(todayStr))) return true;
@@ -210,12 +210,13 @@
             todaysVisitors.forEach(pin => {
                 let badgeClass = 'badge-secondary';
                 if (pin.status === 'Entered') badgeClass = 'badge-success';
+                else if (pin.status === 'Exited') badgeClass = 'badge-secondary';
                 else if (pin.status === 'Approved') badgeClass = 'badge-info';
                 else if (pin.status === 'Pending' || pin.status === 'Awaiting Admin Approval') badgeClass = 'badge-warning';
                 else if (pin.status === 'Rejected') badgeClass = 'badge-danger';
 
                 let arrivalHtml = '';
-                if (pin.status === 'Entered' && pin.arrival_time) {
+                if ((pin.status === 'Entered' || pin.status === 'Exited') && pin.arrival_time) {
                     arrivalHtml = `<div style="font-size: 11px; color: #10b981; margin-top: 4px; font-weight: 700;">Entered: ${pin.arrival_time}</div>`;
                 }
 

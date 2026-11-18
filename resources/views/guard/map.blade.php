@@ -272,6 +272,9 @@
                     <span style="font-weight: 800; color: ${statusColor};">${statusText}</span>
                     <span style="color: #94a3b8;">${vis.last_ping_at || 'Just now'}</span>
                 </div>
+                <button type="button" onclick="markVisitorExited('${vis.visitor_id}', '${(vis.visitor_name || 'Visitor').replace(/'/g, "\\'")}')" style="width: 100%; margin-top: 8px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 6px 10px; font-size: 11px; font-weight: 800; color: #b91c1c; cursor: pointer;">
+                    🚪 Mark Exited (Remove from Radar)
+                </button>
             </div>
         `;
     }
@@ -349,6 +352,47 @@
             dedicatedMapInstance.setView([pos.lat, pos.lng], 19, { animate: true });
             item.marker.openPopup();
         }
+    }
+
+    function markVisitorExited(visitorId, visitorName) {
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        fetch(`/api/visitors/${visitorId}/exit`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrf
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) return;
+            const entry = liveVisitorMarkers.get(Number(visitorId)) || liveVisitorMarkers.get(String(visitorId));
+            if (entry) {
+                if (dedicatedMapInstance && entry.marker) {
+                    dedicatedMapInstance.removeLayer(entry.marker);
+                }
+                liveVisitorMarkers.delete(Number(visitorId));
+                liveVisitorMarkers.delete(String(visitorId));
+            }
+            hasAlertedFor.delete(Number(visitorId));
+            hasAlertedFor.delete(String(visitorId));
+            hasWarnedGpsFor.delete(Number(visitorId));
+            hasWarnedGpsFor.delete(String(visitorId));
+            hasWarnedDelayFor.delete(Number(visitorId));
+            hasWarnedDelayFor.delete(String(visitorId));
+            renderDedicatedVisitorsList();
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'success',
+                    title: `${visitorName || 'Visitor'} marked Exited (${data.exit_time || 'Now'})`,
+                    showConfirmButton: false,
+                    timer: 2500
+                });
+            }
+        })
+        .catch(err => console.warn('Mark exited error:', err));
     }
 
     function onVisitorLocationUpdate(vis) {
@@ -477,9 +521,14 @@
                         <span>Host: <strong>${d.host_name}</strong></span>
                         <span>${d.last_ping_at || 'Just now'}</span>
                     </div>
-                    <button type="button" onclick="focusVisitorOnMap('${d.visitor_id}')" style="width: 100%; margin-top: 10px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; font-size: 12px; font-weight: 700; color: #334155; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
-                        🎯 Focus on Map
-                    </button>
+                    <div style="display: flex; gap: 8px; margin-top: 10px;">
+                        <button type="button" onclick="focusVisitorOnMap('${d.visitor_id}')" style="flex: 1; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 700; color: #334155; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                            🎯 Focus
+                        </button>
+                        <button type="button" onclick="markVisitorExited('${d.visitor_id}', '${(d.visitor_name || 'Visitor').replace(/'/g, "\\'")}')" style="flex: 1; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 700; color: #b91c1c; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                            🚪 Mark Exited
+                        </button>
+                    </div>
                 </div>
             `;
         });

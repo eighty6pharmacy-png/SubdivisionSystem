@@ -62,7 +62,7 @@
                 <tbody id="historyTableBody">
                     @php
                         $allVisitors = collect($pins)
-                            ->filter(fn($v) => ($v['status'] ?? '') === 'Entered')
+                            ->filter(fn($v) => in_array($v['status'] ?? '', ['Entered', 'Exited'], true))
                             ->values();
                     @endphp
 
@@ -105,10 +105,17 @@
                             @endif
                         </td>
                         <td>
-                            <div style="display: flex; align-items: center; gap: 6px; color: #10b981; font-weight: 700; font-size: 13px;">
-                                <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%;"></span>
-                                Entered
-                            </div>
+                            @if(($v['status'] ?? '') === 'Exited')
+                                <div style="display: flex; align-items: center; gap: 6px; color: #475569; font-weight: 700; font-size: 13px;">
+                                    <span style="width: 8px; height: 8px; background: #64748b; border-radius: 50%;"></span>
+                                    Exited
+                                </div>
+                            @else
+                                <div style="display: flex; align-items: center; gap: 6px; color: #10b981; font-weight: 700; font-size: 13px;">
+                                    <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%;"></span>
+                                    Entered
+                                </div>
+                            @endif
                         </td>
                     </tr>
                     @empty
