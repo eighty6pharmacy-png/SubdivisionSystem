@@ -29,8 +29,7 @@
         <div class="active-nav-main">
             <div class="active-nav-arrow" id="activeNavArrow">⬆️</div>
             <div class="active-nav-text">
-                <div class="active-nav-meters" id="activeNavMeters">-- m</div>
-                <div class="active-nav-inst" id="activeNavInst">Calculating route...</div>
+                <div class="active-nav-inst" id="activeNavInst" style="font-size: 16px;">Calculating route...</div>
             </div>
         </div>
         <div class="active-nav-subrow">
@@ -59,11 +58,6 @@
         </div>
         <div class="nav-hud-metrics">
             <div class="nav-metric">
-                <div class="nav-metric-label">DISTANCE</div>
-                <div class="nav-metric-val" id="hudDistanceVal">--</div>
-            </div>
-            <div class="nav-metric-sep"></div>
-            <div class="nav-metric">
                 <div class="nav-metric-label">EST. TIME</div>
                 <div class="nav-metric-val" id="hudTimeVal">--</div>
             </div>
@@ -90,7 +84,7 @@
     <div id="activeNavBottom" class="active-nav-bottom">
         <div class="active-nav-eta">
             <div class="active-nav-eta-time" id="activeNavEtaTime">-- min</div>
-            <div class="active-nav-eta-dist" id="activeNavEtaDist">-- m</div>
+            <div class="active-nav-eta-dist" id="activeNavEtaDist">Destination</div>
         </div>
         <div class="active-nav-bottom-actions">
             <button type="button" onclick="openStepsFromActive()" class="hud-tool-btn" title="View all steps">📋 Steps</button>

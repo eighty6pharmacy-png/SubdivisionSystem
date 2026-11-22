@@ -34,7 +34,7 @@ class HighwayNavigationController extends Controller
         $eLng = (float) $endLng;
 
         // Cache route responses by ~15m grid resolution for 2 hours for instant load times
-        $cacheKey = sprintf('hwy_nav_route_v3_%.4f_%.4f_%.4f_%.4f', $sLat, $sLng, $eLat, $eLng);
+        $cacheKey = sprintf('hwy_nav_route_v4_%.4f_%.4f_%.4f_%.4f', $sLat, $sLng, $eLat, $eLng);
 
         $cachedData = Cache::remember($cacheKey, 7200, function () use ($sLat, $sLng, $eLat, $eLng) {
             try {
@@ -54,9 +54,20 @@ class HighwayNavigationController extends Controller
                 if ($response->successful()) {
                     $json = $response->json();
                     if (isset($json['code']) && $json['code'] === 'Ok' && !empty($json['routes'])) {
+                        $routes = $json['routes'];
+
+                        // If OSRM returned only 1 route on a trip > 500m, probe a perpendicular midpoint via-waypoint
+                        // to surface any parallel alternative road (Google Maps style).
+                        if (count($routes) === 1 && ($routes[0]['distance'] ?? 0) > 500) {
+                            $altRoute = $this->fetchViaAlternative($sLat, $sLng, $eLat, $eLng, $routes[0]);
+                            if ($altRoute !== null) {
+                                $routes[] = $altRoute;
+                            }
+                        }
+
                         return [
                             'code' => 'Ok',
-                            'routes' => $json['routes'],
+                            'routes' => $routes,
                             'source' => 'server_proxy'
                         ];
                     }
@@ -87,6 +98,62 @@ class HighwayNavigationController extends Controller
         });
 
         return response()->json($cachedData);
+    }
+
+    private function fetchViaAlternative(float $sLat, float $sLng, float $eLat, float $eLng, array $primaryRoute): ?array
+    {
+        $primaryDist = (float) ($primaryRoute['distance'] ?? 0);
+        if ($primaryDist <= 500) {
+            return null;
+        }
+
+        $midLat = ($sLat + $eLat) / 2.0;
+        $midLng = ($sLng + $eLng) / 2.0;
+        $dLat = $eLat - $sLat;
+        $dLng = $eLng - $sLng;
+        $norm = hypot($dLat, $dLng);
+        if ($norm <= 1e-6) {
+            return null;
+        }
+
+        // Offset ~350m perpendicular to the origin-destination line (both sides)
+        $offsetDeg = 0.0032;
+        $perpLat = (-$dLng / $norm) * $offsetDeg;
+        $perpLng = ($dLat / $norm) * $offsetDeg;
+
+        foreach ([[$midLat + $perpLat, $midLng + $perpLng], [$midLat - $perpLat, $midLng - $perpLng]] as [$vLat, $vLng]) {
+            try {
+                $viaUrl = sprintf(
+                    'https://router.project-osrm.org/route/v1/driving/%.6f,%.6f;%.6f,%.6f;%.6f,%.6f?overview=full&geometries=geojson&alternatives=false&steps=true',
+                    $sLng,
+                    $sLat,
+                    $vLng,
+                    $vLat,
+                    $eLng,
+                    $eLat
+                );
+                $res = Http::withHeaders([
+                    'User-Agent' => 'SubdivisionSystem-Althesa/1.0 (contact: admin@althesa.local)',
+                    'Accept' => 'application/json',
+                ])->timeout(5)->get($viaUrl);
+
+                if ($res->successful()) {
+                    $json = $res->json();
+                    if (isset($json['code']) && $json['code'] === 'Ok' && !empty($json['routes'][0])) {
+                        $cand = $json['routes'][0];
+                        $candDist = (float) ($cand['distance'] ?? 0);
+                        // Accept only if it's a reasonable detour (not a huge loop) and meaningfully different from primary
+                        if ($candDist > 0 && $candDist <= $primaryDist * 1.45 && abs($candDist - $primaryDist) > 40) {
+                            return $cand;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                continue;
+            }
+        }
+
+        return null;
     }
 
     private function calculateDistance(float $lat1, float $lon1, float $lat2, float $lon2): float

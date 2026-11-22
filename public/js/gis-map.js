@@ -2009,11 +2009,29 @@ async function initGISMap(mapElementId, options = {}) {
 
             function fmtTime(s) {
                 if (s == null || isNaN(s)) return '--';
-                if (s < 60) return '< 1 min';
+                if (s <= 0) return '0 min';
+                if (s < 60) return '1 min';
                 if (s < 3600) return Math.round(s / 60) + ' min';
                 const h = Math.floor(s / 3600);
                 const m = Math.round((s % 3600) / 60);
-                return `${h}h ${m}m`;
+                return m > 0 ? `${h} hr ${m} min` : `${h} hr`;
+            }
+
+            // Google Maps-style realistic ETA estimator (accounts for urban traffic, intersections, & subdivision speed)
+            function estimateGoogleMapsDuration(osrmDurationSec, osrmDistanceM, internalDistM, walkDistM = 0, stepCount = 0) {
+                let hwyTime = 0;
+                if (osrmDistanceM > 0) {
+                    const rawOsrm = Number.isFinite(osrmDurationSec) && osrmDurationSec > 0
+                        ? osrmDurationSec
+                        : (osrmDistanceM / 8.33);
+                    // OSRM free-flow is ~30-35% faster than real-world urban/suburban traffic + turn delays
+                    const turnPenalty = Math.min(stepCount, 12) * 8;
+                    const urbanFloor = osrmDistanceM / 10.5; // ~38 km/h realistic suburban cap
+                    hwyTime = Math.max(rawOsrm * 1.35 + turnPenalty, urbanFloor);
+                }
+                const internalTime = internalDistM > 0 ? (internalDistM / 3.0) : 0; // ~10.8 km/h inside residential streets
+                const walkTime = walkDistM > 0 ? (walkDistM / 1.35) : 0;
+                return hwyTime + internalTime + walkTime;
             }
 
             let liveGpsMarker = null;
@@ -2216,15 +2234,15 @@ async function initGISMap(mapElementId, options = {}) {
                 const etaDistEl = document.getElementById('activeNavEtaDist');
 
                 if (bannerArrow) bannerArrow.textContent = curStep.icon;
-                if (bannerMeters) bannerMeters.textContent = curStep.distance > 0 ? fmtDist(distToNext) : 'Arriving';
+                if (bannerMeters) bannerMeters.style.display = 'none';
                 if (bannerInst) bannerInst.textContent = curStep.instruction;
                 if (bannerNext) {
                     bannerNext.textContent = nextStep
-                        ? `Then: ${nextStep.icon} ${nextStep.instruction} (${fmtDist(nextStep.distance)})`
+                        ? `Then: ${nextStep.icon} ${nextStep.instruction}`
                         : `Destination: ${destinationName}`;
                 }
                 if (etaTimeEl) etaTimeEl.textContent = fmtTime(totalTimeSec);
-                if (etaDistEl) etaDistEl.textContent = `${fmtDist(totalDist)} • ${destinationName}`;
+                if (etaDistEl) etaDistEl.textContent = `${destinationName}`;
 
                 // Update Step-by-Step list in HUD
                 const countEl = document.getElementById('navStepsCount');
@@ -2235,13 +2253,11 @@ async function initGISMap(mapElementId, options = {}) {
                     currentNavSteps.forEach((step, idx) => {
                         const row = document.createElement('div');
                         row.className = 'nav-step-item' + (idx === activeStepIdx ? ' is-active' : (idx < activeStepIdx ? ' is-done' : ''));
-                        const distLabel = step.distance > 0 ? fmtDist(step.distance) : 'Arrive';
                         row.innerHTML = `
                             <div class="nav-step-icon">${step.icon}</div>
                             <div class="nav-step-body">
                                 <div class="nav-step-text">${step.instruction}</div>
                             </div>
-                            <div class="nav-step-dist">${distLabel}</div>
                         `;
                         if (step.location) {
                             row.addEventListener('click', (e) => {
@@ -2408,16 +2424,16 @@ async function initGISMap(mapElementId, options = {}) {
                     casing.on('click', handleAltClick);
                     core.on('click', handleAltClick);
 
-                    // Google Maps-style floating duration pill on the alternative route
+                    // Google Maps-style floating duration pill on the alternative route (no emoji)
                     if (altMinutesText) {
                         const midIdx = Math.floor(secondaryCoords.length * 0.45);
                         const midPt = secondaryCoords[midIdx] || secondaryCoords[0];
                         if (midPt) {
                             const pillIcon = L.divIcon({
                                 className: 'alt-route-duration-pill',
-                                html: `<div style="background:#ffffff; color:#1e293b; border:1.5px solid #94a3b8; border-radius:999px; padding:3px 9px; font-size:11px; font-weight:800; white-space:nowrap; box-shadow:0 2px 8px rgba(15,23,42,0.25); cursor:pointer; display:inline-flex; align-items:center; gap:4px;">🕒 ${altMinutesText}</div>`,
+                                html: `<div style="background:#ffffff; color:#1e293b; border:1.5px solid #94a3b8; border-radius:999px; padding:3px 10px; font-size:11px; font-weight:800; white-space:nowrap; box-shadow:0 2px 8px rgba(15,23,42,0.25); cursor:pointer; display:inline-flex; align-items:center;">${altMinutesText}</div>`,
                                 iconSize: [0, 0],
-                                iconAnchor: [32, 12]
+                                iconAnchor: [28, 12]
                             });
                             const pillMarker = L.marker(midPt, { icon: pillIcon, zIndexOffset: 650 }).addTo(routingLayerGroup);
                             pillMarker.on('click', handleAltClick);
@@ -2661,6 +2677,8 @@ async function initGISMap(mapElementId, options = {}) {
             let currentHeading = null;
             let cameraHeading = null;
             let targetHeading = null;
+            let lastAppliedCameraHeading = null;
+            let lastCameraBearingMs = 0;
             let lastCoordForHeading = null;
             let hasAbsoluteCompass = false;
             let hasCompassSensor = false;
@@ -2695,6 +2713,21 @@ async function initGISMap(mapElementId, options = {}) {
                 }
             }
 
+            function maybeUpdateMapBearing(forceImmediate = false) {
+                if (!isHeadingUp || typeof map.setBearing !== 'function' || currentHeading === null) return;
+                const nowMs = performance.now();
+                if (!forceImmediate && (nowMs - lastCameraBearingMs) < 300) return;
+
+                const refHeading = lastAppliedCameraHeading !== null ? lastAppliedCameraHeading : currentHeading;
+                const diff = Math.abs(shortestAngleDiff(currentHeading, refHeading));
+                if (forceImmediate || lastAppliedCameraHeading === null || diff >= 8.0) {
+                    lastAppliedCameraHeading = currentHeading;
+                    lastCameraBearingMs = nowMs;
+                    map.setBearing(-currentHeading);
+                    syncHeadingConeToMapBearing();
+                }
+            }
+
             function stepHeadingAnimation(nowMs) {
                 headingRafId = null;
                 if (targetHeading === null) return;
@@ -2705,39 +2738,22 @@ async function initGISMap(mapElementId, options = {}) {
                 } else {
                     const dt = lastHeadingFrameMs ? Math.min((nowMs - lastHeadingFrameMs) / 1000, 0.1) : 0.016;
                     const diff = shortestAngleDiff(targetHeading, currentHeading);
-                    const camDiff = (cameraHeading === null) ? 0 : shortestAngleDiff(targetHeading, cameraHeading);
 
-                    // Smooth cone (180ms time constant, 1.2 deg deadband)
-                    if (Math.abs(diff) < 1.2) {
+                    // Smooth cone (200ms time constant, 1.5 deg deadband) — cheap GPU transform only
+                    if (Math.abs(diff) < 1.5) {
                         currentHeading = targetHeading;
                     } else {
-                        const smoothAlpha = 1 - Math.exp(-dt / 0.18);
+                        const smoothAlpha = 1 - Math.exp(-dt / 0.20);
                         currentHeading = ((currentHeading + diff * smoothAlpha) % 360 + 360) % 360;
                     }
 
-                    // Heavily damped camera bearing (380ms time constant, 3.5 deg deadband) so slight body movement doesn't wiggle the map
-                    if (cameraHeading === null) {
-                        cameraHeading = currentHeading;
-                    } else if (Math.abs(shortestAngleDiff(targetHeading, cameraHeading)) >= 3.5) {
-                        const camAlpha = 1 - Math.exp(-dt / 0.38);
-                        cameraHeading = ((cameraHeading + shortestAngleDiff(targetHeading, cameraHeading) * camAlpha) % 360 + 360) % 360;
-                    }
-
-                    if (Math.abs(shortestAngleDiff(targetHeading, currentHeading)) >= 1.2 ||
-                        (isHeadingUp && Math.abs(shortestAngleDiff(targetHeading, cameraHeading)) >= 3.5)) {
+                    if (Math.abs(shortestAngleDiff(targetHeading, currentHeading)) >= 1.5) {
                         headingRafId = requestAnimationFrame(stepHeadingAnimation);
                     }
                 }
                 lastHeadingFrameMs = nowMs;
-
-                if (isHeadingUp && typeof map.setBearing === 'function') {
-                    const curBearing = (typeof map.getBearing === 'function') ? map.getBearing() : 0;
-                    const desiredBearing = -(cameraHeading !== null ? cameraHeading : currentHeading);
-                    if (Math.abs(shortestAngleDiff(desiredBearing, curBearing)) >= 1.0) {
-                        map.setBearing(desiredBearing);
-                    }
-                }
                 syncHeadingConeToMapBearing();
+                maybeUpdateMapBearing(false);
             }
 
             function updateHeadingCone(h) {
@@ -2747,14 +2763,14 @@ async function initGISMap(mapElementId, options = {}) {
                     targetHeading = normalized;
                     currentHeading = normalized;
                     cameraHeading = normalized;
-                    if (isHeadingUp && typeof map.setBearing === 'function') {
-                        map.setBearing(-cameraHeading);
-                    }
                     syncHeadingConeToMapBearing();
+                    maybeUpdateMapBearing(true);
                     return;
                 }
-                if (Math.abs(shortestAngleDiff(normalized, targetHeading)) < 2.0) return;
-                targetHeading = normalized;
+                // Low-pass filter raw sensor jitter before updating targetHeading
+                const delta = shortestAngleDiff(normalized, targetHeading);
+                if (Math.abs(delta) < 2.5) return;
+                targetHeading = ((targetHeading + delta * 0.30) % 360 + 360) % 360;
                 if (!headingRafId) {
                     lastHeadingFrameMs = performance.now();
                     headingRafId = requestAnimationFrame(stepHeadingAnimation);
@@ -2876,10 +2892,10 @@ async function initGISMap(mapElementId, options = {}) {
                 if (orientationListenersAttached) return;
                 orientationListenersAttached = true;
 
-                // 1. Prefer W3C AbsoluteOrientationSensor (true North, 60Hz, zero gimbal lock)
+                // 1. Prefer W3C AbsoluteOrientationSensor (true North, 15Hz, zero gimbal lock)
                 if ('AbsoluteOrientationSensor' in window) {
                     try {
-                        const sensor = new window.AbsoluteOrientationSensor({ frequency: 60, referenceFrame: 'screen' });
+                        const sensor = new window.AbsoluteOrientationSensor({ frequency: 15, referenceFrame: 'screen' });
                         sensor.addEventListener('reading', () => {
                             const h = computeHeadingFromQuaternion(sensor.quaternion);
                             if (h !== null && !isNaN(h)) {
@@ -3308,7 +3324,7 @@ async function initGISMap(mapElementId, options = {}) {
                     routingLayerGroup.clearLayers();
                     osrmLayerGroup.clearLayers();
 
-                    // Compute Google Maps-style driving duration (OSRM road duration + internal subdivision time)
+                    // Compute Google Maps-style driving duration (realistic OSRM road duration + internal subdivision time)
                     const calcPathDist = (pts) => {
                         let d = 0;
                         for (let i = 0; i < pts.length - 1; i++) d += map.distance(pts[i], pts[i + 1]);
@@ -3316,16 +3332,23 @@ async function initGISMap(mapElementId, options = {}) {
                     };
                     const internalPrimaryDist = calcPathDist(internalRoadLatLngs);
                     const internalAltDist = internalAltLatLngs.length > 0 ? calcPathDist(internalAltLatLngs) : internalPrimaryDist;
-                    const primaryHwyDur = (osrm && Number.isFinite(osrm.duration))
-                        ? osrm.duration
-                        : (calcPathDist(osrm?.latlngs || []) / 8.33);
-                    const altHwyDur = (osrm && osrm.alternative && Number.isFinite(osrm.alternative.duration))
-                        ? osrm.alternative.duration
-                        : primaryHwyDur;
+                    const primaryHwyDist = (osrm && Number.isFinite(osrm.distance)) ? osrm.distance : calcPathDist(osrm?.latlngs || []);
+                    const primaryHwyDur = (osrm && Number.isFinite(osrm.duration)) ? osrm.duration : (primaryHwyDist / 8.33);
+                    const primaryHwySteps = (osrm && Array.isArray(osrm.steps)) ? osrm.steps.length : 0;
 
-                    const primaryTotalTime = primaryHwyDur + (internalPrimaryDist / 4.16);
+                    const altHwyDist = (osrm && osrm.alternative && Number.isFinite(osrm.alternative.distance)) ? osrm.alternative.distance : primaryHwyDist;
+                    const altHwyDur = (osrm && osrm.alternative && Number.isFinite(osrm.alternative.duration)) ? osrm.alternative.duration : primaryHwyDur;
+                    const altHwySteps = (osrm && osrm.alternative && Array.isArray(osrm.alternative.steps)) ? osrm.alternative.steps.length : primaryHwySteps;
+
+                    const primaryTotalTime = estimateGoogleMapsDuration(primaryHwyDur, primaryHwyDist, internalPrimaryDist, 0, primaryHwySteps);
                     const altTotalTime = fullAltLatLngs
-                        ? (altHwyDur + ((osrm && osrm.alternative ? internalPrimaryDist : internalAltDist) / 4.16))
+                        ? estimateGoogleMapsDuration(
+                            altHwyDur,
+                            altHwyDist,
+                            (osrm && osrm.alternative ? internalPrimaryDist : internalAltDist),
+                            0,
+                            altHwySteps
+                        )
                         : null;
                     const secondaryTimeText = fullAltLatLngs
                         ? fmtTime(preferAlternative ? primaryTotalTime : altTotalTime)
@@ -3384,7 +3407,7 @@ async function initGISMap(mapElementId, options = {}) {
                     if (timeValEl) timeValEl.textContent = fmtTime(totalTime);
                     if (stepInstEl) {
                         const hwyPrefix = (preferAlternative && fullAltLatLngs) ? 'Alternative: ' : '';
-                        stepInstEl.innerHTML = `${hwyPrefix}Head towards <strong>Althesa Entrance Gate</strong> (${fmtDist(totalDist)})`;
+                        stepInstEl.innerHTML = `${hwyPrefix}Head towards <strong>Althesa Entrance Gate</strong>`;
                     }
 
                     // Build combined OSRM highway steps + internal subdivision steps
@@ -3444,10 +3467,21 @@ async function initGISMap(mapElementId, options = {}) {
                         });
                     }
 
+                    const calcInternalDist = (pts) => {
+                        let d = 0;
+                        for (let i = 0; i < pts.length - 1; i++) d += map.distance(pts[i], pts[i + 1]);
+                        return d;
+                    };
+                    const primaryIntDist = calcInternalDist(roadLatLngs);
+                    const altIntDist = altRoadLatLngs.length > 1 ? calcInternalDist(altRoadLatLngs) : 0;
+                    const secondaryIntTimeText = altRoadLatLngs.length > 1
+                        ? fmtTime(estimateGoogleMapsDuration(0, 0, preferAlternative ? primaryIntDist : altIntDist))
+                        : '';
+
                     // Render active + alternative routes
                     const activeRoadLatLngs = renderDualRoute(roadLatLngs, altRoadLatLngs, () => {
                         handlePosition(rawLat, rawLng, rawAccuracy, headingVal);
-                    });
+                    }, { secondaryTimeText: secondaryIntTimeText });
 
                     // MAP MATCHING: Lock to internal subdivision road when within the driving street corridor
                     const isOnRoad = userSnap && (userSnap.dist <= ROAD_CORRIDOR_METERS) && (!rawAccuracy || rawAccuracy <= 25);
@@ -3490,12 +3524,12 @@ async function initGISMap(mapElementId, options = {}) {
                     // 4. Google Maps Red Location Pin at House
                     createGoogleDestPinMarker([destCoord.lat, destCoord.lng], '📍 Destination (' + destinationName + ')');
 
-                    const remainingDuration = remainingDist / 4.16;
+                    const remainingDuration = estimateGoogleMapsDuration(0, 0, roadDist, uOffDist + dOffDist);
                     if (distValEl) distValEl.textContent = fmtDist(remainingDist);
                     if (timeValEl) timeValEl.textContent = fmtTime(remainingDuration);
                     if (stepInstEl) {
                         const pathTypeLabel = (preferAlternative && altRoadLatLngs.length > 0) ? 'Alternative street' : 'Follow internal street';
-                        stepInstEl.innerHTML = `${pathTypeLabel} towards <strong>${destinationName}</strong> (${fmtDist(remainingDist)})`;
+                        stepInstEl.innerHTML = `${pathTypeLabel} towards <strong>${destinationName}</strong>`;
                     }
 
                     const rawActiveInternal = (preferAlternative && altRoadLatLngs.length > 0) ? altRoadLatLngs : roadLatLngs;
