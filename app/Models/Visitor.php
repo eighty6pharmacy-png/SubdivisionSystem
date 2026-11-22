@@ -32,6 +32,8 @@ class Visitor extends Model
         'current_lng',
         'last_ping_at',
         'is_at_destination',
+        'house_arrived_at',
+        'left_house_at',
     ];
 
     protected $casts = [

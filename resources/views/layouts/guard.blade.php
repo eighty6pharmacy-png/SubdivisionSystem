@@ -138,6 +138,7 @@
     function closeLogoutModal() {}
     </script>
     
+    <script src="{{ asset('js/admin-table-pagination.js') }}"></script>
     @yield('scripts')
 </body>
 </html>

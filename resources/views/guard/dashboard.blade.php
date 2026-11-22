@@ -96,21 +96,32 @@
 
     <!-- Daily Visitor Log -->
     <div class="analytic-card" style="padding: 0; overflow: hidden; margin-top: 24px;">
-        <div style="padding: 20px 24px; border-bottom: 1px solid var(--bill-border); display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0;">Today's Expected Visitors</h3>
-            <span style="font-size: 13px; color: #64748b; font-weight: 600;" id="totalVisitorsCount">Total: 0</span>
+        <div style="padding: 20px 24px; border-bottom: 1px solid var(--bill-border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+                <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0;">Today's Expected Visitors</h3>
+                <span style="font-size: 12px; color: #64748b; font-weight: 600;" id="totalVisitorsCount">Total: 0</span>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <input type="text" id="guardDailySearch" class="filter-select" placeholder="Search ID, Visitor, Plate, Host..." oninput="applyGuardDailyFilters()" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; min-width: 220px;">
+                <select id="guardDailyStatusFilter" class="filter-select" onchange="applyGuardDailyFilters()" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #fff;">
+                    <option value="all">All Statuses</option>
+                    <option value="approved">Approved</option>
+                    <option value="entered">Entered</option>
+                    <option value="exited">Exited</option>
+                </select>
+            </div>
         </div>
         <div class="bill-table-container">
             <table class="bill-table" id="dailyLogTable">
                 <thead>
                     <tr>
-                        <th>Visit ID</th>
-                        <th>Visitor Name</th>
-                        <th>Address (Walk-in)</th>
-                        <th>Plate Number</th>
-                        <th>Host Property</th>
-                        <th>Purpose</th>
-                        <th>Status</th>
+                        <th data-sort="number">Visit ID</th>
+                        <th data-sort="text">Visitor Name</th>
+                        <th data-sort="text">Address (Walk-in)</th>
+                        <th data-sort="text">Plate Number</th>
+                        <th data-sort="text">Host Property</th>
+                        <th data-sort="text">Purpose</th>
+                        <th data-sort="text">Status</th>
                     </tr>
                 </thead>
                 <tbody id="guardVisitorTableBody">
@@ -118,6 +129,7 @@
                 </tbody>
             </table>
         </div>
+        @include('partials.admin-client-pagination', ['prefix' => 'guardDailyTable', 'defaultPerPage' => 10])
     </div>
 
     <!-- Walk-in Registration Modal -->
@@ -217,12 +229,27 @@
 
                 let arrivalHtml = '';
                 if ((pin.status === 'Entered' || pin.status === 'Exited') && pin.arrival_time) {
-                    arrivalHtml = `<div style="font-size: 11px; color: #10b981; margin-top: 4px; font-weight: 700;">Entered: ${pin.arrival_time}</div>`;
+                    arrivalHtml += `<div style="font-size: 11px; color: #10b981; margin-top: 4px; font-weight: 700;">Entered: ${pin.arrival_time}</div>`;
+                }
+                if (pin.house_arrived_at) {
+                    arrivalHtml += `<div style="font-size: 11px; color: #0284c7; margin-top: 2px; font-weight: 700;">At House: ${pin.house_arrived_at}</div>`;
+                }
+                if (pin.left_house_at) {
+                    arrivalHtml += `<div style="font-size: 11px; color: #d97706; margin-top: 2px; font-weight: 700;">Left House: ${pin.left_house_at}</div>`;
+                }
+                if (pin.status === 'Exited' && pin.exit_time) {
+                    arrivalHtml += `<div style="font-size: 11px; color: #475569; margin-top: 2px; font-weight: 700;">Exited Gate: ${pin.exit_time}</div>`;
+                }
+                if (pin.status === 'Entered') {
+                    arrivalHtml += `<button type="button" onclick="markVisitorExitedFromScanner('${pin.db_id}', '${(pin.visitor || 'Visitor').replace(/'/g, "\\'")}')" style="margin-top: 6px; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: pointer;">🚪 Mark Exited</button>`;
                 }
 
                 const tr = document.createElement('tr');
+                tr.className = 'guard-daily-row pagination-match';
+                tr.dataset.status = (pin.status || '').toLowerCase();
+                tr.dataset.search = `${pin.id} ${pin.visitor || ''} ${pin.visitor_address || ''} ${pin.plate_number || ''} ${pin.host || ''} ${pin.block || ''} ${pin.lot || ''} ${pin.purpose || ''} ${pin.status || ''}`.toLowerCase();
                 tr.innerHTML = `
-                    <td style="font-family: monospace; font-size: 12px; font-weight: 700; color: #64748b;">${pin.id}</td>
+                    <td data-sort-val="${pin.id}" style="font-family: monospace; font-size: 12px; font-weight: 700; color: #64748b;">${pin.id}</td>
                     <td>
                         <div style="font-weight: 700; color: #0f172a;">${pin.visitor}</div>
                         ${pin.contact_number ? `<div style="font-size: 11px; color: #0284c7; font-weight: 600;">📞 ${pin.contact_number}</div>` : ''}
@@ -256,6 +283,7 @@
             });
 
             document.getElementById('totalVisitorsCount').textContent = `Today: ${todaysVisitors.length}`;
+            applyGuardDailyFilters();
         })
         .catch(err => {
             console.error('Failed to load daily log:', err);
@@ -328,6 +356,11 @@
                     status: data.status,
                     arrival_time: data.arrival_time,
                     plate_number: data.plate_number || '',
+                    purpose: data.purpose || 'N/A',
+                    contact_number: data.contact_number || 'N/A',
+                    visitor_address: data.visitor_address || 'N/A',
+                    visitor_type: data.type || 'PIN Auth',
+                    validity: data.validity || 'Today',
                     is_appointment: data.is_appointment,
                     appointment_type: data.appointment_type,
                     appointment_time: data.appointment_time
@@ -434,11 +467,34 @@
                     </div>
                 </div>
 
-                <div id="mapWrapper" style="display: ${type === 'Appointment' ? 'none' : 'block'}; position: relative; margin-bottom: 20px;">
-                    <div id="guardMapContainer" style="width: 100%; height: 250px; border-radius: 12px; background: #f1f5f9; overflow: hidden; border: 1px solid #cbd5e1; z-index: 1;"></div>
-                    <button type="button" onclick="toggleFullScreenMap()" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: white; border: none; padding: 8px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center; justify-content: center;">
-                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-                    </button>
+                <div id="visitorInfoWrapper" style="display: ${type === 'Appointment' ? 'none' : 'block'}; background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
+                    <div style="font-size: 12px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 12px;">Visitor Information</div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; font-size: 13px; color: #0f172a;">
+                        <div>
+                            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Purpose</div>
+                            <div style="font-weight: 600; margin-top: 2px;">${record.purpose || 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Pass Type</div>
+                            <div style="font-weight: 600; margin-top: 2px;">${record.visitor_type || 'PIN Auth'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Contact Number</div>
+                            <div style="font-weight: 600; margin-top: 2px;">${record.contact_number || 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Validity</div>
+                            <div style="font-weight: 600; margin-top: 2px;">${record.validity || 'Today'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Entry Time</div>
+                            <div style="font-weight: 700; color: #059669; margin-top: 2px;">${record.arrival_time || 'Just now'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Home Address</div>
+                            <div style="font-weight: 600; margin-top: 2px;">${record.visitor_address || 'N/A'}</div>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="appointmentWrapper" style="display: ${type === 'Appointment' ? 'block' : 'none'}; background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
@@ -462,35 +518,33 @@
                 </button>
             </div>
         `;
+    }
 
-        // Safely initialize GIS map with routing
-        setTimeout(() => {
-            if (type !== 'Appointment') {
-                const container = document.getElementById('guardMapContainer');
-                if (container) {
-                    if (window.activeGuardMap) {
-                        try { window.activeGuardMap.remove(); } catch(e) {}
-                        window.activeGuardMap = null;
-                    }
-                    if (container._leaflet_id) {
-                        container._leaflet_id = null;
-                    }
-                    const targetNode = (record.block !== 'N/A' && record.lot !== 'N/A') ? `B${record.block} L${record.lot}` : null;
-                    initGISMap('guardMapContainer', {
-                        interactive: true,
-                        showRouting: !!targetNode,
-                        endNode: targetNode,
-                        showCalibration: false,
-                        liveNavigation: false,
-                        bearing: -125.35
-                    }).then(mapInstance => {
-                        window.activeGuardMap = mapInstance;
-                    }).catch(err => {
-                        console.warn('GIS routing init notice:', err);
-                    });
-                }
+    function markVisitorExitedFromScanner(visitorId, visitorName) {
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        fetch(`/api/visitors/${visitorId}/exit`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrf
             }
-        }, 120);
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) return;
+            if (typeof loadDailyLog === 'function') loadDailyLog();
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'success',
+                    title: `${visitorName || 'Visitor'} marked Exited (${data.exit_time || 'Now'})`,
+                    showConfirmButton: false,
+                    timer: 2500
+                });
+            }
+        })
+        .catch(err => console.warn('Mark exited error:', err));
     }
 
     function resetScannerView() {
@@ -692,6 +746,45 @@
             Swal.fire('Error', 'Server connection error.', 'error');
         });
     }
+
+    let guardDailyPagination = null;
+
+    function applyGuardDailyFilters() {
+        const search = (document.getElementById('guardDailySearch')?.value || '').toLowerCase().trim();
+        const status = (document.getElementById('guardDailyStatusFilter')?.value || 'all').toLowerCase();
+
+        document.querySelectorAll('.guard-daily-row').forEach(row => {
+            const text = row.dataset.search || '';
+            const rowStatus = row.dataset.status || '';
+            const matchSearch = !search || text.includes(search);
+            const matchStatus = status === 'all' || rowStatus === status;
+            if (matchSearch && matchStatus) {
+                row.classList.add('pagination-match');
+            } else {
+                row.classList.remove('pagination-match');
+            }
+        });
+
+        if (guardDailyPagination) {
+            guardDailyPagination.render();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (window.initTablePagination) {
+            guardDailyPagination = window.initTablePagination({
+                rowSelector: '.guard-daily-row',
+                matchClass: 'pagination-match',
+                infoEl: '#guardDailyTablePageInfo',
+                prevEl: '#guardDailyTablePagePrev',
+                nextEl: '#guardDailyTablePageNext',
+                pageSizeEl: '#guardDailyTablePageSize',
+                numbersEl: '#guardDailyTablePageNumbers',
+                table: '#dailyLogTable',
+                perPage: 10
+            });
+        }
+    });
 
 </script>
 @endsection

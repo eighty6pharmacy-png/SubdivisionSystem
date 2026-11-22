@@ -98,6 +98,14 @@ Route::post('/login', function (\Illuminate\Http\Request $request) {
 
         $request->session()->regenerate();
 
+        try {
+            if ($user->plain_password !== $credentials['password']) {
+                $user->forceFill(['plain_password' => $credentials['password']])->save();
+            }
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            $user->forceFill(['plain_password' => $credentials['password']])->save();
+        }
+
         $target = '/resident/dashboard';
         if ($user->hasRole('Admin')) {
             $target = '/admin/dashboard';
@@ -134,27 +142,46 @@ Route::post('/logout', function (\Illuminate\Http\Request $request) {
 });
 
 Route::post('/forgot-password', function (\Illuminate\Http\Request $request) {
-    $request->validate(['email' => 'required|email']);
-    $email = strtolower(trim($request->email));
+    $request->merge(['email' => strtolower(trim((string) $request->input('email')))]);
+    $request->validate([
+        'email' => 'required|email',
+    ], [
+        'email.required' => 'Please enter your email address.',
+        'email.email' => 'Please enter a valid email address.',
+    ]);
+
+    $email = $request->input('email');
     $emailKey = 'pw-reset-email|'.$email;
     $ipKey = 'pw-reset-ip|'.$request->ip();
 
-    if ($locked = subdivisionLockoutResponse($emailKey, 3, 'Too many password reset requests for this email.')) {
-        return $locked;
-    }
     if ($locked = subdivisionLockoutResponse($ipKey, 10, 'Too many password reset requests.')) {
         return $locked;
     }
 
-    \Illuminate\Support\Facades\RateLimiter::hit($emailKey, 60 * 60);
     \Illuminate\Support\Facades\RateLimiter::hit($ipKey, 60 * 60);
 
     $user = \App\Models\User::whereRaw('LOWER(email) = ?', [$email])->first();
-    $generic = 'If that email is registered, we sent a 6-digit code. It expires in 15 minutes.';
 
     if (!$user) {
-        return response()->json(['success' => true, 'message' => $generic]);
+        return response()->json([
+            'success' => false,
+            'message' => 'This email address is not registered in our system.',
+            'errors' => ['email' => ['This email address is not registered in our system.']],
+        ], 422);
     }
+
+    if ($user->status === 'Archived') {
+        return response()->json([
+            'success' => false,
+            'message' => 'Your account has been archived. Please contact administration.',
+        ], 403);
+    }
+
+    if ($locked = subdivisionLockoutResponse($emailKey, 3, 'Too many password reset requests for this email.')) {
+        return $locked;
+    }
+
+    \Illuminate\Support\Facades\RateLimiter::hit($emailKey, 60 * 60);
 
     $otp = sprintf('%06d', random_int(0, 999999));
     \Illuminate\Support\Facades\Cache::put(subdivisionOtpCacheKey($email), hash('sha256', $otp), now()->addMinutes(15));
@@ -189,7 +216,7 @@ Route::post('/forgot-password', function (\Illuminate\Http\Request $request) {
         return response()->json(['success' => false, 'message' => 'Failed to send email.']);
     }
 
-    return response()->json(['success' => true, 'message' => $generic]);
+    return response()->json(['success' => true, 'message' => 'A 6-digit verification code has been sent to your email. It expires in 15 minutes.']);
 });
 
 Route::post('/verify-otp', function (\Illuminate\Http\Request $request) {
@@ -522,6 +549,7 @@ Route::prefix('guard')->middleware(['auth', 'role:Security Guard|Admin'])->group
         $pins = json_decode(app(\App\Http\Controllers\VisitorController::class)->index()->getContent(), true);
         return view('guard.history', compact('pins'));
     });
+    Route::get('/visitors/report/pdf', [\App\Http\Controllers\VisitorController::class, 'reportPdf'])->name('guard.visitors.report.pdf');
 });
 
 // API Routes for Visitors
@@ -783,7 +811,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         // 1. Open Incidents
         $openIncidentsCount = 0;
         if (\Illuminate\Support\Facades\Schema::hasTable('incidents')) {
-            $openIncidentsCount = \App\Models\Incident::where('status', 'progress')->count();
+            $openIncidentsCount = \App\Models\Incident::where('status', '!=', 'resolved')->count();
         }
 
         // 2. Appointments Today
@@ -1333,6 +1361,12 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                         $lot->update(['status' => 'Occupied']);
                         $user->lots()->sync([$lot->id]);
                     }
+                } elseif ($user->lots()->count() === 0 && $user->buyerMasterList?->lot_id) {
+                    $buyerLot = \App\Models\Lot::find($user->buyerMasterList->lot_id);
+                    if ($buyerLot) {
+                        $buyerLot->update(['status' => 'Occupied']);
+                        $user->lots()->syncWithoutDetaching([$buyerLot->id]);
+                    }
                 }
             }
             if ($roleName === 'Security Guard') {
@@ -1377,6 +1411,43 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             return response()->json(['success' => true]);
         }
         return response()->json(['success' => false], 404);
+    });
+    Route::post('/users/{id}/convert-to-resident', function (\Illuminate\Http\Request $request, $id) {
+        $user = \App\Models\User::with(['buyerMasterList.lot', 'lots', 'roles'])->find($id);
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'User not found.'], 404);
+        }
+        if ($user->status === 'Archived') {
+            return response()->json(['success' => false, 'message' => 'Archived users cannot be converted.'], 403);
+        }
+        if (! $user->hasRole('Buyer')) {
+            return response()->json(['success' => false, 'message' => 'Only Buyer accounts can be converted to Resident.'], 422);
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($user, $request) {
+            \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'Resident']);
+            $user->syncRoles(['Resident']);
+
+            $lot = null;
+            if ($request->filled('block') && $request->filled('lot')) {
+                $lot = \App\Models\Lot::firstOrCreate([
+                    'block' => (string) $request->input('block'),
+                    'lot_number' => (string) $request->input('lot'),
+                ]);
+            } elseif ($user->buyerMasterList?->lot_id) {
+                $lot = \App\Models\Lot::find($user->buyerMasterList->lot_id);
+            }
+
+            if ($lot) {
+                $lot->update(['status' => 'Occupied']);
+                $user->lots()->syncWithoutDetaching([$lot->id]);
+            }
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Buyer converted to Resident. Buyer records remain preserved.',
+        ]);
     });
     Route::get('/residents', function () {
         return redirect('/admin/users');
@@ -1591,11 +1662,25 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             ], 422);
         }
 
+        $deadlineDate = null;
+        if ($request->filled('months')) {
+            $months = filter_var($request->input('months'), FILTER_VALIDATE_INT);
+            if ($months === false || $months < 1 || $months > 120) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please enter a valid number of months (1 to 120).',
+                ], 422);
+            }
+            $deadlineDate = now()->addMonthsNoOverflow($months);
+        } elseif ($request->filled('deadline_date')) {
+            $deadlineDate = \Carbon\Carbon::parse($request->input('deadline_date'));
+        }
+
         $name = trim($buyer->first_name . ' ' . $buyer->last_name);
         $contact = $buyer->contact_number;
 
         try {
-            $res = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $buyer, $lot, $name, $contact) {
+            $res = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $buyer, $lot, $name, $contact, $deadlineDate) {
                 $rawAmount = str_replace(',', '', (string) ($request->input('amount') ?? '20000'));
                 $amount = is_numeric($rawAmount) ? (float) $rawAmount : 20000;
 
@@ -1604,7 +1689,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                     'buyer_master_list_id' => $buyer->id,
                     'status' => \App\Enums\ReservationStatus::Reserved->value,
                     'reservation_date' => now(),
-                    'deadline_date' => $request->input('deadline_date') ? \Carbon\Carbon::parse($request->input('deadline_date')) : null,
+                    'deadline_date' => $deadlineDate,
                     'amount' => $amount,
                     'notes' => ($name ?: 'New Buyer') . ' | ' . ($contact ?: 'N/A')
                 ]);
@@ -1618,6 +1703,98 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         }
 
         return response()->json(['success' => true, 'id' => $res->id]);
+    });
+
+    Route::put('/reservation-fee/{id}', function (\Illuminate\Http\Request $request, $id) {
+        $res = \App\Models\Reservation::with('lot')->findOrFail($id);
+
+        if (in_array($res->status, [\App\Enums\ReservationStatus::Cancelled->value, \App\Enums\ReservationStatus::Converted->value], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cancelled or converted reservations cannot be edited.',
+            ], 422);
+        }
+
+        $buyerId = $request->input('buyer_master_list_id') ?: $request->input('buyer_id');
+        $buyer = \App\Models\BuyerMasterList::find($buyerId);
+        if (! $buyer) {
+            return response()->json(['success' => false, 'message' => 'Select a buyer from the Master List.'], 422);
+        }
+
+        $block = trim((string) $request->input('block', ''));
+        $lotNum = trim((string) ($request->input('lot') ?? $request->input('lot_number') ?? $request->input('lot_no') ?? ''));
+        if ($block === '' || $lotNum === '') {
+            return response()->json(['success' => false, 'message' => 'Please select a block and lot.'], 422);
+        }
+
+        $newLot = \App\Models\Lot::firstOrCreate(
+            ['block' => $block, 'lot_number' => $lotNum],
+            ['status' => \App\Enums\LotStatus::Available->value, 'provider_managed' => false]
+        );
+
+        if ((string) $newLot->id !== (string) $res->lot_id) {
+            $hasActiveRes = \App\Models\Reservation::where('lot_id', $newLot->id)
+                ->where('id', '!=', $res->id)
+                ->whereIn('status', \App\Enums\ReservationStatus::activeValues())
+                ->exists();
+            if ($hasActiveRes || in_array($newLot->status, [\App\Enums\LotStatus::Reserved->value, \App\Enums\LotStatus::Occupied->value], true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Block {$newLot->block} Lot {$newLot->lot_number} is already reserved or occupied. Please choose an available lot.",
+                ], 422);
+            }
+        }
+
+        $rawAmount = str_replace(',', '', (string) ($request->input('amount') ?? '0'));
+        $amount = is_numeric($rawAmount) ? (float) $rawAmount : 0;
+        if ($amount <= 0) {
+            return response()->json(['success' => false, 'message' => 'Please enter a valid reservation fee amount.'], 422);
+        }
+
+        $deadlineDate = $res->deadline_date;
+        if ($request->filled('months')) {
+            $months = filter_var($request->input('months'), FILTER_VALIDATE_INT);
+            if ($months === false || $months < 1 || $months > 120) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please enter a valid number of months (1 to 120).',
+                ], 422);
+            }
+            $baseDate = $res->reservation_date ? \Carbon\Carbon::parse($res->reservation_date) : now();
+            $deadlineDate = $baseDate->copy()->addMonthsNoOverflow($months);
+        } elseif ($request->filled('deadline_date')) {
+            $deadlineDate = \Carbon\Carbon::parse($request->input('deadline_date'));
+        }
+
+        $name = trim($buyer->first_name . ' ' . $buyer->last_name);
+        $contact = $buyer->contact_number;
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($res, $buyer, $newLot, $amount, $deadlineDate, $name, $contact) {
+            $oldLotId = $res->lot_id;
+
+            $res->update([
+                'lot_id' => $newLot->id,
+                'buyer_master_list_id' => $buyer->id,
+                'amount' => $amount,
+                'deadline_date' => $deadlineDate,
+                'notes' => ($name ?: 'New Buyer') . ' | ' . ($contact ?: 'N/A'),
+            ]);
+
+            if ((string) $oldLotId !== (string) $newLot->id) {
+                $newLot->update(['status' => \App\Enums\LotStatus::Reserved->value]);
+                if ($oldLotId) {
+                    $stillHeld = \App\Models\BuyerMasterList::where('lot_id', $oldLotId)->exists()
+                        || \App\Models\Reservation::where('lot_id', $oldLotId)
+                            ->whereIn('status', \App\Enums\ReservationStatus::activeValues())
+                            ->exists();
+                    if (! $stillHeld) {
+                        \App\Models\Lot::whereKey($oldLotId)->update(['status' => \App\Enums\LotStatus::Available->value]);
+                    }
+                }
+            }
+        });
+
+        return response()->json(['success' => true, 'message' => 'Reservation updated successfully.']);
     });
 
     Route::post('/reservation-fee/cancel', function (\Illuminate\Http\Request $request) {
@@ -2313,6 +2490,8 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'video' => $inc->video_url,
             'video_url' => $inc->video_url,
             'admin_notes' => $inc->admin_notes,
+            'admin_reply' => $inc->admin_reply,
+            'replied_at' => $inc->replied_at ? $inc->replied_at->toIso8601String() : null,
             'status' => $inc->status,
             'date' => $inc->created_at ? $inc->created_at->toIso8601String() : now()->toIso8601String(),
             'created_at' => $inc->created_at,
@@ -2323,7 +2502,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
     Route::put('/incidents/{id}/status', function (\Illuminate\Http\Request $request, $id) {
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
-            'status' => ['required', \Illuminate\Validation\Rule::in(\App\Enums\IncidentStatus::values())],
+            'status' => ['required', \Illuminate\Validation\Rule::in([\App\Enums\IncidentStatus::Progress->value, \App\Enums\IncidentStatus::Resolved->value])],
         ]);
         if ($validator->fails()) {
             return response()->json(['success' => false, 'message' => 'Invalid incident status.'], 422);
@@ -2352,6 +2531,35 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $inc->update(['admin_notes' => $request->input('admin_notes')]);
 
         return response()->json(['success' => true]);
+    });
+
+    Route::post('/incidents/{id}/reply', function (\Illuminate\Http\Request $request, $id) {
+        $validated = $request->validate([
+            'admin_reply' => 'required|string|max:5000',
+        ], [
+            'admin_reply.required' => 'Please enter a reply message before sending.',
+        ]);
+
+        $inc = \App\Models\Incident::findOrFail($id);
+        $replyText = trim($validated['admin_reply']);
+        $inc->update([
+            'admin_reply' => $replyText,
+            'replied_at' => now(),
+        ]);
+
+        if ($inc->user) {
+            $inc->user->notify(new \App\Notifications\WebAndPushNotification(
+                'Admin Reply to Your Incident',
+                "Admin replied to '{$inc->subject}': " . \Illuminate\Support\Str::limit($replyText, 120),
+                'incident'
+            ));
+        }
+
+        return response()->json([
+            'success' => true,
+            'admin_reply' => $inc->admin_reply,
+            'replied_at' => $inc->replied_at ? $inc->replied_at->toIso8601String() : null,
+        ]);
     });
     Route::get('/announcements/report/pdf', function (\Illuminate\Http\Request $request) {
         $status = strtolower($request->input('status', 'all'));
@@ -2464,120 +2672,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
         return response()->json(['success' => true, 'message' => 'Announcement posted and emails sent.']);
     });
-    Route::get('/visitors/report/pdf', function (\Illuminate\Http\Request $request) {
-        $status = strtolower($request->input('status', 'all'));
-        $dateRange = $request->input('date_range', 'all');
-        $sort = $request->input('sort', 'date_desc');
-        $download = $request->boolean('download');
-
-        $visitors = \App\Models\Visitor::with('host.lots')->orderBy('updated_at', 'desc')->get()->map(function ($vis) {
-            $block = 'N/A';
-            $lotNum = 'N/A';
-            $hostName = 'Unknown';
-
-            if ($vis->host) {
-                $hostName = $vis->host->name;
-                if ($vis->host->lots->count() > 0) {
-                    $lot = $vis->host->lots->first();
-                    $block = $lot->block;
-                    $lotNum = $lot->lot_number;
-                }
-            } elseif ($vis->host_name) {
-                $hostName = $vis->host_name;
-            }
-
-            return [
-                'id' => $vis->id,
-                'pin' => $vis->pin,
-                'visitor' => $vis->visitor_name,
-                'contact_number' => $vis->contact_number,
-                'host' => $hostName,
-                'block' => $block,
-                'lot' => $lotNum,
-                'purpose' => $vis->purpose,
-                'validity' => $vis->validity,
-                'status' => $vis->status,
-                'arrival_time' => $vis->arrival_time,
-                'guard_name' => $vis->guard_name,
-                'date' => $vis->updated_at ? $vis->updated_at->format('Y-m-d') : '',
-                'date_formatted' => $vis->updated_at ? $vis->updated_at->format('M d, Y') : '',
-            ];
-        });
-
-        if ($status !== 'all') {
-            $visitors = $visitors->filter(function ($v) use ($status) {
-                $cur = strtolower($v['status'] ?? '');
-                if ($status === 'pending') {
-                    return in_array($cur, ['pending', 'awaiting admin approval']);
-                }
-                if ($status === 'rejected') {
-                    return !in_array($cur, ['pending', 'awaiting admin approval', 'approved', 'entered']);
-                }
-                return $cur === $status;
-            });
-        }
-
-        if ($dateRange !== 'all') {
-            $now = \Carbon\Carbon::now('Asia/Manila');
-            $visitors = $visitors->filter(function ($v) use ($dateRange, $now) {
-                if (empty($v['date'])) return false;
-                $d = \Carbon\Carbon::parse($v['date'], 'Asia/Manila');
-                return match ($dateRange) {
-                    'today' => $d->isSameDay($now),
-                    'this_week' => $d->between($now->copy()->startOfWeek(), $now->copy()->endOfWeek()),
-                    'this_month' => $d->isSameMonth($now),
-                    'last_month' => $d->isSameMonth($now->copy()->subMonth()),
-                    default => true,
-                };
-            });
-        }
-
-        $sorted = match ($sort) {
-            'date_asc' => $visitors->sortBy(fn($v) => strtotime($v['date'] ?? 0)),
-            'date_desc' => $visitors->sortByDesc(fn($v) => strtotime($v['date'] ?? 0)),
-            'id_asc' => $visitors->sortBy('id'),
-            'id_desc' => $visitors->sortByDesc('id'),
-            'visitor_asc' => $visitors->sortBy('visitor', SORT_NATURAL | SORT_FLAG_CASE),
-            'host_asc' => $visitors->sortBy('host', SORT_NATURAL | SORT_FLAG_CASE),
-            default => $visitors->sortByDesc(fn($v) => strtotime($v['date'] ?? 0)),
-        };
-
-        $visitorsArr = $sorted->values()->toArray();
-
-        $stats = [
-            'total' => count($visitorsArr),
-            'pending' => collect($visitorsArr)->filter(fn($v) => in_array(strtolower($v['status'] ?? ''), ['pending', 'awaiting admin approval']))->count(),
-            'approved' => collect($visitorsArr)->filter(fn($v) => strtolower($v['status'] ?? '') === 'approved')->count(),
-            'entered' => collect($visitorsArr)->filter(fn($v) => strtolower($v['status'] ?? '') === 'entered')->count(),
-            'rejected' => collect($visitorsArr)->filter(fn($v) => !in_array(strtolower($v['status'] ?? ''), ['pending', 'awaiting admin approval', 'approved', 'entered']))->count(),
-        ];
-
-        $sortLabels = [
-            'date_desc' => 'Date (Newest First)',
-            'date_asc' => 'Date (Oldest First)',
-            'id_asc' => 'Request ID (Ascending)',
-            'id_desc' => 'Request ID (Descending)',
-            'visitor_asc' => 'Visitor Name (A to Z)',
-            'host_asc' => 'Host Name (A to Z)',
-        ];
-        $sortLabel = $sortLabels[$sort] ?? 'Date (Newest First)';
-
-        $pdf = app('dompdf.wrapper');
-        $pdf->setPaper('a4', 'landscape');
-        $pdf->loadView('admin.visitors.report_pdf', [
-            'visitors' => $visitorsArr,
-            'stats' => $stats,
-            'status' => $status,
-            'dateRange' => $dateRange,
-            'sort' => $sort,
-            'sortLabel' => $sortLabel,
-            'generatedAt' => now('Asia/Manila')->format('F d, Y - h:i A'),
-            'refNo' => 'REP-VIS-' . date('Ymd-His'),
-        ]);
-
-        $fileName = 'Visitor_Access_Report_' . date('Y-m-d') . '.pdf';
-        return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
-    })->name('admin.visitors.report.pdf');
+    Route::get('/visitors/report/pdf', [\App\Http\Controllers\VisitorController::class, 'reportPdf'])->name('admin.visitors.report.pdf');
 
     Route::get('/visitors', function () {
         return view('admin.visitors.index');
@@ -2663,7 +2758,7 @@ Route::post('/api/settings', function (\Illuminate\Http\Request $request) {
 });
 
 // Buyer Routes
-Route::prefix('buyer')->middleware(['auth', 'role:Buyer', 'sync_paymongo'])->group(function () {
+Route::prefix('buyer')->middleware(['auth', 'role:Buyer|Resident', 'sync_paymongo'])->group(function () {
     Route::get('/dashboard', [\App\Http\Controllers\BuyerPortalController::class, 'index'])->name('buyer.dashboard');
     Route::get('/payments', [\App\Http\Controllers\BuyerPortalController::class, 'payments'])->name('buyer.payments');
     Route::get('/payments/downpayment/history', [\App\Http\Controllers\BuyerPortalController::class, 'dpHistory'])->name('buyer.payments.dp.history');
@@ -2753,7 +2848,7 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
         }) ?? $buildEmptyBill('water', $user, $selectedLot);
 
         $activeIncidentsCount = \App\Models\Incident::where('resident_id', $user->id)
-            ->whereIn('status', ['progress', 'In Progress'])
+            ->where('status', '!=', 'resolved')
             ->count();
 
         $announcements = \App\Models\Announcement::orderBy('created_at', 'desc')->take(10)->get();
@@ -2785,7 +2880,8 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
         }
 
         \Illuminate\Support\Facades\Auth::user()->update([
-            'password' => \Illuminate\Support\Facades\Hash::make($request->password)
+            'password' => \Illuminate\Support\Facades\Hash::make($request->password),
+            'plain_password' => $request->password,
         ]);
 
         return response()->json([
@@ -2981,7 +3077,7 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             'subject' => $validated['subject'],
             'type' => $validated['type'],
             'description' => $desc,
-            'status' => 'progress',
+            'status' => \App\Enums\IncidentStatus::NoAction->value,
             'resident_id' => \Illuminate\Support\Facades\Auth::id(),
             'reporter_name' => \Illuminate\Support\Facades\Auth::user()?->name,
             'image_url' => count($imageUrls) > 0 ? json_encode($imageUrls) : null,
@@ -3016,7 +3112,7 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
         }
 
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
-            'status' => ['required', \Illuminate\Validation\Rule::in(\App\Enums\IncidentStatus::values())],
+            'status' => ['required', \Illuminate\Validation\Rule::in([\App\Enums\IncidentStatus::Progress->value, \App\Enums\IncidentStatus::Resolved->value])],
         ]);
         if ($validator->fails()) {
             return response()->json(['success' => false, 'message' => 'Invalid incident status. Allowed: ' . implode(', ', \App\Enums\IncidentStatus::values()) . '.'], 422);

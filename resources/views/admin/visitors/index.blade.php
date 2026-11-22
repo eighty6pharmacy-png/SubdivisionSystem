@@ -59,6 +59,7 @@
                 <option value="pending">Pending Approval</option>
                 <option value="approved">Approved</option>
                 <option value="entered">Entered Gate</option>
+                <option value="exited">Exited Gate</option>
                 <option value="rejected">Rejected / Expired</option>
             </select>
         </div>
@@ -225,7 +226,7 @@
                             <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; background: #059669;" onclick="approveVisitorRequest('${v.db_id}', '${(v.host || 'Resident').replace(/'/g, "\\'")}', '${v.visitor.replace(/'/g, "\\'")}')">
                                 ✓ Approve & Gen Code
                             </button>
-                            <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="rejectVisitorRequest('${v.db_id}')">
+                            <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="rejectVisitorRequest('${v.db_id}', '${(v.visitor || 'this visitor').replace(/'/g, "\\'")}')">
                                 ✕ Reject
                             </button>
                         </div>
@@ -242,9 +243,19 @@
                     statusBadge = `<span class="badge" style="background: #e0e7ff; color: #4f46e5; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 11px;">ENTERED GATE</span>`;
                     codeDisplay = `<span style="color:#4f46e5; font-family:monospace; font-size:16px; font-weight:800; letter-spacing:2px;">${v.pin || 'USED'}</span>`;
                     actionHtml = `<span style="font-size: 12px; color: #4f46e5; font-weight: 700;">Entered Gate ✓</span><br><span style="font-size:10px; color:#64748b; font-weight:700;">${v.arrival_time || ''}</span>`;
+                } else if (v.status === 'Exited') {
+                    tr.dataset.statusCat = 'exited';
+                    statusBadge = `<span class="badge" style="background: #f1f5f9; color: #475569; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 11px;">EXITED GATE</span>`;
+                    codeDisplay = `<span style="color:#64748b; font-family:monospace; font-size:14px; font-weight:700;">${v.pin || 'USED'}</span>`;
+                    actionHtml = `<span style="font-size: 12px; color: #64748b; font-weight: 700;">Exited Gate</span>${v.arrival_time ? `<br><span style="font-size:10px; color:#10b981; font-weight:700;">In: ${v.arrival_time}</span>` : ''}${v.left_house_at ? `<br><span style="font-size:10px; color:#d97706; font-weight:700;">Left House: ${v.left_house_at}</span>` : ''}${v.exit_time ? `<br><span style="font-size:10px; color:#64748b; font-weight:700;">Out: ${v.exit_time}</span>` : ''}`;
+                } else if (v.status === 'Expired') {
+                    tr.dataset.statusCat = 'rejected';
+                    statusBadge = `<span class="badge" style="background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 11px;">EXPIRED</span>`;
+                    codeDisplay = `<span style="color:#94a3b8; font-size:13px;">-</span>`;
+                    actionHtml = `<span style="font-size: 12px; color: #64748b; font-weight: 700;">Expired</span>`;
                 } else {
                     tr.dataset.statusCat = 'rejected';
-                    statusBadge = `<span class="badge" style="background: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 11px;">REJECTED / EXPIRED</span>`;
+                    statusBadge = `<span class="badge" style="background: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 11px;">REJECTED</span>`;
                     codeDisplay = `<span style="color:#94a3b8; font-size:13px;">-</span>`;
                     actionHtml = `<span style="font-size: 12px; color: #ef4444; font-weight: 700;">Rejected</span>`;
                 }
@@ -340,27 +351,50 @@
         });
     }
 
-    function rejectVisitorRequest(reqId) {
-        if (confirm(`Are you sure you want to reject visitor request ${reqId}?`)) {
+    function rejectVisitorRequest(reqId, visitorName = '') {
+        const label = visitorName ? `visitor request for <strong>${visitorName}</strong>` : `visitor request #${reqId}`;
+        Swal.fire({
+            icon: 'warning',
+            title: 'Reject Visitor Request?',
+            html: `Are you sure you want to reject the ${label}? The resident will be notified.`,
+            showCancelButton: true,
+            confirmButtonText: 'Yes, Reject',
+            confirmButtonColor: '#ef4444',
+            cancelButtonText: 'Cancel',
+            reverseButtons: true,
+        }).then((result) => {
+            if (!result.isConfirmed) return;
+
             const overlay = document.getElementById('loadingOverlay');
             if (overlay) overlay.style.display = 'flex';
 
             fetch('/api/visitors/' + reqId + '/reject', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
             }).then(res => res.json()).then(data => {
-                if(data.success) {
+                if (data.success) {
                     renderAdminVisitorTable();
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Visitor Rejected',
+                        text: 'The visitor request has been rejected and the resident has been notified.',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
                 } else {
-                    Swal.fire('Error rejecting visitor: ' + data.message);
+                    Swal.fire({ icon: 'error', text: 'Error rejecting visitor: ' + (data.message || 'Unknown error') });
                 }
             }).catch(err => {
                 console.error('Error:', err);
-                Swal.fire('An error occurred during rejection.');
+                Swal.fire({ icon: 'error', text: 'An error occurred during rejection.' });
             }).finally(() => {
                 if (overlay) overlay.style.display = 'none';
             });
-        }
+        });
     }
 
     document.getElementById('exportPdfBtn').addEventListener('click', function() {
@@ -450,6 +484,7 @@
                         <option value="pending">Pending Approval</option>
                         <option value="approved">Approved</option>
                         <option value="entered">Entered Gate</option>
+                        <option value="exited">Exited Gate</option>
                         <option value="rejected">Rejected / Expired</option>
                     </select>
                 </div>

@@ -129,7 +129,7 @@
                 </div>
                 <div style="display: flex; align-items: center; gap: 6px;">
                     <span style="width: 10px; height: 10px; border-radius: 50%; background: #22c55e; display: inline-block;"></span>
-                    Arrived (1m+ at House)
+                    Arrived (Entered House)
                 </div>
                 <div style="display: flex; align-items: center; gap: 6px;">
                     <span style="width: 10px; height: 10px; border-radius: 50%; background: #dc2626; display: inline-block;"></span>
@@ -172,6 +172,7 @@
     let dedicatedMapInstance = null;
     let liveVisitorMarkers = new Map();
     let hasAlertedFor = new Set();
+    let hasNotifiedLeftHouseFor = new Set();
     let hasWarnedGpsFor = new Set();
     let hasWarnedDelayFor = new Set();
 
@@ -268,6 +269,8 @@
                 <div style="color: #1e40af; font-weight: 700;">${vis.destination}</div>
                 <div style="font-size: 12px; color: #475569; margin-top: 4px;">Host: <strong>${vis.host_name}</strong></div>
                 ${vis.plate_number && vis.plate_number !== 'N/A' ? `<div style="font-size: 12px; color: #475569;">Plate: <code style="background:#f1f5f9; padding:2px 4px; border-radius:4px;">${vis.plate_number}</code></div>` : ''}
+                ${vis.house_arrived_at ? `<div style="font-size: 11px; color: #15803d; font-weight: 700; margin-top: 4px;">🏠 Entered House: ${vis.house_arrived_at}</div>` : ''}
+                ${vis.left_house_at ? `<div style="font-size: 11px; color: #b45309; font-weight: 700; margin-top: 2px;">🚶 Left House: ${vis.left_house_at}</div>` : ''}
                 <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #e2e8f0; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
                     <span style="font-weight: 800; color: ${statusColor};">${statusText}</span>
                     <span style="color: #94a3b8;">${vis.last_ping_at || 'Just now'}</span>
@@ -376,6 +379,8 @@
             }
             hasAlertedFor.delete(Number(visitorId));
             hasAlertedFor.delete(String(visitorId));
+            hasNotifiedLeftHouseFor.delete(Number(visitorId));
+            hasNotifiedLeftHouseFor.delete(String(visitorId));
             hasWarnedGpsFor.delete(Number(visitorId));
             hasWarnedGpsFor.delete(String(visitorId));
             hasWarnedDelayFor.delete(Number(visitorId));
@@ -407,9 +412,14 @@
         if (state.isArrived && !hasAlertedFor.has(vId)) {
             hasAlertedFor.add(vId);
             playArrivalChime();
-            showArrivalNoticeDedicated(`🎉 Visitor ${vis.visitor_name} has arrived at destination (${vis.destination})!`);
+            showArrivalNoticeDedicated(`🎉 Visitor ${vis.visitor_name} has entered ${vis.destination}${vis.house_arrived_at ? ` at ${vis.house_arrived_at}` : ''}!`);
         } else if (!state.isGpsStopped) {
             hasWarnedGpsFor.delete(vId);
+        }
+
+        if (vis.left_house_at && !hasNotifiedLeftHouseFor.has(vId)) {
+            hasNotifiedLeftHouseFor.add(vId);
+            showArrivalNoticeDedicated(`🚶 Visitor ${vis.visitor_name} left ${vis.destination} at ${vis.left_house_at} (heading out).`);
         }
 
         const popupContent = buildVisitorPopupHtml(vis, state);
@@ -521,6 +531,12 @@
                         <span>Host: <strong>${d.host_name}</strong></span>
                         <span>${d.last_ping_at || 'Just now'}</span>
                     </div>
+                    ${(d.house_arrived_at || d.left_house_at) ? `
+                    <div style="margin-top: 6px; padding: 6px 8px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 11px; display: flex; flex-wrap: wrap; gap: 8px;">
+                        ${d.house_arrived_at ? `<span style="color: #15803d; font-weight: 700;">🏠 Arrived: ${d.house_arrived_at}</span>` : ''}
+                        ${d.left_house_at ? `<span style="color: #b45309; font-weight: 700;">🚶 Left House: ${d.left_house_at}</span>` : ''}
+                    </div>
+                    ` : ''}
                     <div style="display: flex; gap: 8px; margin-top: 10px;">
                         <button type="button" onclick="focusVisitorOnMap('${d.visitor_id}')" style="flex: 1; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 700; color: #334155; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
                             🎯 Focus

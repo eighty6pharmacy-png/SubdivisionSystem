@@ -199,6 +199,10 @@
                 <div class="summary-value">{{ $stats['entered'] }}</div>
             </td>
             <td>
+                <div class="summary-label">Exited Gate</div>
+                <div class="summary-value">{{ $stats['exited'] ?? 0 }}</div>
+            </td>
+            <td>
                 <div class="summary-label">Rejected / Expired</div>
                 <div class="summary-value">{{ $stats['rejected'] }}</div>
             </td>
@@ -213,9 +217,9 @@
                 <th style="width: 135px;">Resident / Host</th>
                 <th style="width: 135px;">Visitor Name &amp; Contact</th>
                 <th>Purpose</th>
-                <th style="width: 85px; text-align: center;">Visit Date</th>
-                <th style="width: 95px;">Validated By</th>
-                <th style="width: 65px; text-align: center;">PIN</th>
+                <th style="width: 95px; text-align: center;">Visit Date &amp; Time</th>
+                <th style="width: 90px;">Validated By</th>
+                <th style="width: 60px; text-align: center;">PIN</th>
                 <th style="width: 80px; text-align: center;">Status</th>
             </tr>
         </thead>
@@ -235,11 +239,22 @@
                         @endif
                     </td>
                     <td>{{ \Illuminate\Support\Str::limit($v['purpose'] ?? '—', 70) }}</td>
-                    <td style="text-align: center;">{{ $v['validity'] ?? $v['date_formatted'] ?? '—' }}</td>
-                    <td>{{ $v['guard_name'] ?? (strtolower($v['status'] ?? '') === 'entered' ? 'Gate Guard' : 'Pending') }}</td>
+                    <td style="text-align: center;">
+                        <div>{{ $v['validity'] ?? $v['date_formatted'] ?? '—' }}</div>
+                        @if(!empty($v['arrival_time']))
+                            <div style="font-size: 7.5px; color: #333333;">In: {{ $v['arrival_time'] }}</div>
+                        @endif
+                        @if(!empty($v['left_house_at']))
+                            <div style="font-size: 7.5px; color: #333333;">Left House: {{ $v['left_house_at'] }}</div>
+                        @endif
+                        @if(!empty($v['exit_time']))
+                            <div style="font-size: 7.5px; color: #333333;">Out: {{ $v['exit_time'] }}</div>
+                        @endif
+                    </td>
+                    <td>{{ $v['guard_name'] ?? (in_array(strtolower($v['status'] ?? ''), ['entered', 'exited']) ? 'Gate Guard' : 'Pending') }}</td>
                     <td style="text-align: center; font-family: monospace; font-weight: bold;">{{ $v['pin'] ?? '—' }}</td>
                     <td style="text-align: center;">
-                        <span class="badge {{ in_array(strtolower($v['status'] ?? ''), ['approved', 'entered']) ? 'badge-active' : 'badge-archived' }}">
+                        <span class="badge {{ in_array(strtolower($v['status'] ?? ''), ['approved', 'entered', 'exited']) ? 'badge-active' : 'badge-archived' }}">
                             {{ strtoupper($v['status'] ?? 'PENDING') }}
                         </span>
                     </td>

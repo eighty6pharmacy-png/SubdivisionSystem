@@ -23,7 +23,9 @@ class VisitorController extends Controller
             $query->where('resident_id', auth()->id());
         }
 
-        $visitors = $query->get()->map(function ($vis) {
+        $today = now()->setTimezone(config('app.timezone', 'Asia/Manila'))->startOfDay();
+
+        $visitors = $query->get()->map(function ($vis) use ($today) {
             $block = 'N/A';
             $lotNum = 'N/A';
             $hostName = 'Unknown';
@@ -39,21 +41,42 @@ class VisitorController extends Controller
                 $hostName = $vis->host_name;
             }
 
+            $status = $vis->status;
+            if (in_array($status, ['Pending', 'Awaiting Admin Approval', 'Approved'], true)) {
+                try {
+                    if ($vis->validity === 'Today') {
+                        $createdDay = $vis->created_at?->copy()->setTimezone(config('app.timezone', 'Asia/Manila'))->startOfDay();
+                        if ($createdDay && $today->isAfter($createdDay)) {
+                            $status = 'Expired';
+                        }
+                    } elseif (!empty($vis->validity)) {
+                        $validDate = \Carbon\Carbon::parse($vis->validity, config('app.timezone', 'Asia/Manila'))->startOfDay();
+                        if ($today->isAfter($validDate)) {
+                            $status = 'Expired';
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // Keep original status if validity cannot be parsed
+                }
+            }
+
             return [
                 'id' => $vis->id,
                 'db_id' => $vis->id,
-                'pin' => $vis->pin,
+                'pin' => in_array($status, ['Rejected', 'Expired'], true) ? null : $vis->pin,
                 'visitor' => $vis->visitor_name,
                 'contact_number' => $vis->contact_number,
-                'access_token' => $vis->access_token,
+                'access_token' => in_array($status, ['Rejected', 'Expired'], true) ? null : $vis->access_token,
                 'host' => $hostName,
                 'block' => $block,
                 'lot' => $lotNum,
                 'purpose' => $vis->purpose,
                 'validity' => $vis->validity,
-                'status' => $vis->status,
+                'status' => $status,
                 'arrival_time' => $vis->arrival_time,
                 'exit_time' => $vis->exit_time,
+                'house_arrived_at' => $vis->house_arrived_at,
+                'left_house_at' => $vis->left_house_at,
                 'type' => $vis->type,
                 'plate_number' => $vis->plate_number,
                 'visitor_address' => $vis->visitor_address,
@@ -310,6 +333,10 @@ class VisitorController extends Controller
                 'arrival_time' => $visitor->arrival_time,
                 'plate_number' => $visitor->plate_number,
                 'purpose' => $visitor->purpose,
+                'contact_number' => $visitor->contact_number,
+                'visitor_address' => $visitor->visitor_address,
+                'type' => $visitor->type,
+                'validity' => $visitor->validity,
             ]);
         }
 
@@ -443,15 +470,24 @@ class VisitorController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthorized. Only administrators can reject visitor requests.'], 403);
         }
 
-        $visitor = Visitor::whereKey($id)->firstOrFail();
+        $visitor = Visitor::whereKey($id)->with('host')->firstOrFail();
         
-        if ($visitor->status !== 'Pending') {
+        if (!in_array($visitor->status, ['Pending', 'Awaiting Admin Approval'], true)) {
             return response()->json(['success' => false, 'message' => 'Already processed']);
         }
 
         $visitor->update([
-            'status' => 'Rejected'
+            'status' => 'Rejected',
+            'pin' => null,
         ]);
+
+        if ($visitor->host) {
+            $visitor->host->notify(new \App\Notifications\WebAndPushNotification(
+                'Visitor Request Rejected',
+                "Your visitor request for {$visitor->visitor_name} has been rejected by administration.",
+                'visitor'
+            ));
+        }
 
         return response()->json(['success' => true]);
     }
@@ -494,6 +530,8 @@ class VisitorController extends Controller
             'status' => $visitor->status,
             'arrival_time' => $visitor->arrival_time,
             'is_at_destination' => (bool) $visitor->is_at_destination,
+            'house_arrived_at' => $visitor->house_arrived_at,
+            'left_house_at' => $visitor->left_house_at,
             'last_ping_at' => $visitor->last_ping_at ? $visitor->last_ping_at->setTimezone($tz)->format('h:i:s A') : null,
             'last_ping_ms' => $visitor->last_ping_at ? $visitor->last_ping_at->getTimestampMs() : null,
             'entered_ms' => $enteredMs,
@@ -508,6 +546,7 @@ class VisitorController extends Controller
             'lat' => 'required|numeric',
             'lng' => 'required|numeric',
             'is_at_destination' => 'nullable|boolean',
+            'has_left_house' => 'nullable|boolean',
         ]);
 
         $visitor = Visitor::where('access_token', $request->token)->with('host.lots')->first();
@@ -523,14 +562,28 @@ class VisitorController extends Controller
             ]);
         }
 
+        $tz = config('app.timezone', 'Asia/Manila');
+        $nowTimeStr = \Carbon\Carbon::now()->setTimezone($tz)->format('h:i A');
         $isAtDest = (bool) $request->input('is_at_destination', false);
+        $hasLeftHouse = (bool) $request->input('has_left_house', false);
+        $finalAtDest = $isAtDest || (bool) $visitor->is_at_destination;
 
-        $visitor->update([
+        $updatePayload = [
             'current_lat' => $request->lat,
             'current_lng' => $request->lng,
             'last_ping_at' => now(),
-            'is_at_destination' => $isAtDest || (bool) $visitor->is_at_destination,
-        ]);
+            'is_at_destination' => $finalAtDest,
+        ];
+
+        if ($finalAtDest && empty($visitor->house_arrived_at)) {
+            $updatePayload['house_arrived_at'] = $nowTimeStr;
+        }
+
+        if ($finalAtDest && $hasLeftHouse && empty($visitor->left_house_at)) {
+            $updatePayload['left_house_at'] = $nowTimeStr;
+        }
+
+        $visitor->update($updatePayload);
 
         $payload = $this->formatLiveVisitorPayload($visitor);
 
@@ -559,5 +612,130 @@ class VisitorController extends Controller
             ->map(fn ($vis) => $this->formatLiveVisitorPayload($vis));
 
         return response()->json($visitors);
+    }
+
+    // Shared PDF Report for Admin & Guard Visitor History
+    public function reportPdf(Request $request)
+    {
+        if (!auth()->check() || !auth()->user()->hasAnyRole(['Admin', 'Security Guard'])) {
+            abort(403, 'Unauthorized');
+        }
+
+        $status = strtolower($request->input('status', 'all'));
+        $dateRange = $request->input('date_range', 'all');
+        $sort = $request->input('sort', 'date_desc');
+        $download = $request->boolean('download');
+
+        $visitors = Visitor::with('host.lots')->orderBy('updated_at', 'desc')->get()->map(function ($vis) {
+            $block = 'N/A';
+            $lotNum = 'N/A';
+            $hostName = 'Unknown';
+
+            if ($vis->host) {
+                $hostName = $vis->host->name;
+                if ($vis->host->lots->count() > 0) {
+                    $lot = $vis->host->lots->first();
+                    $block = $lot->block;
+                    $lotNum = $lot->lot_number;
+                }
+            } elseif ($vis->host_name) {
+                $hostName = $vis->host_name;
+            }
+
+            return [
+                'id' => $vis->id,
+                'pin' => $vis->pin,
+                'visitor' => $vis->visitor_name,
+                'contact_number' => $vis->contact_number,
+                'host' => $hostName,
+                'block' => $block,
+                'lot' => $lotNum,
+                'purpose' => $vis->purpose,
+                'validity' => $vis->validity,
+                'status' => $vis->status,
+                'arrival_time' => $vis->arrival_time,
+                'exit_time' => $vis->exit_time,
+                'house_arrived_at' => $vis->house_arrived_at,
+                'left_house_at' => $vis->left_house_at,
+                'guard_name' => $vis->guard_name,
+                'date' => $vis->updated_at ? $vis->updated_at->format('Y-m-d') : '',
+                'date_formatted' => $vis->updated_at ? $vis->updated_at->format('M d, Y') : '',
+            ];
+        });
+
+        if ($status !== 'all') {
+            $visitors = $visitors->filter(function ($v) use ($status) {
+                $cur = strtolower($v['status'] ?? '');
+                if ($status === 'pending') {
+                    return in_array($cur, ['pending', 'awaiting admin approval']);
+                }
+                if ($status === 'rejected') {
+                    return !in_array($cur, ['pending', 'awaiting admin approval', 'approved', 'entered', 'exited']);
+                }
+                return $cur === $status;
+            });
+        }
+
+        if ($dateRange !== 'all') {
+            $now = \Carbon\Carbon::now('Asia/Manila');
+            $visitors = $visitors->filter(function ($v) use ($dateRange, $now) {
+                if (empty($v['date'])) return false;
+                $d = \Carbon\Carbon::parse($v['date'], 'Asia/Manila');
+                return match ($dateRange) {
+                    'today' => $d->isSameDay($now),
+                    'this_week' => $d->between($now->copy()->startOfWeek(), $now->copy()->endOfWeek()),
+                    'this_month' => $d->isSameMonth($now),
+                    'last_month' => $d->isSameMonth($now->copy()->subMonth()),
+                    default => true,
+                };
+            });
+        }
+
+        $sorted = match ($sort) {
+            'date_asc' => $visitors->sortBy(fn($v) => strtotime($v['date'] ?? 0)),
+            'date_desc' => $visitors->sortByDesc(fn($v) => strtotime($v['date'] ?? 0)),
+            'id_asc' => $visitors->sortBy('id'),
+            'id_desc' => $visitors->sortByDesc('id'),
+            'visitor_asc' => $visitors->sortBy('visitor', SORT_NATURAL | SORT_FLAG_CASE),
+            'host_asc' => $visitors->sortBy('host', SORT_NATURAL | SORT_FLAG_CASE),
+            default => $visitors->sortByDesc(fn($v) => strtotime($v['date'] ?? 0)),
+        };
+
+        $visitorsArr = $sorted->values()->toArray();
+
+        $stats = [
+            'total' => count($visitorsArr),
+            'pending' => collect($visitorsArr)->filter(fn($v) => in_array(strtolower($v['status'] ?? ''), ['pending', 'awaiting admin approval']))->count(),
+            'approved' => collect($visitorsArr)->filter(fn($v) => strtolower($v['status'] ?? '') === 'approved')->count(),
+            'entered' => collect($visitorsArr)->filter(fn($v) => strtolower($v['status'] ?? '') === 'entered')->count(),
+            'exited' => collect($visitorsArr)->filter(fn($v) => strtolower($v['status'] ?? '') === 'exited')->count(),
+            'rejected' => collect($visitorsArr)->filter(fn($v) => !in_array(strtolower($v['status'] ?? ''), ['pending', 'awaiting admin approval', 'approved', 'entered', 'exited']))->count(),
+        ];
+
+        $sortLabels = [
+            'date_desc' => 'Date (Newest First)',
+            'date_asc' => 'Date (Oldest First)',
+            'id_asc' => 'Request ID (Ascending)',
+            'id_desc' => 'Request ID (Descending)',
+            'visitor_asc' => 'Visitor Name (A to Z)',
+            'host_asc' => 'Host Name (A to Z)',
+        ];
+        $sortLabel = $sortLabels[$sort] ?? 'Date (Newest First)';
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'landscape');
+        $pdf->loadView('admin.visitors.report_pdf', [
+            'visitors' => $visitorsArr,
+            'stats' => $stats,
+            'status' => $status,
+            'dateRange' => $dateRange,
+            'sort' => $sort,
+            'sortLabel' => $sortLabel,
+            'generatedAt' => now('Asia/Manila')->format('F d, Y - h:i A'),
+            'refNo' => 'REP-VIS-' . date('Ymd-His'),
+        ]);
+
+        $fileName = 'Visitor_Access_Report_' . date('Y-m-d') . '.pdf';
+        return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
     }
 }

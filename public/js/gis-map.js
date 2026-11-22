@@ -1702,6 +1702,29 @@ async function initGISMap(mapElementId, options = {}) {
                 return minD;
             }
 
+            function nearestPointOnLocalPoly(pt, poly) {
+                if (!poly || poly.length < 3) return { x: 0, y: 0 };
+                let bestPt = { x: 0, y: 0 };
+                let minD = Infinity;
+                for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+                    const a = poly[j];
+                    const b = poly[i];
+                    const dx = b.x - a.x;
+                    const dy = b.y - a.y;
+                    const l2 = dx * dx + dy * dy;
+                    let t = l2 === 0 ? 0 : ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / l2;
+                    t = Math.max(0, Math.min(1, t));
+                    const nx = a.x + t * dx;
+                    const ny = a.y + t * dy;
+                    const d = Math.hypot(pt.x - nx, pt.y - ny);
+                    if (d < minD) {
+                        minD = d;
+                        bestPt = { x: nx, y: ny };
+                    }
+                }
+                return bestPt;
+            }
+
             // Build a focused House + Front-of-House arrival zone aligned to the lot's own frontage
             function buildDestinationArrivalZone(centerCoord, frontRoadCoord, houseRingLatLngs) {
                 const M_PER_DEG_LAT = 111320;
@@ -1837,6 +1860,29 @@ async function initGISMap(mapElementId, options = {}) {
                         const dFront = frontPadPolyM.length >= 3 ? distToLocalPoly(ptM, frontPadPolyM) : Infinity;
                         const minD = Math.min(dHouse, dFront);
                         return Number.isFinite(minD) ? minD : map.distance([lat, lng], [centerCoord.lat, centerCoord.lng]);
+                    },
+                    getDistanceToHouse: (lat, lng) => {
+                        const ptM = toLocalM(lat, lng);
+                        const dHouse = housePolyM.length >= 3 ? distToLocalPoly(ptM, housePolyM) : Infinity;
+                        return Number.isFinite(dHouse) ? dHouse : map.distance([lat, lng], [centerCoord.lat, centerCoord.lng]);
+                    },
+                    clampToHouse: (lat, lng) => {
+                        if (housePolyM.length < 3) {
+                            return [centerCoord.lat, centerCoord.lng];
+                        }
+                        const ptM = toLocalM(lat, lng);
+                        if (pointInLocalPoly(ptM, housePolyM)) {
+                            return [lat, lng];
+                        }
+                        const edgePt = nearestPointOnLocalPoly(ptM, housePolyM);
+                        // Nudge slightly inward toward house centroid (0,0) so the marker stays cleanly inside the house
+                        const lenToCenter = Math.hypot(edgePt.x, edgePt.y);
+                        if (lenToCenter > 0.4) {
+                            const nudge = Math.min(0.4, lenToCenter * 0.25);
+                            const scale = (lenToCenter - nudge) / lenToCenter;
+                            return fromLocalM(edgePt.x * scale, edgePt.y * scale);
+                        }
+                        return [centerCoord.lat, centerCoord.lng];
                     }
                 };
             }
@@ -2299,15 +2345,18 @@ async function initGISMap(mapElementId, options = {}) {
                 return { activeCore: 3.5, activeCasing: 5.2, altCore: 2.8, altCasing: 4.4 };
             }
 
-            // Dual Route Visual Renderer (Vibrant blue active route + clickable slate/grey alternative route)
-            function renderDualRoute(primaryLatLngs, altLatLngs, onToggle) {
+            // Dual Route Visual Renderer (Vibrant blue active route + clickable slate/grey alternative route with Google Maps-style minutes pill)
+            function renderDualRoute(primaryLatLngs, altLatLngs, onToggle, routeMeta = {}) {
                 const hasAlt = Array.isArray(altLatLngs) && altLatLngs.length > 1;
+                const altMinutesText = routeMeta.secondaryTimeText || '';
 
                 if (altRouteBtn) {
                     if (hasAlt) {
                         altRouteBtn.style.display = 'inline-flex';
                         altRouteBtn.classList.toggle('active', preferAlternative);
-                        altRouteBtn.innerHTML = preferAlternative ? '✓ Alt Route Active' : '⇄ Alt Route';
+                        altRouteBtn.innerHTML = preferAlternative
+                            ? `✓ Alt Active${altMinutesText ? ` (${altMinutesText})` : ''}`
+                            : `⇄ Alt Route${altMinutesText ? ` (${altMinutesText})` : ''}`;
                         altRouteBtn.onclick = (e) => {
                             e.stopPropagation();
                             preferAlternative = !preferAlternative;
@@ -2346,7 +2395,7 @@ async function initGISMap(mapElementId, options = {}) {
                         className: 'route-alt-polyline route-alt-core'
                     }).addTo(routingLayerGroup);
 
-                    const tipText = '🔄 <b>Alternative Route</b><br><span style="font-size:10px; color:#cbd5e1;">Click or tap to select this route</span>';
+                    const tipText = `🔄 <b>Alternative Route${altMinutesText ? ` (${altMinutesText})` : ''}</b><br><span style="font-size:10px; color:#cbd5e1;">Click or tap to select this route</span>`;
                     casing.bindTooltip(tipText, { sticky: true });
                     core.bindTooltip(tipText, { sticky: true });
 
@@ -2358,6 +2407,22 @@ async function initGISMap(mapElementId, options = {}) {
 
                     casing.on('click', handleAltClick);
                     core.on('click', handleAltClick);
+
+                    // Google Maps-style floating duration pill on the alternative route
+                    if (altMinutesText) {
+                        const midIdx = Math.floor(secondaryCoords.length * 0.45);
+                        const midPt = secondaryCoords[midIdx] || secondaryCoords[0];
+                        if (midPt) {
+                            const pillIcon = L.divIcon({
+                                className: 'alt-route-duration-pill',
+                                html: `<div style="background:#ffffff; color:#1e293b; border:1.5px solid #94a3b8; border-radius:999px; padding:3px 9px; font-size:11px; font-weight:800; white-space:nowrap; box-shadow:0 2px 8px rgba(15,23,42,0.25); cursor:pointer; display:inline-flex; align-items:center; gap:4px;">🕒 ${altMinutesText}</div>`,
+                                iconSize: [0, 0],
+                                iconAnchor: [32, 12]
+                            });
+                            const pillMarker = L.marker(midPt, { icon: pillIcon, zIndexOffset: 650 }).addTo(routingLayerGroup);
+                            pillMarker.on('click', handleAltClick);
+                        }
+                    }
                 }
 
                 // 2. Draw Active / Suggested route on top in Google Maps deep blue (#1F3BFF) with thin dark border (#0B1033)
@@ -2522,7 +2587,7 @@ async function initGISMap(mapElementId, options = {}) {
 
                 // 2. Direct Fallback: Client-side OSRM driving query
                 try {
-                    const url = `https://router.project-osrm.org/route/v1/driving/${startLng.toFixed(6)},${startLat.toFixed(6)};${endLng.toFixed(6)},${endLat.toFixed(6)}?overview=full&geometries=geojson&alternatives=true&steps=true`;
+                    const url = `https://router.project-osrm.org/route/v1/driving/${startLng.toFixed(6)},${startLat.toFixed(6)};${endLng.toFixed(6)},${endLat.toFixed(6)}?overview=full&geometries=geojson&alternatives=3&steps=true`;
                     const res = await fetch(url);
                     if (res.ok) {
                         const data = await res.json();
@@ -2592,8 +2657,9 @@ async function initGISMap(mapElementId, options = {}) {
                 return false;
             }
 
-            // Point of View (POV) Directional Guide (Google Maps-grade Tilt-Compensated Compass & Bearing)
+            // Point of View (POV) Directional Guide (Damped Compass & Camera Bearing to prevent body-movement wiggle)
             let currentHeading = null;
+            let cameraHeading = null;
             let targetHeading = null;
             let lastCoordForHeading = null;
             let hasAbsoluteCompass = false;
@@ -2635,23 +2701,30 @@ async function initGISMap(mapElementId, options = {}) {
 
                 if (currentHeading === null) {
                     currentHeading = targetHeading;
+                    cameraHeading = targetHeading;
                 } else {
                     const dt = lastHeadingFrameMs ? Math.min((nowMs - lastHeadingFrameMs) / 1000, 0.1) : 0.016;
                     const diff = shortestAngleDiff(targetHeading, currentHeading);
-                    // Immediate response (35ms time constant, 0.3 deg deadband) like Google Maps
-                    if (Math.abs(diff) < 0.3) {
-                        currentHeading = targetHeading;
-                        lastHeadingFrameMs = nowMs;
-                        if (isHeadingUp && typeof map.setBearing === 'function') {
-                            map.setBearing(-currentHeading);
-                        }
-                        syncHeadingConeToMapBearing();
-                        return;
-                    }
-                    const smoothAlpha = 1 - Math.exp(-dt / 0.035);
-                    currentHeading = ((currentHeading + diff * smoothAlpha) % 360 + 360) % 360;
+                    const camDiff = (cameraHeading === null) ? 0 : shortestAngleDiff(targetHeading, cameraHeading);
 
-                    if (Math.abs(shortestAngleDiff(targetHeading, currentHeading)) >= 0.3) {
+                    // Smooth cone (180ms time constant, 1.2 deg deadband)
+                    if (Math.abs(diff) < 1.2) {
+                        currentHeading = targetHeading;
+                    } else {
+                        const smoothAlpha = 1 - Math.exp(-dt / 0.18);
+                        currentHeading = ((currentHeading + diff * smoothAlpha) % 360 + 360) % 360;
+                    }
+
+                    // Heavily damped camera bearing (380ms time constant, 3.5 deg deadband) so slight body movement doesn't wiggle the map
+                    if (cameraHeading === null) {
+                        cameraHeading = currentHeading;
+                    } else if (Math.abs(shortestAngleDiff(targetHeading, cameraHeading)) >= 3.5) {
+                        const camAlpha = 1 - Math.exp(-dt / 0.38);
+                        cameraHeading = ((cameraHeading + shortestAngleDiff(targetHeading, cameraHeading) * camAlpha) % 360 + 360) % 360;
+                    }
+
+                    if (Math.abs(shortestAngleDiff(targetHeading, currentHeading)) >= 1.2 ||
+                        (isHeadingUp && Math.abs(shortestAngleDiff(targetHeading, cameraHeading)) >= 3.5)) {
                         headingRafId = requestAnimationFrame(stepHeadingAnimation);
                     }
                 }
@@ -2659,8 +2732,8 @@ async function initGISMap(mapElementId, options = {}) {
 
                 if (isHeadingUp && typeof map.setBearing === 'function') {
                     const curBearing = (typeof map.getBearing === 'function') ? map.getBearing() : 0;
-                    const desiredBearing = -currentHeading;
-                    if (Math.abs(shortestAngleDiff(desiredBearing, curBearing)) >= 0.2) {
+                    const desiredBearing = -(cameraHeading !== null ? cameraHeading : currentHeading);
+                    if (Math.abs(shortestAngleDiff(desiredBearing, curBearing)) >= 1.0) {
                         map.setBearing(desiredBearing);
                     }
                 }
@@ -2673,13 +2746,14 @@ async function initGISMap(mapElementId, options = {}) {
                 if (targetHeading === null) {
                     targetHeading = normalized;
                     currentHeading = normalized;
+                    cameraHeading = normalized;
                     if (isHeadingUp && typeof map.setBearing === 'function') {
-                        map.setBearing(-currentHeading);
+                        map.setBearing(-cameraHeading);
                     }
                     syncHeadingConeToMapBearing();
                     return;
                 }
-                if (Math.abs(shortestAngleDiff(normalized, targetHeading)) < 0.3) return;
+                if (Math.abs(shortestAngleDiff(normalized, targetHeading)) < 2.0) return;
                 targetHeading = normalized;
                 if (!headingRafId) {
                     lastHeadingFrameMs = performance.now();
@@ -2869,7 +2943,13 @@ async function initGISMap(mapElementId, options = {}) {
             const ROAD_CORRIDOR_METERS = 8.5; // Street-width + normal in-car GPS tolerance inside subdivision
             const ARRIVAL_ENTER_BUFFER_M = 3.0; // Inside destination house/frontage pad or within 3m of its edge
             const ARRIVAL_EXIT_BUFFER_M = 9.0;  // Exit arrival and resume routing once >9m away from house/frontage
-            const GUARD_ARRIVAL_BUFFER_M = 5.0; // Guard radar arrival tolerance around house + frontage pad
+            const GUARD_HOUSE_ENTER_M = 1.0;    // Must be inside destination house polygon (or within 1m of wall)
+            const HOUSE_EXIT_BUFFER_M = 8.0;    // Must move >8m outside the house polygon to unlock indoor GPS lock
+            const HOUSE_EXIT_STREAK_REQUIRED = 3; // Consecutive accurate readings outside house before unlocking
+            let isInsideHouse = false;
+            let hasEnteredHouse = false;
+            let hasLeftHouse = false;
+            let outsideHouseStreak = 0;
 
             function updateLiveGpsVisuals(displayCoord, rawCoord, accuracy) {
                 const clampedRadius = Math.min(accuracy || 10, 45);
@@ -2917,32 +2997,12 @@ async function initGISMap(mapElementId, options = {}) {
                 }
             }
 
-            function streamVisitorLocation(curLat, curLng) {
+            function streamVisitorLocation(curLat, curLng, forceSend = false) {
                 if (!config.visitorToken) return;
                 const nowTs = Date.now();
-                const ARRIVAL_DWELL_MS = 60000; // Must stay at destination house/frontage for 1 minute to confirm arrival
 
-                if (destCoord) {
-                    const distToZone = destArrivalZone.getDistanceToZone(curLat, curLng);
-                    if (distToZone <= GUARD_ARRIVAL_BUFFER_M) {
-                        if (!window._visitorArrivedSinceTs) {
-                            window._visitorArrivedSinceTs = nowTs;
-                        }
-                    } else if (!window._visitorArrivalConfirmed) {
-                        // Left the house/frontage zone before 1 minute elapsed (e.g. just passing by) -> reset dwell timer
-                        window._visitorArrivedSinceTs = null;
-                    }
-                }
-
-                if (!window._lastLocationSendTime || (nowTs - window._lastLocationSendTime >= 3500)) {
+                if (forceSend || !window._lastLocationSendTime || (nowTs - window._lastLocationSendTime >= 3500)) {
                     window._lastLocationSendTime = nowTs;
-                    let isAtDest = false;
-                    if (window._visitorArrivalConfirmed) {
-                        isAtDest = true;
-                    } else if (window._visitorArrivedSinceTs && (nowTs - window._visitorArrivedSinceTs >= ARRIVAL_DWELL_MS)) {
-                        window._visitorArrivalConfirmed = true;
-                        isAtDest = true;
-                    }
                     fetch('/api/visitor/location', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -2950,7 +3010,8 @@ async function initGISMap(mapElementId, options = {}) {
                             token: config.visitorToken,
                             lat: curLat,
                             lng: curLng,
-                            is_at_destination: isAtDest
+                            is_at_destination: hasEnteredHouse,
+                            has_left_house: hasLeftHouse
                         })
                     })
                     .then(res => res.ok ? res.json() : null)
@@ -3033,6 +3094,49 @@ async function initGISMap(mapElementId, options = {}) {
                 lastAcceptedTime = now;
                 userPos = { lat: curLat, lng: curLng, accuracy: rawAccuracy };
 
+                // 2B. HOUSE-ENTRY DETECTION & INDOOR GPS LOCK (keeps live GPS inside the house)
+                let forceGuardPing = false;
+                if (destCoord) {
+                    const rawDistToHouse = destArrivalZone.getDistanceToHouse(rawLat, rawLng);
+                    const curDistToHouse = destArrivalZone.getDistanceToHouse(curLat, curLng);
+                    if (!isInsideHouse) {
+                        if ((curDistToHouse <= GUARD_HOUSE_ENTER_M || rawDistToHouse <= GUARD_HOUSE_ENTER_M) && (!rawAccuracy || rawAccuracy <= 40)) {
+                            isInsideHouse = true;
+                            outsideHouseStreak = 0;
+                            if (!hasEnteredHouse) {
+                                hasEnteredHouse = true;
+                                forceGuardPing = true;
+                            }
+                            const clamped = destArrivalZone.clampToHouse(curLat, curLng);
+                            curLat = clamped[0];
+                            curLng = clamped[1];
+                            lastAcceptedPos = { lat: curLat, lng: curLng };
+                            userPos = { lat: curLat, lng: curLng, accuracy: rawAccuracy };
+                        }
+                    } else {
+                        if (rawDistToHouse > HOUSE_EXIT_BUFFER_M && (!rawAccuracy || rawAccuracy <= 20)) {
+                            outsideHouseStreak++;
+                        } else {
+                            outsideHouseStreak = 0;
+                        }
+
+                        if (outsideHouseStreak >= HOUSE_EXIT_STREAK_REQUIRED) {
+                            isInsideHouse = false;
+                            outsideHouseStreak = 0;
+                            if (hasEnteredHouse && !hasLeftHouse) {
+                                hasLeftHouse = true;
+                                forceGuardPing = true;
+                            }
+                        } else {
+                            const clamped = destArrivalZone.clampToHouse(curLat, curLng);
+                            curLat = clamped[0];
+                            curLng = clamped[1];
+                            lastAcceptedPos = { lat: curLat, lng: curLng };
+                            userPos = { lat: curLat, lng: curLng, accuracy: rawAccuracy };
+                        }
+                    }
+                }
+
                 // 3. HEADING / COMPASS CALIBRATION (stays active even after arrival)
                 let gpsCourse = null;
                 if (headingVal !== null && headingVal !== undefined && !isNaN(headingVal)) {
@@ -3059,10 +3163,10 @@ async function initGISMap(mapElementId, options = {}) {
                 // 4. HOUSE + FRONT-OF-HOUSE ARRIVAL EVALUATION (Live marker NEVER freezes)
                 const distToZone = destArrivalZone.getDistanceToZone(curLat, curLng);
                 if (!isArrived) {
-                    if (distToZone <= ARRIVAL_ENTER_BUFFER_M && (!rawAccuracy || rawAccuracy <= 35)) {
+                    if (isInsideHouse || (distToZone <= ARRIVAL_ENTER_BUFFER_M && (!rawAccuracy || rawAccuracy <= 35))) {
                         isArrived = true;
                     }
-                } else if (distToZone > ARRIVAL_EXIT_BUFFER_M && (!rawAccuracy || rawAccuracy <= 35)) {
+                } else if (!isInsideHouse && distToZone > ARRIVAL_EXIT_BUFFER_M && (!rawAccuracy || rawAccuracy <= 35)) {
                     isArrived = false;
                     wasArrivedRendered = false;
                 }
@@ -3111,7 +3215,7 @@ async function initGISMap(mapElementId, options = {}) {
                         lastPanCoord = arrivedCoord;
                     }
 
-                    streamVisitorLocation(curLat, curLng);
+                    streamVisitorLocation(curLat, curLng, forceGuardPing);
                     return;
                 }
 
@@ -3204,9 +3308,32 @@ async function initGISMap(mapElementId, options = {}) {
                     routingLayerGroup.clearLayers();
                     osrmLayerGroup.clearLayers();
 
+                    // Compute Google Maps-style driving duration (OSRM road duration + internal subdivision time)
+                    const calcPathDist = (pts) => {
+                        let d = 0;
+                        for (let i = 0; i < pts.length - 1; i++) d += map.distance(pts[i], pts[i + 1]);
+                        return d;
+                    };
+                    const internalPrimaryDist = calcPathDist(internalRoadLatLngs);
+                    const internalAltDist = internalAltLatLngs.length > 0 ? calcPathDist(internalAltLatLngs) : internalPrimaryDist;
+                    const primaryHwyDur = (osrm && Number.isFinite(osrm.duration))
+                        ? osrm.duration
+                        : (calcPathDist(osrm?.latlngs || []) / 8.33);
+                    const altHwyDur = (osrm && osrm.alternative && Number.isFinite(osrm.alternative.duration))
+                        ? osrm.alternative.duration
+                        : primaryHwyDur;
+
+                    const primaryTotalTime = primaryHwyDur + (internalPrimaryDist / 4.16);
+                    const altTotalTime = fullAltLatLngs
+                        ? (altHwyDur + ((osrm && osrm.alternative ? internalPrimaryDist : internalAltDist) / 4.16))
+                        : null;
+                    const secondaryTimeText = fullAltLatLngs
+                        ? fmtTime(preferAlternative ? primaryTotalTime : altTotalTime)
+                        : '';
+
                     const activeRoute = renderDualRoute(fullRouteLatLngs, fullAltLatLngs, () => {
                         handlePosition(rawLat, rawLng, rawAccuracy, headingVal);
-                    });
+                    }, { secondaryTimeText });
 
                     // Outside subdivision roads: NEVER magnet/snap user marker to highway; keep true filtered GPS position
                     const displayCoord = [curLat, curLng];
@@ -3249,7 +3376,9 @@ async function initGISMap(mapElementId, options = {}) {
                     }
                     const dOffDist = destSnap ? map.distance(destSnap.point, [destCoord.lat, destCoord.lng]) : 0;
                     totalDist += dOffDist;
-                    const totalTime = totalDist / 8.33; // ~30 km/h driving average outside
+                    const totalTime = (preferAlternative && altTotalTime !== null)
+                        ? altTotalTime + ((offRoadGap > 4.0 ? offRoadGap : 0) / 1.4) + (dOffDist / 1.4)
+                        : primaryTotalTime + ((offRoadGap > 4.0 ? offRoadGap : 0) / 1.4) + (dOffDist / 1.4);
 
                     if (distValEl) distValEl.textContent = fmtDist(totalDist);
                     if (timeValEl) timeValEl.textContent = fmtTime(totalTime);
@@ -3390,7 +3519,7 @@ async function initGISMap(mapElementId, options = {}) {
                 }
 
                 // If visitorToken is provided, stream live coordinates & arrival status to guard portal
-                streamVisitorLocation(curLat, curLng);
+                streamVisitorLocation(curLat, curLng, forceGuardPing);
             }
 
             function onRecenterClick(e) {
