@@ -235,7 +235,7 @@
         </div>
         
         <div id="fp-step-1">
-            <p style="font-size: 14px; color: var(--text-mid); margin-bottom: 16px;">Enter your email. If it is registered, we send a 6-digit code that expires in 15 minutes. You can request a code up to 3 times per hour.</p>
+            <p style="font-size: 14px; color: var(--text-mid); margin-bottom: 16px;">Enter your registered email address. We will send a 6-digit code that expires in 15 minutes. You can request a code up to 3 times per hour.</p>
             <input type="email" id="fp-email" class="form-input" placeholder="you@example.com" style="width: 100%; box-sizing: border-box; margin-bottom: 16px; padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
             <button class="login-submit" onclick="sendOtp()" id="fp-btn-send">Send OTP</button>
         </div>
@@ -284,9 +284,14 @@
     }
     
     async function sendOtp() {
-        const email = document.getElementById('fp-email').value.trim();
+        const emailInput = document.getElementById('fp-email');
+        const email = emailInput.value.trim();
         if (!email) {
-            showFpError("Please enter your email.");
+            showFpError("Please enter your email address.");
+            return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            showFpError("Please enter a valid email address.");
             return;
         }
         
@@ -302,12 +307,12 @@
                 body: JSON.stringify({ email })
             });
             const data = await res.json();
-            if (data.success) {
+            if (res.ok && data.success) {
                 document.getElementById('fp-step-1').style.display = 'none';
                 document.getElementById('fp-step-2').style.display = 'block';
                 document.getElementById('fp-otp').value = '';
             } else {
-                showFpError(data.message || "Failed to send OTP.");
+                showFpError(data.errors?.email?.[0] || data.message || "Failed to send OTP.");
             }
         } catch (e) {
             showFpError("An error occurred.");

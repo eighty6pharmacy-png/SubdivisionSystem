@@ -47,6 +47,12 @@
         </div>
         
         <nav class="sidebar-nav">
+            @if(\Illuminate\Support\Facades\Auth::user()?->hasRole('Resident'))
+            <div class="nav-section-label">Resident Portal</div>
+            <a href="/resident/dashboard" class="nav-item">
+                <span>Back to Resident Portal</span>
+            </a>
+            @endif
             <div class="nav-section-label">My Property</div>
             <a href="/buyer/dashboard" class="nav-item {{ request()->is('buyer/dashboard') ? 'active' : '' }}">
                 <span class="nav-icon">🏠</span>

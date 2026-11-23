@@ -204,7 +204,12 @@
                     <tbody>
                         @forelse($buyers as $buyer)
                             <tr>
-                                <td style="font-weight: 600;">{{ $buyer->first_name }}</td>
+                                <td style="font-weight: 600;">
+                                    {{ $buyer->first_name }}
+                                    @if($buyer->user && $buyer->user->hasRole('Resident'))
+                                        <span style="display: inline-block; margin-left: 6px; padding: 2px 6px; font-size: 10px; font-weight: 700; border-radius: 4px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;">Resident</span>
+                                    @endif
+                                </td>
                                 <td style="font-weight: 600;">{{ $buyer->middle_name ?? '-' }}</td>
                                 <td style="font-weight: 600;">{{ $buyer->last_name }}</td>
                                 <td>
@@ -385,6 +390,28 @@
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
                         <div><label class="form-label"
+                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Birth
+                                Date</label><input type="date" name="birth_date" id="inp_birth_date"
+                                max="{{ now()->toDateString() }}" onchange="syncAgeFromBirthDate()"
+                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
+                                class="view-readonly"></div>
+                        <div><label class="form-label"
+                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Age</label><input
+                                type="number" name="age" id="inp_age" min="0" max="150"
+                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
+                                class="view-readonly" placeholder="Auto-computed or enter age"></div>
+                        <div><label class="form-label"
+                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Sex</label>
+                            <select name="sex" id="inp_sex"
+                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
+                                class="view-readonly">
+                                <option value="">-- Select Sex --</option>
+                                @foreach(\App\Models\BuyerMasterList::SEX_OPTIONS as $sexOption)
+                                    <option value="{{ $sexOption }}">{{ $sexOption }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Civil
                                 Status *</label>
                             <select name="civil_status" id="inp_civil_status" required
@@ -408,10 +435,16 @@
                                 Number *</label><input type="text" name="contact_number" id="inp_contact_number" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
-                        <div><label class="form-label"
+                        <div style="grid-column: span 2;"><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Email Address *</label><input type="email" name="email" id="inp_email" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
+                        <div><label class="form-label"
+                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">TIN
+                                Number <span style="font-weight:400; color:#64748b;">(Optional)</span></label><input
+                                type="text" name="tin_number" id="inp_tin_number" maxlength="50"
+                                style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
+                                class="view-readonly" placeholder="e.g. 123-456-789-000"></div>
                         <div style="grid-column: span 3;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                                 <label class="form-label" style="margin: 0; font-size: 12px; font-weight: 600; color: #334155;">Present Address *</label>
@@ -1029,6 +1062,23 @@
             postalInput.dispatchEvent(new Event('input', { bubbles: true }));
         }
 
+        function syncAgeFromBirthDate() {
+            const birthDateVal = document.getElementById('inp_birth_date').value;
+            const ageInput = document.getElementById('inp_age');
+            if (!birthDateVal) return;
+
+            const birthDate = new Date(birthDateVal + 'T00:00:00');
+            if (Number.isNaN(birthDate.getTime())) return;
+
+            const today = new Date();
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const monthDiff = today.getMonth() - birthDate.getMonth();
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                age--;
+            }
+            ageInput.value = age >= 0 ? age : '';
+        }
+
         function syncSpouseField() {
             const status = document.getElementById('inp_civil_status').value;
             const spouse = document.getElementById('inp_spouse_name');
@@ -1086,10 +1136,14 @@
                 document.getElementById('inp_first_name').value = buyer.first_name || '';
                 document.getElementById('inp_middle_name').value = buyer.middle_name || '';
                 document.getElementById('inp_last_name').value = buyer.last_name || '';
+                document.getElementById('inp_birth_date').value = buyer.birth_date ? String(buyer.birth_date).slice(0, 10) : '';
+                document.getElementById('inp_age').value = buyer.age ?? '';
+                document.getElementById('inp_sex').value = buyer.sex || '';
                 document.getElementById('inp_civil_status').value = buyer.civil_status || '';
                 document.getElementById('inp_spouse_name').value = buyer.spouse_name || '';
                 document.getElementById('inp_contact_number').value = buyer.contact_number || '';
                 document.getElementById('inp_email').value = buyer.email || '';
+                document.getElementById('inp_tin_number').value = buyer.tin_number || '';
                 document.getElementById('inp_present_address').value = buyer.present_address || '';
                 document.getElementById('inp_postal_address').value = buyer.postal_address || '';
                 document.getElementById('inp_id_type').value = buyer.id_type || '';
@@ -1122,6 +1176,7 @@
                     document.getElementById('modalTitle').textContent = 'View Buyer Details';
                     document.getElementById('saveButton').style.display = 'none';
                     readOnlyElements.forEach(el => el.setAttribute('readonly', true));
+                    document.getElementById('inp_sex').setAttribute('disabled', true);
                     document.getElementById('inp_civil_status').setAttribute('disabled', true);
                     document.getElementById('inp_id_type').setAttribute('disabled', true);
                     syncSpouseField();
@@ -1131,6 +1186,7 @@
                     document.getElementById('saveButton').style.display = 'block';
                     document.getElementById('saveButton').textContent = 'Update Record';
                     readOnlyElements.forEach(el => el.removeAttribute('readonly'));
+                    document.getElementById('inp_sex').removeAttribute('disabled');
                     document.getElementById('inp_civil_status').removeAttribute('disabled');
                     document.getElementById('inp_id_type').removeAttribute('disabled');
                     syncSpouseField();

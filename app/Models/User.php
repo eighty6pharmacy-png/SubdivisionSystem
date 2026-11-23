@@ -150,8 +150,8 @@ class User extends Authenticatable
             return null;
         }
 
-        if ($current->contains('Buyer') && $this->buyerProfileHasDependents()) {
-            return 'This person is a buyer with a reservation or financing record. Keep the buyer role. Do not change them into a guard, admin, resident, or finance officer.';
+        if ($current->contains('Buyer') && $newRole !== 'Resident' && $this->buyerProfileHasDependents()) {
+            return 'This person is a buyer with a reservation or financing record. Keep the buyer role or convert them to a resident. Do not change them into a guard, admin, or finance officer.';
         }
 
         if ($current->contains('Resident') && $this->residentProfileHasDependents()) {
@@ -191,7 +191,7 @@ class User extends Authenticatable
                 continue;
             }
 
-            if ($name === 'Buyer' && $this->buyerProfileHasDependents()) {
+            if ($name === 'Buyer' && ($roleNames->contains('Resident') || $this->buyerProfileHasDependents())) {
                 continue;
             }
             if ($name === 'Resident' && $this->residentProfileHasDependents()) {

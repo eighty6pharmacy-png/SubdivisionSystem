@@ -19,7 +19,12 @@
                 <span class="incident-type">{{ $inc['type'] }}</span>
                 <h1 style="font-size: 24px; font-weight: 700; color: var(--incident-text-main); margin-top: 4px;">INC-{{ str_pad($inc['id'], 5, '0', STR_PAD_LEFT) }} — {{ $inc['sub'] }}</h1>
                 <div class="incident-meta" style="margin-top: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <span class="badge-premium badge-{{ strtolower($inc['status']) === 'resolved' ? 'resolved' : 'progress' }}">{{ strtolower($inc['status']) === 'resolved' ? 'Resolved' : 'In Progress' }}</span>
+                    @php
+                        $showStatus = strtolower($inc['status'] ?? 'no_action');
+                        $showStatusLabel = $showStatus === 'resolved' ? 'Resolved' : ($showStatus === 'progress' ? 'In Progress' : 'No Action');
+                        $showBadgeClass = $showStatus === 'resolved' ? 'resolved' : 'progress';
+                    @endphp
+                    <span class="badge-premium badge-{{ $showBadgeClass }}" @if($showStatus !== 'resolved' && $showStatus !== 'progress') style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;" @endif>{{ $showStatusLabel }}</span>
                     <span>&bull;</span>
                     <span>Reported by: <strong>{{ $inc['res'] }}</strong></span>
                     <span>&bull;</span>
@@ -70,6 +75,19 @@
                 </div>
 
                 <div style="margin-bottom: 32px;">
+                    <h3 style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--incident-text-sub); margin-bottom: 12px;">Reply to Resident</h3>
+                    <textarea id="adminReplyText" style="width: 100%; min-height: 110px; padding: 14px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 14px; resize: vertical; font-family: inherit; color: var(--incident-text-main); background: #fff;" placeholder="Type a reply to the resident about this issue (visible to the resident)...">{{ $inc['admin_reply'] ?? '' }}</textarea>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 10px; flex-wrap: wrap;">
+                        <span style="font-size: 12px; color: #64748b;">
+                            @if(!empty($inc['replied_at']))
+                                Last replied: {{ \Carbon\Carbon::parse($inc['replied_at'])->format('M d, Y h:i A') }}
+                            @endif
+                        </span>
+                        <button id="btnSendReply" class="btn btn-primary" style="background: #0284c7; color: white; border: none; padding: 10px 22px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer;" onclick="sendAdminReply()">Send Reply</button>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 32px;">
                     <h3 style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--incident-text-sub); margin-bottom: 12px;">Admin Notes</h3>
                     <textarea id="adminNotesText" style="width: 100%; min-height: 110px; padding: 14px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 14px; resize: vertical; font-family: inherit; color: var(--incident-text-main); background: #fff;" placeholder="Add internal notes about this incident (visible to administration only)...">{{ $inc['admin_notes'] ?? '' }}</textarea>
                     <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
@@ -84,8 +102,9 @@
                     <div class="detail-item" style="margin-top: 10px;">
                         <span class="detail-label">Current Status</span>
                         <select id="statusSelect" class="form-input" style="width: 100%; border-radius: 8px; padding: 10px; border: 1px solid #cbd5e1; font-weight: 600; background: #fff; margin-top: 6px;">
-                            <option value="progress" {{ strtolower($inc['status']) !== 'resolved' ? 'selected' : '' }}>In Progress</option>
-                            <option value="resolved" {{ strtolower($inc['status']) === 'resolved' ? 'selected' : '' }}>Resolved</option>
+                            <option value="" disabled {{ !in_array(strtolower($inc['status'] ?? ''), ['progress', 'resolved'], true) ? 'selected' : '' }} hidden>-- Select Status (Currently: No Action) --</option>
+                            <option value="progress" {{ strtolower($inc['status'] ?? '') === 'progress' ? 'selected' : '' }}>In Progress</option>
+                            <option value="resolved" {{ strtolower($inc['status'] ?? '') === 'resolved' ? 'selected' : '' }}>Resolved</option>
                         </select>
                     </div>
                     <div style="margin-top: 12px;">
@@ -122,6 +141,10 @@
         const select = document.getElementById('statusSelect');
         const btn = document.getElementById('btnUpdateStatus');
         const newStatus = select.value;
+        if (!newStatus) {
+            Swal.fire({ icon: 'warning', text: 'Please select In Progress or Resolved.' });
+            return;
+        }
 
         btn.disabled = true;
         btn.textContent = 'Updating...';
@@ -152,6 +175,46 @@
             Swal.fire({ icon: 'error', text: 'An error occurred while updating status.' });
             btn.disabled = false;
             btn.textContent = 'Update Status';
+        }
+    }
+
+    async function sendAdminReply() {
+        const text = (document.getElementById('adminReplyText')?.value || '').trim();
+        const btn = document.getElementById('btnSendReply');
+        if (!text) {
+            Swal.fire({ icon: 'warning', text: 'Please enter a reply message before sending.' });
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+
+        try {
+            const response = await fetch(`/admin/incidents/${incidentId}/reply`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ admin_reply: text })
+            });
+
+            const result = await response.json();
+            if (response.ok && result.success) {
+                Swal.fire({ icon: 'success', text: 'Reply sent to resident successfully.' }).then(() => {
+                    window.location.reload();
+                });
+            } else {
+                Swal.fire({ icon: 'error', text: result.message || 'Failed to send reply.' });
+                btn.disabled = false;
+                btn.textContent = 'Send Reply';
+            }
+        } catch (error) {
+            console.error(error);
+            Swal.fire({ icon: 'error', text: 'An error occurred while sending reply.' });
+            btn.disabled = false;
+            btn.textContent = 'Send Reply';
         }
     }
 

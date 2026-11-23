@@ -34,6 +34,8 @@ if (!function_exists('getIncidents')) {
                         'video' => $inc->video_url,
                         'video_url' => $inc->video_url,
                         'admin_notes' => $inc->admin_notes,
+                        'admin_reply' => $inc->admin_reply,
+                        'replied_at' => $inc->replied_at ? $inc->replied_at->toIso8601String() : null,
                         'status' => $inc->status,
                         'date' => $inc->created_at ? $inc->created_at->toIso8601String() : now()->toIso8601String(),
                     ];

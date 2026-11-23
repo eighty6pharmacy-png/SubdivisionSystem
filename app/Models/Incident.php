@@ -20,7 +20,13 @@ class Incident extends Model
         'image_url',
         'video_url',
         'admin_notes',
+        'admin_reply',
+        'replied_at',
         'status',
+    ];
+
+    protected $casts = [
+        'replied_at' => 'datetime',
     ];
 
     protected static function booted()

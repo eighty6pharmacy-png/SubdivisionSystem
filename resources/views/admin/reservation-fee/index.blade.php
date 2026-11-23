@@ -248,6 +248,7 @@
             </div>
             <div class="modal-body">
                 <div id="modalMainContent">
+                    <div id="modalViewSection">
                     <h3
                         style="font-size: 14px; font-weight: 700; text-transform: uppercase; margin-bottom: 20px; color: #64748b;">
                         Reservation Details</h3>
@@ -279,10 +280,61 @@
                     <div id="modalReservationActions"
                         style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 40px; border-top: 1px solid var(--bill-border); padding-top: 32px;">
                         <button type="button" class="btn btn-primary" onclick="convertReservation()">Convert to Downpayment</button>
+                        <button type="button" class="btn btn-outline" style="border-color: #3b82f6; color: #2563eb; font-weight: 700;"
+                            onclick="openEditReservation()">Edit Reservation</button>
                         <button type="button" id="btnSendReservationSms" class="btn btn-outline" style="border-color: #0284c7; color: #0284c7; font-weight: 700;"
                             onclick="sendReservationSmsReminder()">📱 Send SMS Reminder</button>
                         <button type="button" class="btn btn-outline" style="color: var(--bill-danger); border-color: #fee2e2;"
                             onclick="cancelReservation()">Cancel Reservation</button>
+                    </div>
+                    </div>
+
+                    <div id="modalEditSection" style="display: none;">
+                        <h3 style="font-size: 14px; font-weight: 700; text-transform: uppercase; margin-bottom: 20px; color: #64748b;">
+                            Edit Reservation</h3>
+
+                        <div style="margin-bottom: 16px;">
+                            <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Buyer *</label>
+                            <select id="editResBuyer" class="filter-select" style="width: 100%; padding: 12px; border-radius: 10px;"></select>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                            <div>
+                                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Block *</label>
+                                <select id="editResBlock" class="filter-select" style="width: 100%; padding: 12px; border-radius: 10px;">
+                                    <option value="">-- Select Block --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Lot *</label>
+                                <select id="editResLot" class="filter-select" style="width: 100%; padding: 12px; border-radius: 10px;">
+                                    <option value="">-- Select Lot --</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+                            <div>
+                                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Amount Paid (₱) *</label>
+                                <input type="text" id="editResAmount" class="filter-select"
+                                    style="width: 100%; font-size: 16px; padding: 12px; border-radius: 10px; box-sizing: border-box;"
+                                    oninput="formatNumberInput(this)">
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Number of Months *</label>
+                                <input type="number" id="editResMonths" class="filter-select" min="1" max="120" step="1"
+                                    style="width: 100%; font-size: 16px; padding: 12px; border-radius: 10px; box-sizing: border-box;"
+                                    oninput="updateEditReservationDeadlinePreview()">
+                                <div id="editResDeadlinePreview" style="font-size: 11px; color: #64748b; margin-top: 6px; font-weight: 600;"></div>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 12px; border-top: 1px solid var(--bill-border); padding-top: 24px;">
+                            <button type="button" class="btn btn-outline" style="flex: 1; justify-content: center; padding: 12px;"
+                                onclick="cancelEditReservation()">Cancel</button>
+                            <button type="button" id="btnSaveEditReservation" class="btn btn-primary" style="flex: 1; justify-content: center; padding: 12px;"
+                                onclick="submitEditReservation()">Save Changes</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -366,11 +418,12 @@
                 </div>
                 <div>
                     <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Deadline
-                        of Reservation</label>
-                    <input type="date" id="resDeadline" class="filter-select"
+                        style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Number
+                        of Months *</label>
+                    <input type="number" id="resMonths" class="filter-select" min="1" max="120" step="1"
                         style="width: 100%; font-size: 16px; padding: 12px; border-radius: 10px; box-sizing: border-box;"
-                        value="{{ \Carbon\Carbon::now()->addDays(30)->format('Y-m-d') }}">
+                        value="1" oninput="updateReservationDeadlinePreview()">
+                    <div id="resDeadlinePreview" style="font-size: 11px; color: #64748b; margin-top: 6px; font-weight: 600;"></div>
                 </div>
             </div>
 
@@ -492,11 +545,40 @@
             }
         });
 
+        function updateReservationDeadlinePreview() {
+            const monthsInput = document.getElementById('resMonths');
+            const previewEl = document.getElementById('resDeadlinePreview');
+            if (!monthsInput || !previewEl) return;
+
+            const months = parseInt(monthsInput.value, 10);
+            if (isNaN(months) || months < 1) {
+                previewEl.textContent = 'Enter at least 1 month.';
+                previewEl.style.color = '#dc2626';
+                return;
+            }
+
+            const target = new Date();
+            const day = target.getDate();
+            target.setMonth(target.getMonth() + months);
+            if (target.getDate() !== day) {
+                target.setDate(0);
+            }
+
+            const formatted = target.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            previewEl.textContent = `Deadline: ${formatted}`;
+            previewEl.style.color = '#64748b';
+        }
+
         function openReservationModal() {
             if (new URLSearchParams(window.location.search).get('action') !== 'add') {
                 window.history.pushState(null, '', '?action=add');
             }
             clearSelectedBuyer();
+            const monthsInput = document.getElementById('resMonths');
+            if (monthsInput) {
+                monthsInput.value = '1';
+                updateReservationDeadlinePreview();
+            }
             if (typeof bindGisDropdowns === 'function') {
                 bindGisDropdowns('resBlock', 'resLot', { includePlaceholder: true });
             }
@@ -536,7 +618,7 @@
             const contact = document.getElementById('resContact').value.trim();
             const block = document.getElementById('resBlock').value;
             const lot = document.getElementById('resLot').value;
-            const deadline = document.getElementById('resDeadline').value;
+            const months = parseInt(document.getElementById('resMonths').value, 10);
             const amountStr = document.getElementById('resAmount').value.replace(/,/g, '');
             const amount = parseFloat(amountStr);
 
@@ -558,6 +640,12 @@
                 return;
             }
 
+            if (isNaN(months) || months < 1 || months > 120) {
+                Swal.fire({ icon: 'warning', title: 'Invalid Duration', text: 'Please enter a valid number of months (1 to 120).' });
+                resetBtn();
+                return;
+            }
+
             try {
                 const res = await fetch('/admin/reservation-fee', {
                     method: 'POST',
@@ -572,7 +660,7 @@
                         name: name,
                         contact: contact,
                         amount: amount,
-                        deadline_date: deadline
+                        months: months
                     })
                 });
 
@@ -690,8 +778,145 @@
                 alertEl.textContent = '';
             }
 
+            document.getElementById('modalViewSection').style.display = 'block';
+            document.getElementById('modalEditSection').style.display = 'none';
             document.getElementById('billModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
+        }
+
+        function updateEditReservationDeadlinePreview() {
+            const bill = allBillsRaw.find(b => String(b.id) === String(currentModalId));
+            const monthsInput = document.getElementById('editResMonths');
+            const previewEl = document.getElementById('editResDeadlinePreview');
+            if (!monthsInput || !previewEl) return;
+
+            const months = parseInt(monthsInput.value, 10);
+            if (isNaN(months) || months < 1) {
+                previewEl.textContent = 'Enter at least 1 month.';
+                previewEl.style.color = '#dc2626';
+                return;
+            }
+
+            const base = bill && bill.date ? new Date(bill.date + 'T00:00:00') : new Date();
+            const day = base.getDate();
+            base.setMonth(base.getMonth() + months);
+            if (base.getDate() !== day) {
+                base.setDate(0);
+            }
+            const formatted = base.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            previewEl.textContent = `Deadline: ${formatted}`;
+            previewEl.style.color = '#64748b';
+        }
+
+        function openEditReservation() {
+            if (!currentModalId) return;
+            const bill = allBillsRaw.find(b => String(b.id) === String(currentModalId));
+            if (!bill || bill.status === 'Cancelled' || bill.status === 'Converted') return;
+
+            const buyerSelect = document.getElementById('editResBuyer');
+            if (buyerSelect) {
+                buyerSelect.innerHTML = '<option value="">-- Select Buyer --</option>' + masterBuyersList.map(b => {
+                    const fullName = [b.first_name, b.middle_name, b.last_name].filter(Boolean).join(' ');
+                    const selected = String(b.id) === String(bill.buyer_id) ? 'selected' : '';
+                    return `<option value="${b.id}" ${selected}>${fullName} (${b.contact_number || 'No Contact'})</option>`;
+                }).join('');
+            }
+
+            if (typeof bindGisDropdowns === 'function') {
+                bindGisDropdowns('editResBlock', 'editResLot', { currentBlock: bill.block, currentLot: bill.lot });
+            }
+
+            const amountInput = document.getElementById('editResAmount');
+            if (amountInput) {
+                amountInput.value = Number(bill.amount || 0).toLocaleString();
+            }
+
+            let initialMonths = 1;
+            if (bill.date && bill.deadline) {
+                const start = new Date(bill.date + 'T00:00:00');
+                const end = new Date(bill.deadline + 'T00:00:00');
+                const diffMonths = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+                if (diffMonths >= 1) initialMonths = diffMonths;
+            }
+            document.getElementById('editResMonths').value = String(initialMonths);
+            updateEditReservationDeadlinePreview();
+
+            document.getElementById('modalViewSection').style.display = 'none';
+            document.getElementById('modalEditSection').style.display = 'block';
+        }
+
+        function cancelEditReservation() {
+            document.getElementById('modalEditSection').style.display = 'none';
+            document.getElementById('modalViewSection').style.display = 'block';
+        }
+
+        async function submitEditReservation() {
+            if (!currentModalId) return;
+            const btn = document.getElementById('btnSaveEditReservation');
+            const resetBtn = () => {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Save Changes';
+                }
+            };
+
+            const buyerId = document.getElementById('editResBuyer').value;
+            const block = document.getElementById('editResBlock').value;
+            const lot = document.getElementById('editResLot').value;
+            const amountStr = document.getElementById('editResAmount').value.replace(/,/g, '');
+            const amount = parseFloat(amountStr);
+            const months = parseInt(document.getElementById('editResMonths').value, 10);
+
+            if (!buyerId) {
+                Swal.fire({ icon: 'warning', title: 'Buyer Required', text: 'Please select a buyer from the Master List.' });
+                return;
+            }
+            if (!block || !lot) {
+                Swal.fire({ icon: 'warning', title: 'Block and Lot Required', text: 'Please select both Block and Lot.' });
+                return;
+            }
+            if (isNaN(amount) || amount <= 0) {
+                Swal.fire({ icon: 'warning', title: 'Invalid Amount', text: 'Please enter a valid reservation fee amount.' });
+                return;
+            }
+            if (isNaN(months) || months < 1 || months > 120) {
+                Swal.fire({ icon: 'warning', title: 'Invalid Duration', text: 'Please enter a valid number of months (1 to 120).' });
+                return;
+            }
+
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Saving...';
+            }
+
+            try {
+                const res = await fetch(`/admin/reservation-fee/${currentModalId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    },
+                    body: JSON.stringify({
+                        buyer_master_list_id: buyerId,
+                        block: block,
+                        lot: lot,
+                        amount: amount,
+                        months: months
+                    })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success) {
+                    window.location.reload();
+                } else {
+                    Swal.fire(data.message || 'Failed to update reservation.');
+                    resetBtn();
+                }
+            } catch (e) {
+                console.error(e);
+                Swal.fire('Error connecting to server');
+                resetBtn();
+            }
         }
 
         function convertReservation() {

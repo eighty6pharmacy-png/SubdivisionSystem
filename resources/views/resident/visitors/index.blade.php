@@ -127,8 +127,14 @@
                     } else if(pin.status === 'Entered') {
                         codeDisplay = `<span style="font-family: monospace; font-size: 14px; font-weight: 700; color: #166534;">${pin.pin || 'USED'}</span>`;
                         statusBadge = `<span class="badge badge-success" style="padding: 4px 12px; border-radius: 20px; background:#dcfce7; color:#166534;">Entered Gate</span>`;
+                    } else if(pin.status === 'Exited') {
+                        codeDisplay = `<span style="font-family: monospace; font-size: 14px; font-weight: 700; color: #475569;">${pin.pin || 'USED'}</span>`;
+                        statusBadge = `<span class="badge" style="background:#f1f5f9; color:#475569; border: 1px solid #cbd5e1; padding: 4px 12px; border-radius: 20px;">Exited Gate</span>`;
+                    } else if(pin.status === 'Rejected') {
+                        codeDisplay = `<span style="font-family: monospace; font-size: 13px; color: #94a3b8;">-</span>`;
+                        statusBadge = `<span class="badge" style="background:#fee2e2; color:#991b1b; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 20px; font-weight:700;">Rejected</span>`;
                     } else {
-                        codeDisplay = `<span style="font-family: monospace; font-size: 13px; color: #94a3b8;">${pin.pin || 'EXPIRED'}</span>`;
+                        codeDisplay = `<span style="font-family: monospace; font-size: 13px; color: #94a3b8;">-</span>`;
                         statusBadge = `<span class="badge" style="background:#f1f5f9; color:#64748b; border: 1px solid #e2e8f0; padding: 4px 12px; border-radius: 20px;">Expired</span>`;
                     }
 

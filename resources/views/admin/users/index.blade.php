@@ -119,12 +119,20 @@
                 <tbody id="userTableBody">
                     @foreach($users as $user)
                     <tr class="user-row" 
+                        data-user-id="{{ $user['id'] }}"
                         data-dbid="{{ $user['db_id'] }}" 
+                        data-first-name="{{ $user['first_name'] ?? '' }}"
+                        data-middle-name="{{ $user['middle_name'] ?? '' }}"
+                        data-last-name="{{ $user['last_name'] ?? '' }}"
                         data-name="{{ strtolower($user['name']) }}" 
                         data-email="{{ strtolower($user['email']) }}" 
+                        data-raw-email="{{ $user['email'] }}"
+                        data-contact="{{ $user['contact_number'] ?? '' }}"
                         data-role="{{ $user['role'] }}" 
                         data-status="{{ $user['status'] }}" 
                         data-block="{{ $user['block'] ?? '' }}"
+                        data-lot="{{ $user['lot'] ?? '' }}"
+                        data-joined="{{ date('M d, Y', strtotime($user['joined'])) }}"
                         data-lots='@json($user['lots'] ?? [])'
                         data-schedule-days='@json($user['schedule_days'] ?? [])'
                         data-shift-type="{{ $user['shift_type'] ?? 'day' }}"
@@ -176,12 +184,13 @@
                         </td>
                         <td>
                             <div style="display: flex; gap: 8px;">
-                                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openViewModal('{{ $user['id'] }}', '{{ addslashes($user['name']) }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ addslashes($user['contact_number'] ?? 'N/A') }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}', '{{ date('M d, Y', strtotime($user['joined'])) }}', '{{ $user['status'] }}', '{{ $user['db_id'] }}', '{{ addslashes($user['password'] ?? '') }}')">View</button>
+                                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openUserModal(this.closest('tr'), 'view')">View</button>
                                 @if($user['status'] === 'Active')
-                                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px;" onclick="openEditModal('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ addslashes($user['first_name'] ?? '') }}', '{{ addslashes($user['middle_name'] ?? '') }}', '{{ addslashes($user['last_name'] ?? '') }}', '{{ $user['email'] }}', '{{ $user['role'] }}', '{{ $user['contact_number'] ?? '' }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}', '{{ addslashes($user['password'] ?? '') }}')">Edit</button>
+                                    @if($user['role'] === 'Buyer')
+                                        <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #059669; border-color: #a7f3d0;" onclick="convertBuyerToResident('{{ $user['db_id'] ?? '' }}', '{{ addslashes($user['name']) }}', '{{ $user['block'] ?? '' }}', '{{ $user['lot'] ?? '' }}')">To Resident</button>
+                                    @endif
                                     <button class="btn btn-outline archive-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #ef4444; border-color: #fee2e2;" onclick="archiveUser('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', '{{ $user['role'] }}', this)">Archive</button>
                                 @else
-                                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; opacity: 0.5; cursor: not-allowed;" disabled>Edit</button>
                                     <button class="btn btn-outline restore-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; color: #10b981; border-color: #a7f3d0;" onclick="restoreUser('{{ $user['id'] }}', '{{ $user['db_id'] ?? '' }}', this)">Restore</button>
                                 @endif
                             </div>
@@ -398,58 +407,83 @@
     </div>
 </div>
 
-<!-- Manage/Edit User Modal -->
+<!-- View / Edit User Modal -->
 <div id="editUserModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2000; background: rgba(15,23,42,0.6); backdrop-filter: blur(8px); padding: 20px; overflow-y: auto;">
     <div class="bill-modal-content" style="max-width: 560px; width: 92%; max-height: 88vh; overflow-y: auto; padding: 28px; border-radius: 24px;">
-        <div class="modal-header" style="padding: 0; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center;">
+        <div class="modal-header" style="padding: 0; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center;">
             <div>
-                <h2 style="font-size: 24px; font-weight: 800; color: #0f172a;">Edit Account</h2>
-                <p style="font-size: 13px; color: #64748b; margin-top: 4px;" id="editUserIdLabel">Updating USR-XXXX</p>
+                <h2 id="editUserModalTitle" style="font-size: 24px; font-weight: 800; color: #0f172a;">Account Details</h2>
+                <p style="font-size: 13px; color: #64748b; margin-top: 4px;" id="editUserIdLabel">USR-XXXX</p>
             </div>
             <button class="ann-btn-icon" onclick="closeEditModal()" style="background: none; border: none; cursor: pointer;">
                 <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
         </div>
 
+        <div id="userModalMetaStrip" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; background: #f8fafc; padding: 12px 16px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 18px;">
+            <div>
+                <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Account ID</div>
+                <div id="userModalMetaId" style="font-size: 13px; font-weight: 700; color: #334155; margin-top: 2px; font-family: monospace;">USR-0000</div>
+            </div>
+            <div>
+                <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Status</div>
+                <div id="userModalMetaStatus" style="font-size: 13px; font-weight: 700; color: #10b981; margin-top: 2px;">Active</div>
+            </div>
+            <div>
+                <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Member Since</div>
+                <div id="userModalMetaJoined" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 2px;">Date</div>
+            </div>
+        </div>
+
         <form id="editUserForm" onsubmit="saveUserChanges(event)" style="display: flex; flex-direction: column; gap: 16px;">
             <input type="hidden" id="editUserId">
-    <input type="hidden" id="editUserDbId">
+            <input type="hidden" id="editUserDbId">
             <div style="display: flex; gap: 12px;">
                 <div style="flex: 1;">
                     <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">First Name *</label>
-                    <input type="text" id="editUserFirstName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
+                    <input type="text" id="editUserFirstName" class="filter-select user-modal-editable" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
                 </div>
                 <div style="flex: 1;">
                     <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Middle Name *</label>
-                    <input type="text" id="editUserMiddleName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Initial or name">
+                    <input type="text" id="editUserMiddleName" class="filter-select user-modal-editable" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Initial or name">
                 </div>
                 <div style="flex: 1;">
                     <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Last Name *</label>
-                    <input type="text" id="editUserLastName" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
+                    <input type="text" id="editUserLastName" class="filter-select user-modal-editable" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
                 </div>
             </div>
 
             <div style="display: flex; gap: 12px;">
                 <div style="flex: 1;">
                     <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Email Address</label>
-                    <input type="email" id="editUserEmail" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
+                    <input type="email" id="editUserEmail" class="filter-select user-modal-editable" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;">
                 </div>
                 <div style="flex: 1;">
                     <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Contact Number</label>
-                    <input type="text" id="editUserContact" class="filter-select" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Required">
+                    <input type="text" id="editUserContact" class="filter-select user-modal-editable" required style="width: 100%; margin-top: 6px; padding: 12px; border-radius: 12px;" placeholder="Required">
+                </div>
+            </div>
+
+            <div id="viewUserPasswordSection">
+                <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Password</label>
+                <div style="position: relative; display: flex; align-items: center; margin-top: 6px;">
+                    <input type="password" id="viewUserPasswordDisplay" class="filter-select" readonly style="width: 100%; padding: 12px 44px 12px 12px; border-radius: 12px; background: #f8fafc; font-family: monospace; font-size: 13px; color: #334155; border: 1px solid #cbd5e1; cursor: default;" value="" placeholder="••••••••••••">
+                    <button type="button" id="toggleViewPasswordBtn" onclick="togglePasswordVisibility('viewUserPasswordDisplay', this)" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: #64748b; padding: 6px; display: flex; align-items: center; justify-content: center;" title="View Password">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
                 </div>
             </div>
 
             <div id="editResidentFields" style="display: flex; flex-direction: column; gap: 14px; background: #f8fafc; padding: 16px; border-radius: 14px; border: 1px solid #e2e8f0;">
                 <div>
                     <label style="font-size: 11px; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px;">Assigned Lots / Houses</label>
-                    <p style="font-size: 12px; color: #64748b; margin: 2px 0 8px 0;">This resident can own or occupy multiple lots. Manage their assigned properties below.</p>
+                    <p id="editResidentLotsHint" style="font-size: 12px; color: #64748b; margin: 2px 0 8px 0;">Assigned subdivision properties.</p>
                     <div id="editResidentLotsBadges" style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 32px; align-items: center;">
                         <!-- Badges rendered via JS -->
                     </div>
                 </div>
 
-                <div style="border-top: 1px dashed #cbd5e1; padding-top: 12px;">
+                <div id="editResidentAttachSection" style="border-top: 1px dashed #cbd5e1; padding-top: 12px;">
                     <label style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Attach Another Lot</label>
                     <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin-top: 6px; align-items: flex-end;">
                         <div>
@@ -483,7 +517,7 @@
                 <div style="margin-bottom: 16px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <label style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Duty Days</label>
-                        <div style="display: flex; gap: 6px;">
+                        <div id="editGuardDaysPresets" style="display: flex; gap: 6px;">
                             <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; border-radius: 6px;" onclick="setGuardDays('edit', 'weekday')">Mon - Fri</button>
                             <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; border-radius: 6px;" onclick="setGuardDays('edit', 'all')">Mon - Sun</button>
                             <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; border-radius: 6px; color: #64748b;" onclick="setGuardDays('edit', 'none')">Clear</button>
@@ -503,7 +537,7 @@
                 <div>
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
                         <label style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Shift Time per Selected Day</label>
-                        <div style="display: flex; gap: 6px;">
+                        <div id="editGuardShiftPresets" style="display: flex; gap: 6px;">
                             <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 6px;" onclick="applyPresetToSelectedDays('edit', 'day')">Set All Day</button>
                             <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 6px;" onclick="applyPresetToSelectedDays('edit', 'night')">Set All Night</button>
                         </div>
@@ -534,90 +568,16 @@
                 </div>
             </div>
 
-            <div>
-                <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Password</label>
-                <div style="position: relative; display: flex; align-items: center; margin-top: 6px;">
-                    <input type="password" id="editUserPasswordDisplay" class="filter-select" readonly style="width: 100%; padding: 12px 44px 12px 12px; border-radius: 12px; background: #f8fafc; font-family: monospace; font-size: 13px; color: #334155; border: 1px solid #cbd5e1; cursor: default;" value="" placeholder="••••••••••••">
-                    <button type="button" id="toggleEditPasswordBtn" onclick="togglePasswordVisibility('editUserPasswordDisplay', this)" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: #64748b; padding: 6px; display: flex; align-items: center; justify-content: center;" title="View Password">
-                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    </button>
-                </div>
+            <div id="userModalViewFooter" style="display: flex; gap: 12px; margin-top: 12px; border-top: 1px solid #f1f5f9; padding-top: 20px;">
+                <button type="button" class="btn btn-outline" style="flex: 1; justify-content: center; padding: 12px;" onclick="closeEditModal()">Close</button>
+                <button type="button" id="userModalEditBtn" class="btn btn-primary" style="flex: 1; justify-content: center; padding: 12px;" onclick="setUserModalMode('edit')">Edit</button>
             </div>
 
-            <div style="display: flex; gap: 12px; margin-top: 12px; border-top: 1px solid #f1f5f9; padding-top: 20px;">
-                <button type="button" class="btn btn-outline" style="flex: 1; justify-content: center; padding: 12px;" onclick="closeEditModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary" style="flex: 1; justify-content: center; padding: 12px;">Save Account Changes</button>
+            <div id="userModalEditFooter" style="display: none; gap: 12px; margin-top: 12px; border-top: 1px solid #f1f5f9; padding-top: 20px;">
+                <button type="button" class="btn btn-outline" style="flex: 1; justify-content: center; padding: 12px;" onclick="cancelUserEditMode()">Cancel</button>
+                <button type="submit" id="userModalSaveBtn" class="btn btn-primary" style="flex: 1; justify-content: center; padding: 12px;">Save Account Changes</button>
             </div>
         </form>
-    </div>
-</div>
-
-<!-- View User Modal -->
-<div id="viewUserModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2000; background: rgba(15,23,42,0.6); backdrop-filter: blur(8px); padding: 20px; overflow-y: auto;">
-    <div class="bill-modal-content" style="max-width: 480px; width: 90%; max-height: 88vh; overflow-y: auto; padding: 28px; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
-        <div class="modal-header" style="padding: 0; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start;">
-            <div style="display: flex; gap: 16px; align-items: center;">
-                <div id="viewUserInitials" style="width: 56px; height: 56px; border-radius: 16px; background: #e0e7ff; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #4338ca; font-size: 20px;">
-                    J
-                </div>
-                <div>
-                    <h2 id="viewUserName" style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0;">Name</h2>
-                    <p id="viewUserRole" style="font-size: 13px; font-weight: 700; color: var(--bill-primary); margin-top: 2px;">Role</p>
-                </div>
-            </div>
-            <button class="ann-btn-icon" onclick="closeViewModal()" style="background: none; border: none; cursor: pointer; color: #64748b;">
-                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-        </div>
-
-        <div style="display: flex; flex-direction: column; gap: 16px;">
-            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                    <div>
-                        <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Account ID</div>
-                        <div id="viewUserId" style="font-size: 13px; font-weight: 700; color: #334155; margin-top: 4px; font-family: monospace;">USR-0000</div>
-                    </div>
-                    <div>
-                        <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Status</div>
-                        <div id="viewUserStatus" style="font-size: 13px; font-weight: 700; color: #10b981; margin-top: 4px;">Active</div>
-                    </div>
-                </div>
-            </div>
-
-            <div style="background: #fff; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                <div style="margin-bottom: 12px;">
-                    <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Email Address</div>
-                    <div id="viewUserEmail" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">email</div>
-                </div>
-                <div style="margin-bottom: 12px;">
-                    <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Contact Number</div>
-                    <div id="viewUserContact" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">N/A</div>
-                </div>
-                <div style="margin-bottom: 12px;">
-                    <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Password</div>
-                    <div style="position: relative; display: flex; align-items: center; margin-top: 4px;">
-                        <input type="password" id="viewUserPasswordDisplay" class="filter-select" readonly style="width: 100%; padding: 10px 40px 10px 10px; border-radius: 8px; font-family: monospace; font-size: 13px; background: #f8fafc; color: #334155; border: 1px solid #e2e8f0; cursor: default;" value="" placeholder="••••••••••••">
-                        <button type="button" id="toggleViewPasswordBtn" onclick="togglePasswordVisibility('viewUserPasswordDisplay', this)" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: #64748b; padding: 4px; display: flex; align-items: center; justify-content: center;" title="View Password">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                        </button>
-                    </div>
-                </div>
-                <div id="viewUserPropertyContainer" style="margin-bottom: 12px; display: none;">
-                    <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Property Details</div>
-                    <div id="viewUserProperty" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">Block X, Lot Y</div>
-                </div>
-                <div id="viewUserGuardContainer" style="margin-bottom: 12px; display: none;">
-                    <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Guard Duty Schedule</div>
-                    <div id="viewUserGuardSchedule" style="font-size: 13px; font-weight: 700; color: #1e40af; margin-top: 4px;">Schedule</div>
-                    <div id="viewUserDutyStatus" style="font-size: 11px; margin-top: 4px;">Status</div>
-                </div>
-                <div>
-                    <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Member Since</div>
-                    <div id="viewUserJoined" style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 4px;">Date</div>
-                </div>
-            </div>
-        </div>
-        <button class="btn btn-outline" style="width: 100%; justify-content: center; padding: 12px; margin-top: 24px; border-radius: 12px; font-weight: 700;" onclick="closeViewModal()">Close Profile</button>
     </div>
 </div>
 
@@ -922,142 +882,67 @@
         };
     }
 
-    function openViewModal(id, name, email, role, contact, block, lot, joined, status, dbid, password) {
-        if (new URLSearchParams(window.location.search).get('view') !== id) {
-            window.history.pushState(null, '', '?view=' + id);
+    let currentUserModalRow = null;
+    let isUserModalViewMode = true;
+    let currentEditResidentLots = [];
+
+    function openUserModal(row, mode = 'view') {
+        if (!row) return;
+        currentUserModalRow = row;
+
+        const d = row.dataset;
+        const id = d.userId || '';
+        const dbid = d.dbid || '';
+        const firstName = d.firstName || '';
+        const middleName = d.middleName || '';
+        const lastName = d.lastName || '';
+        const email = d.rawEmail || '';
+        const role = d.role || '';
+        const contact = d.contact || '';
+        const block = d.block || '';
+        const lot = d.lot || '';
+        const joined = d.joined || '';
+        const status = d.status || 'Active';
+        const password = d.password || '';
+
+        if (status !== 'Active') {
+            mode = 'view';
         }
-        if (!password) {
-            const row = document.querySelector(`.user-row[data-dbid="${dbid}"]`);
-            if (row && row.dataset.password) {
-                password = row.dataset.password;
-            }
-        }
+
+        document.getElementById('editUserId').value = id;
+        document.getElementById('editUserDbId').value = dbid;
+        document.getElementById('editUserModal').dataset.role = role;
+        document.getElementById('editUserModal').dataset.status = status;
+
+        document.getElementById('userModalMetaId').innerText = id;
+        const metaStatus = document.getElementById('userModalMetaStatus');
+        metaStatus.innerText = status;
+        metaStatus.style.color = status === 'Active' ? '#10b981' : '#ef4444';
+        document.getElementById('userModalMetaJoined').innerText = joined || 'N/A';
+
+        document.getElementById('editUserFirstName').value = firstName;
+        document.getElementById('editUserMiddleName').value = middleName;
+        document.getElementById('editUserLastName').value = lastName;
+        document.getElementById('editUserEmail').value = email;
+        document.getElementById('editUserContact').value = contact;
+
         const viewPwInput = document.getElementById('viewUserPasswordDisplay');
         if (viewPwInput) {
             viewPwInput.type = 'password';
-            viewPwInput.value = password || '';
+            viewPwInput.value = password;
         }
         const viewPwBtn = document.getElementById('toggleViewPasswordBtn');
         if (viewPwBtn) {
             viewPwBtn.innerHTML = EYE_OPEN_SVG;
             viewPwBtn.title = 'View Password';
         }
-        document.getElementById('viewUserInitials').innerText = name.charAt(0).toUpperCase();
-        document.getElementById('viewUserName').innerText = name;
-        document.getElementById('viewUserRole').innerText = role;
-        document.getElementById('viewUserId').innerText = id;
-        document.getElementById('viewUserStatus').innerText = status;
-        document.getElementById('viewUserStatus').style.color = status === 'Active' ? '#10b981' : '#ef4444';
-        
-        document.getElementById('viewUserEmail').innerText = email;
-        document.getElementById('viewUserContact').innerText = contact || 'N/A';
-        document.getElementById('viewUserJoined').innerText = joined;
 
-        const propContainer = document.getElementById('viewUserPropertyContainer');
-        if (role === 'Resident') {
-            const row = document.querySelector(`.user-row[data-dbid="${dbid}"]`);
-            let userLots = [];
-            if (row && row.dataset.lots) {
-                try { userLots = JSON.parse(row.dataset.lots); } catch(e) {}
-            }
-            if (userLots.length > 0) {
-                document.getElementById('viewUserProperty').innerText = userLots.map(l => `Block ${l.block}, Lot ${l.lot_number}`).join(' | ');
-                propContainer.style.display = 'block';
-            } else if (block && lot) {
-                document.getElementById('viewUserProperty').innerText = `Block ${block}, Lot ${lot}`;
-                propContainer.style.display = 'block';
-            } else {
-                propContainer.style.display = 'none';
-            }
-        } else {
-            propContainer.style.display = 'none';
-        }
-
-        const guardContainer = document.getElementById('viewUserGuardContainer');
-        if (guardContainer) {
-            if (role === 'Security Guard') {
-                const row = document.querySelector(`.user-row[data-dbid="${dbid}"]`);
-                let scheduleHtml = '';
-                let onDuty = false;
-                if (row) {
-                    try {
-                        const raw = JSON.parse(row.dataset.scheduleDays || '[]');
-                        onDuty = row.dataset.isOnDuty === '1';
-                        const shiftType = row.dataset.shiftType || 'day';
-                        const shiftStart = row.dataset.shiftStart || '06:00';
-                        const shiftEnd = row.dataset.shiftEnd || '18:00';
-
-                        const normalized = normalizeGuardScheduleData(raw, shiftType, shiftStart, shiftEnd);
-                        const todayName = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: 'Asia/Manila' }).format(new Date());
-
-                        scheduleHtml = '<div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">';
-                        GUARD_DAYS_OF_WEEK.forEach(d => {
-                            const cfg = normalized[d];
-                            const isWorkDay = cfg && cfg.enabled;
-                            const isToday = d === todayName;
-                            const bg = isWorkDay ? '#eff6ff' : '#f8fafc';
-                            const border = isWorkDay ? '#bfdbfe' : '#e2e8f0';
-                            const todayStyle = isToday ? 'border: 2px solid #2563eb;' : `border: 1px solid ${border};`;
-                            const shiftBadgeLabel = cfg.shift === 'night' ? 'Night Shift' : (cfg.shift === 'day' ? 'Day Shift' : 'Custom Shift');
-                            const timeText = isWorkDay ? `${shiftBadgeLabel} (${formatTime12Hour(cfg.start)} - ${formatTime12Hour(cfg.end)})` : 'Off Duty';
-
-                            scheduleHtml += `
-                                <div style="background: ${bg}; ${todayStyle} border-radius: 8px; padding: 6px 10px; display: flex; justify-content: space-between; align-items: center;">
-                                    <div style="font-size: 12px; font-weight: 700; color: #1e293b;">
-                                        ${d} ${isToday ? '<span style="font-size: 10px; color: #2563eb; font-weight: 800; margin-left: 4px;">(Today)</span>' : ''}
-                                    </div>
-                                    <div style="font-size: 11px; font-weight: 700; color: ${isWorkDay ? '#1d4ed8' : '#94a3b8'};">
-                                        ${timeText}
-                                    </div>
-                                </div>
-                            `;
-                        });
-                        scheduleHtml += '</div>';
-                    } catch(e) {
-                        scheduleHtml = '<div style="font-size: 12px; color: #64748b;">No schedule assigned</div>';
-                    }
-                }
-                document.getElementById('viewUserGuardSchedule').innerHTML = scheduleHtml;
-                document.getElementById('viewUserDutyStatus').innerHTML = onDuty 
-                    ? '<span style="display: inline-flex; align-items: center; gap: 5px; color: #047857; font-weight: 700; background: #ecfdf5; padding: 3px 10px; border-radius: 9999px; border: 1px solid #a7f3d0;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #10b981; display: inline-block;"></span> Active on Duty</span>' 
-                    : '<span style="display: inline-flex; align-items: center; gap: 5px; color: #64748b; font-weight: 600; background: #f8fafc; padding: 3px 10px; border-radius: 9999px; border: 1px solid #e2e8f0;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #94a3b8; display: inline-block;"></span> Currently Off Duty</span>';
-                guardContainer.style.display = 'block';
-            } else {
-                guardContainer.style.display = 'none';
-            }
-        }
-
-        document.getElementById('viewUserModal').style.display = 'flex';
-    }
-
-    function closeViewModal() {
-        window.history.replaceState(null, '', window.location.pathname);
-        document.getElementById('viewUserModal').style.display = 'none';
-    }
-
-    function openEditModal(id, dbid, firstName, middleName, lastName, email, role, contact, block, lot, password) {
-        if (new URLSearchParams(window.location.search).get('edit') !== id) {
-            window.history.pushState(null, '', '?edit=' + id);
-        }
-        document.getElementById('editUserId').value = id;
-        document.getElementById('editUserDbId').value = dbid;
-        document.getElementById('editUserIdLabel').innerText = `Updating ${id} (${role})`;
-        document.getElementById('editUserModal').dataset.role = role;
-
-        document.getElementById('editUserFirstName').value = firstName;
-        document.getElementById('editUserMiddleName').value = middleName || '';
-        document.getElementById('editUserLastName').value = lastName;
-        
-        document.getElementById('editUserEmail').value = email;
-        document.getElementById('editUserContact').value = contact;
-        
         const resFields = document.getElementById('editResidentFields');
         if (role === 'Resident') {
             resFields.style.display = 'flex';
-            const row = document.querySelector(`.user-row[data-dbid="${dbid}"]`);
             let userLots = [];
-            if (row && row.dataset.lots) {
-                try { userLots = JSON.parse(row.dataset.lots); } catch(e) {}
+            if (d.lots) {
+                try { userLots = JSON.parse(d.lots); } catch (e) {}
             }
             if (userLots.length > 0) {
                 currentEditResidentLots = userLots.map(l => ({ id: l.id, block: l.block, lot: l.lot_number, lot_number: l.lot_number }));
@@ -1066,84 +951,148 @@
             } else {
                 currentEditResidentLots = [];
             }
-            renderEditResidentLotsBadges();
             bindGisDropdowns('editResBlock', 'editResLot', { currentBlock: block, currentLot: lot });
         } else {
             resFields.style.display = 'none';
+            currentEditResidentLots = [];
         }
 
         const guardFields = document.getElementById('editGuardScheduleFields');
         if (guardFields) {
             if (role === 'Security Guard') {
                 guardFields.style.display = 'block';
-                const row = document.querySelector(`.user-row[data-dbid="${dbid}"]`);
                 let raw = [];
-                let shiftType = 'day';
-                let shiftStart = '06:00';
-                let shiftEnd = '18:00';
-                if (row) {
-                    try {
-                        raw = JSON.parse(row.dataset.scheduleDays || '[]');
-                        shiftType = row.dataset.shiftType || 'day';
-                        shiftStart = row.dataset.shiftStart || '06:00';
-                        shiftEnd = row.dataset.shiftEnd || '18:00';
-                    } catch(e) {
-                        raw = [];
-                    }
+                let shiftType = d.shiftType || 'day';
+                let shiftStart = d.shiftStart || '06:00';
+                let shiftEnd = d.shiftEnd || '18:00';
+                try {
+                    raw = JSON.parse(d.scheduleDays || '[]');
+                } catch (e) {
+                    raw = [];
                 }
                 const normalized = normalizeGuardScheduleData(raw, shiftType, shiftStart, shiftEnd);
-                GUARD_DAYS_OF_WEEK.forEach(d => {
-                    const cfg = normalized[d];
-                    const chk = document.getElementById(`edit_day_${d}`);
-                    const sSelect = document.getElementById(`edit_shift_type_${d}`);
-                    const sStart = document.getElementById(`edit_shift_start_${d}`);
-                    const sEnd = document.getElementById(`edit_shift_end_${d}`);
+                GUARD_DAYS_OF_WEEK.forEach(day => {
+                    const cfg = normalized[day];
+                    const chk = document.getElementById(`edit_day_${day}`);
+                    const sSelect = document.getElementById(`edit_shift_type_${day}`);
+                    const sStart = document.getElementById(`edit_shift_start_${day}`);
+                    const sEnd = document.getElementById(`edit_shift_end_${day}`);
 
                     if (sSelect) sSelect.value = cfg.shift;
                     if (sStart) sStart.value = cfg.start;
                     if (sEnd) sEnd.value = cfg.end;
                     if (chk) {
                         chk.checked = cfg.enabled;
-                        toggleGuardDayStyle(chk, `lbl_edit_day_${d}`, 'edit', d);
+                        toggleGuardDayStyle(chk, `lbl_edit_day_${day}`, 'edit', day);
                     }
                 });
             } else {
                 guardFields.style.display = 'none';
             }
         }
-        
-        if (!password) {
-            const row = document.querySelector(`.user-row[data-dbid="${dbid}"]`);
-            if (row && row.dataset.password) {
-                password = row.dataset.password;
-            }
-        }
-        const editPwInput = document.getElementById('editUserPasswordDisplay');
-        if (editPwInput) {
-            editPwInput.type = 'password';
-            editPwInput.value = password || '';
-        }
-        const editPwBtn = document.getElementById('toggleEditPasswordBtn');
-        if (editPwBtn) {
-            editPwBtn.innerHTML = EYE_OPEN_SVG;
-            editPwBtn.title = 'View Password';
-        }
+
+        setUserModalMode(mode);
         document.getElementById('editUserModal').style.display = 'flex';
     }
 
-    let currentEditResidentLots = [];
+    function setUserModalMode(mode) {
+        const modal = document.getElementById('editUserModal');
+        const id = document.getElementById('editUserId').value;
+        const role = modal.dataset.role || '';
+        const status = modal.dataset.status || 'Active';
+        if (status !== 'Active') {
+            mode = 'view';
+        }
+
+        const isView = (mode === 'view');
+        isUserModalViewMode = isView;
+
+        const targetParam = isView ? 'view' : 'edit';
+        if (id && new URLSearchParams(window.location.search).get(targetParam) !== id) {
+            window.history.pushState(null, '', `?${targetParam}=${id}`);
+        }
+
+        document.getElementById('editUserModalTitle').innerText = isView ? 'Account Details' : 'Edit Account';
+        document.getElementById('editUserIdLabel').innerText = isView ? `${id} (${role})` : `Updating ${id} (${role})`;
+
+        document.querySelectorAll('#editUserModal .user-modal-editable').forEach(el => {
+            el.disabled = isView;
+            el.style.backgroundColor = isView ? '#f8fafc' : '#ffffff';
+            el.style.cursor = isView ? 'default' : '';
+        });
+
+        const pwSection = document.getElementById('viewUserPasswordSection');
+        if (pwSection) {
+            pwSection.style.display = isView ? 'block' : 'none';
+        }
+
+        const attachSection = document.getElementById('editResidentAttachSection');
+        if (attachSection) {
+            attachSection.style.display = isView ? 'none' : 'block';
+        }
+        const lotsHint = document.getElementById('editResidentLotsHint');
+        if (lotsHint) {
+            lotsHint.innerText = isView
+                ? 'Assigned subdivision properties for this resident.'
+                : 'This resident can own or occupy multiple lots. Manage their assigned properties below.';
+        }
+        renderEditResidentLotsBadges();
+
+        const daysPresets = document.getElementById('editGuardDaysPresets');
+        if (daysPresets) daysPresets.style.display = isView ? 'none' : 'flex';
+        const shiftPresets = document.getElementById('editGuardShiftPresets');
+        if (shiftPresets) shiftPresets.style.display = isView ? 'none' : 'flex';
+
+        GUARD_DAYS_OF_WEEK.forEach(day => {
+            const chk = document.getElementById(`edit_day_${day}`);
+            const lbl = document.getElementById(`lbl_edit_day_${day}`);
+            const sSelect = document.getElementById(`edit_shift_type_${day}`);
+            const sStart = document.getElementById(`edit_shift_start_${day}`);
+            const sEnd = document.getElementById(`edit_shift_end_${day}`);
+
+            if (chk) chk.disabled = isView;
+            if (lbl) {
+                lbl.style.pointerEvents = isView ? 'none' : 'auto';
+                lbl.style.cursor = isView ? 'default' : 'pointer';
+            }
+            if (sSelect) sSelect.disabled = isView;
+            if (sStart) sStart.disabled = isView;
+            if (sEnd) sEnd.disabled = isView;
+        });
+
+        const viewFooter = document.getElementById('userModalViewFooter');
+        const editFooter = document.getElementById('userModalEditFooter');
+        const editBtn = document.getElementById('userModalEditBtn');
+        if (viewFooter) viewFooter.style.display = isView ? 'flex' : 'none';
+        if (editFooter) editFooter.style.display = isView ? 'none' : 'flex';
+        if (editBtn) editBtn.style.display = (status === 'Active') ? 'inline-flex' : 'none';
+    }
+
+    function cancelUserEditMode() {
+        if (currentUserModalRow) {
+            openUserModal(currentUserModalRow, 'view');
+        } else {
+            setUserModalMode('view');
+        }
+    }
+
+    function closeViewModal() {
+        closeEditModal();
+    }
 
     function renderEditResidentLotsBadges() {
         const container = document.getElementById('editResidentLotsBadges');
         if (!container) return;
         if (currentEditResidentLots.length === 0) {
-            container.innerHTML = '<span style="font-size: 12px; color: #dc2626; font-style: italic;">No lots currently assigned. Please attach at least one lot below.</span>';
+            container.innerHTML = isUserModalViewMode
+                ? '<span style="font-size: 12px; color: #64748b; font-style: italic;">No lots currently assigned.</span>'
+                : '<span style="font-size: 12px; color: #dc2626; font-style: italic;">No lots currently assigned. Please attach at least one lot below.</span>';
             return;
         }
         container.innerHTML = currentEditResidentLots.map((l, idx) => `
             <span style="display: inline-flex; align-items: center; gap: 6px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 700;">
                 Block ${l.block}, Lot ${l.lot_number || l.lot}
-                <button type="button" onclick="removeLotFromEditResident(${idx})" style="background: none; border: none; color: #047857; cursor: pointer; padding: 0; font-size: 14px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%;" title="Remove this lot">&times;</button>
+                ${isUserModalViewMode ? '' : `<button type="button" onclick="removeLotFromEditResident(${idx})" style="background: none; border: none; color: #047857; cursor: pointer; padding: 0; font-size: 14px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%;" title="Remove this lot">&times;</button>`}
             </span>
         `).join('');
     }
@@ -1180,6 +1129,7 @@
 
     async function saveUserChanges(e) {
         e.preventDefault();
+        if (isUserModalViewMode) return;
         const id = document.getElementById('editUserId').value;
         const dbid = document.getElementById('editUserDbId').value;
         const firstName = document.getElementById('editUserFirstName').value.trim();
@@ -1335,11 +1285,11 @@
         if (params.get('action') === 'add') {
             openAddUserModal();
         } else if (params.get('edit')) {
-            const editBtn = document.querySelector(`button[onclick*="openEditModal('${params.get('edit')}'"]`);
-            if (editBtn) editBtn.click();
+            const targetRow = Array.from(document.querySelectorAll('.user-row')).find(r => r.dataset.userId === params.get('edit'));
+            if (targetRow) openUserModal(targetRow, 'edit');
         } else if (params.get('view')) {
-            const viewBtn = document.querySelector(`button[onclick*="openViewModal('${params.get('view')}'"]`);
-            if (viewBtn) viewBtn.click();
+            const targetRow = Array.from(document.querySelectorAll('.user-row')).find(r => r.dataset.userId === params.get('view'));
+            if (targetRow) openUserModal(targetRow, 'view');
         }
     });
 
@@ -1481,6 +1431,39 @@
 
     function resetPassword(id) {
         Swal.fire(`A secure password reset link has been dispatched to the registered email for user ${id}.`);
+    }
+
+    async function convertBuyerToResident(dbid, name, block, lot) {
+        const lotNote = (block && lot) ? `Linked lot: Block ${block}, Lot ${lot}. ` : '';
+        const confirmRes = await Swal.fire({
+            title: 'Convert to Resident',
+            text: `Convert ${name} to a Resident account? ${lotNote}Buyer records will remain preserved.`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Convert',
+            cancelButtonText: 'Cancel',
+        });
+        if (!confirmRes.isConfirmed) return;
+
+        try {
+            const res = await fetch(`/admin/users/${dbid}/convert-to-resident`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({})
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok || !data?.success) {
+                Swal.fire('Error', data?.message || 'Failed to convert buyer account.', 'error');
+                return;
+            }
+            Swal.fire('Converted', data.message, 'success').then(() => window.location.reload());
+        } catch (err) {
+            Swal.fire('Error', 'Network error while converting account.', 'error');
+        }
     }
 
     function openImportModal() {

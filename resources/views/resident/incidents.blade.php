@@ -9,6 +9,11 @@
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+.badge-no-action {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+}
 </style>
 
 <div class="fade-in">
@@ -141,9 +146,10 @@
                 $incDesc = is_array($inc) ? ($inc['description'] ?? ($inc['desc'] ?? '')) : ($inc->description ?? '');
                 $incType = is_array($inc) ? ($inc['type'] ?? 'General') : ($inc->type ?? 'General');
                 $incId = is_array($inc) ? ($inc['id'] ?? '') : ($inc->id ?? '');
-                $incStatus = strtolower(is_array($inc) ? ($inc['status'] ?? 'progress') : ($inc->status ?? 'progress'));
-                if ($incStatus === 'pending') $incStatus = 'progress';
-                $statusLabel = $incStatus === 'resolved' ? 'Resolved' : 'In Progress';
+                $incStatus = strtolower(is_array($inc) ? ($inc['status'] ?? 'no_action') : ($inc->status ?? 'no_action'));
+                if ($incStatus === 'pending' || $incStatus === '') $incStatus = 'no_action';
+                $statusClass = $incStatus === 'resolved' ? 'resolved' : ($incStatus === 'progress' ? 'progress' : 'no-action');
+                $statusLabel = $incStatus === 'resolved' ? 'Resolved' : ($incStatus === 'progress' ? 'In Progress' : 'No Action');
                 $incDate = is_array($inc) ? ($inc['created_at'] ?? null) : ($inc->created_at ?? null);
                 $timeAgo = $incDate ? \Carbon\Carbon::parse($incDate)->diffForHumans() : 'Recently';
                 $refDisplay = is_numeric($incId) ? 'INC-' . str_pad($incId, 5, '0', STR_PAD_LEFT) : $incId;
@@ -160,7 +166,7 @@
                     </div>
                 </div>
                 <div class="incident-status">
-                    <span class="badge-status badge-{{ $incStatus }}">{{ $statusLabel }}</span>
+                    <span class="badge-status badge-{{ $statusClass }}">{{ $statusLabel }}</span>
                     <button class="btn btn-outline" onclick="openDetailsModal('{{ $incId }}')" style="padding: 4px 12px; font-size: 11px; border-radius: 6px;">View Details</button>
                 </div>
             </div>
@@ -216,23 +222,6 @@
                         </div>
                     </div>
                     <input type="hidden" id="reportType">
-                </div>
-
-                <!-- Incident Date & Time with Calendar Picker -->
-                <div class="form-group" style="margin-top: 14px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <label style="margin: 0; font-size: 13px; font-weight: 700; color: #1e293b;">Incident Date &amp; Time</label>
-                        <span style="font-size: 11px; color: #64748b; font-weight: 600;">When did this incident happen?</span>
-                    </div>
-                    <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;">
-                        <button type="button" class="incident-time-preset-btn active" id="presetNow" onclick="setIncidentTimePreset('now')">⚡ Just Now</button>
-                        <button type="button" class="incident-time-preset-btn" id="preset1h" onclick="setIncidentTimePreset('1h')">🕒 1 Hour Ago</button>
-                        <button type="button" class="incident-time-preset-btn" id="presetMorning" onclick="setIncidentTimePreset('today_morning')">🌅 Earlier Today</button>
-                        <button type="button" class="incident-time-preset-btn" id="presetYesterday" onclick="setIncidentTimePreset('yesterday')">📅 Yesterday</button>
-                    </div>
-                    <div style="position: relative;">
-                        <input type="datetime-local" id="reportIncidentDateTime" class="form-input" style="padding: 10px 14px; font-size: 13px; font-weight: 600; width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff;" max="{{ now()->format('Y-m-d\TH:i') }}">
-                    </div>
                 </div>
 
                 <div class="form-group">
@@ -411,7 +400,14 @@
             date: inc.created_at || inc.date,
             updated: inc.updated_at,
             desc: inc.description || inc.desc || 'No description provided.',
-            status: ((inc.status || 'progress').toLowerCase() === 'pending' ? 'progress' : (inc.status || 'progress').toLowerCase()),
+            status: (() => {
+                const s = (inc.status || 'no_action').toLowerCase();
+                if (s === 'resolved') return 'resolved';
+                if (s === 'progress') return 'progress';
+                return 'no_action';
+            })(),
+            admin_reply: inc.admin_reply || null,
+            replied_at: inc.replied_at || null,
             photos: parsedPhotos,
             video: inc.video_url || inc.video || null,
         };
@@ -443,8 +439,8 @@
         incidents.forEach(inc => {
             const card = document.createElement('div');
             card.className = 'incident-card';
-            const statusClass = inc.status === 'resolved' ? 'resolved' : 'progress';
-            const statusLabel = statusClass === 'resolved' ? 'Resolved' : 'In Progress';
+            const statusClass = inc.status === 'resolved' ? 'resolved' : (inc.status === 'progress' ? 'progress' : 'no-action');
+            const statusLabel = inc.status === 'resolved' ? 'Resolved' : (inc.status === 'progress' ? 'In Progress' : 'No Action');
             const shortDesc = inc.desc.length > 80 ? inc.desc.substring(0, 80) + '...' : inc.desc;
             
             const mediaBadges = [];
@@ -453,6 +449,9 @@
             }
             if (inc.video) {
                 mediaBadges.push(`<span>🎥 Video</span>`);
+            }
+            if (inc.admin_reply) {
+                mediaBadges.push(`<span style="color: #0284c7; font-weight: 700;">💬 Admin replied</span>`);
             }
             const mediaInfo = mediaBadges.length > 0 ? `<span>•</span>${mediaBadges.join(' ')}` : '';
 
@@ -475,36 +474,6 @@
             `;
             container.appendChild(card);
         });
-    }
-
-    function setIncidentTimePreset(preset) {
-        document.querySelectorAll('.incident-time-preset-btn').forEach(btn => btn.classList.remove('active'));
-        const input = document.getElementById('reportIncidentDateTime');
-        if (!input) return;
-        const now = new Date();
-        let target = new Date();
-
-        if (preset === 'now') {
-            document.getElementById('presetNow')?.classList.add('active');
-            target = now;
-        } else if (preset === '1h') {
-            document.getElementById('preset1h')?.classList.add('active');
-            target = new Date(now.getTime() - 60 * 60 * 1000);
-        } else if (preset === 'today_morning') {
-            document.getElementById('presetMorning')?.classList.add('active');
-            target.setHours(9, 0, 0, 0);
-            if (target > now) target = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-        } else if (preset === 'yesterday') {
-            document.getElementById('presetYesterday')?.classList.add('active');
-            target.setDate(target.getDate() - 1);
-        }
-
-        const yyyy = target.getFullYear();
-        const mm = String(target.getMonth() + 1).padStart(2, '0');
-        const dd = String(target.getDate()).padStart(2, '0');
-        const hh = String(target.getHours()).padStart(2, '0');
-        const min = String(target.getMinutes()).padStart(2, '0');
-        input.value = `${yyyy}-${mm}-${dd}T${hh}:${min}`;
     }
 
     let resCalDate = new Date();
@@ -652,7 +621,6 @@
         document.getElementById('reportSubject').value = '';
         document.getElementById('reportDesc').value = '';
         document.getElementById('reportPhotos').value = '';
-        setIncidentTimePreset('now');
         selectedPhotoFiles = [];
         renderPhotoPreview();
         removeVideo();
@@ -1173,10 +1141,6 @@
         formData.append('subject', subject);
         formData.append('type', type);
         formData.append('description', desc);
-        const incDateVal = document.getElementById('reportIncidentDateTime')?.value;
-        if (incDateVal) {
-            formData.append('incident_date', incDateVal);
-        }
         selectedPhotoFiles.forEach(file => {
             formData.append('photos[]', file);
         });
@@ -1237,9 +1201,9 @@
         document.getElementById('detDesc').textContent = inc.desc;
         
         const statusEl = document.getElementById('detStatus');
-        const statusClass = inc.status === 'resolved' ? 'resolved' : 'progress';
+        const statusClass = inc.status === 'resolved' ? 'resolved' : (inc.status === 'progress' ? 'progress' : 'no-action');
         statusEl.className = 'badge-status badge-' + statusClass;
-        statusEl.textContent = statusClass === 'resolved' ? 'Resolved' : 'In Progress';
+        statusEl.textContent = inc.status === 'resolved' ? 'Resolved' : (inc.status === 'progress' ? 'In Progress' : 'No Action');
         
         const photoContainer = document.getElementById('detPhotos');
         const photoWrapper = document.getElementById('detPhotosContainer');
@@ -1283,6 +1247,32 @@
                 </div>
             </div>
         `;
+
+        if (inc.admin_reply) {
+            timelineHtml += `
+                <div style="display: flex; gap: 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 12px 14px;">
+                    <div style="width: 8px; height: 8px; background: #0284c7; border-radius: 50%; margin-top: 6px; flex-shrink: 0;"></div>
+                    <div style="flex: 1;">
+                        <div style="font-size: 13px; font-weight: 800; color: #0369a1;">Admin Reply</div>
+                        <div style="font-size: 13px; color: #1e293b; margin-top: 4px; line-height: 1.5; white-space: pre-wrap;">${escapeHtml(inc.admin_reply)}</div>
+                        <div style="font-size: 11px; color: #64748b; margin-top: 6px;">${inc.replied_at ? new Date(inc.replied_at).toLocaleString('en-US', {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'}) : ''}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        if (inc.status === 'progress') {
+            timelineHtml += `
+                <div style="display: flex; gap: 12px;">
+                    <div style="width: 8px; height: 8px; background: #f59e0b; border-radius: 50%; margin-top: 6px; flex-shrink: 0;"></div>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 700; color: #1e293b;">In Progress</div>
+                        <div style="font-size: 12px; color: #64748b;">Administration is currently handling this issue.</div>
+                        <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">${inc.updated ? new Date(inc.updated).toLocaleString('en-US', {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'}) : ''}</div>
+                    </div>
+                </div>
+            `;
+        }
 
         if (statusClass === 'resolved') {
             let color = '#10b981';

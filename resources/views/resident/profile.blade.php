@@ -56,6 +56,18 @@
             </div>
         </form>
     </div>
+
+    @if(\Illuminate\Support\Facades\Auth::user()->buyerMasterList()->exists())
+    <div class="analytic-card" style="padding: 24px 32px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+        <div>
+            <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0 0 4px 0;">Buyer &amp; Financing Records</h3>
+            <p style="font-size: 13px; color: #64748b; margin: 0;">Access your reservation, payment history, and receipts.</p>
+        </div>
+        <a href="/buyer/dashboard" class="btn btn-outline" style="padding: 10px 20px; font-weight: 700; text-decoration: none;">
+            View Buyer Records
+        </a>
+    </div>
+    @endif
 </div>
 
 <script>

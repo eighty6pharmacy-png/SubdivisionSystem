@@ -56,9 +56,13 @@
             <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Incidents</div>
             <div id="statTotal" style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 2px;">{{ $incidentsList->count() }}</div>
         </div>
+        <div onclick="filterByQuickStatus('no_action')" style="background: #fff; padding: 14px 18px; border-radius: 12px; border: 1px solid var(--bill-border); border-left: 4px solid #64748b; cursor: pointer; transition: transform 0.15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">No Action</div>
+            <div id="statNoAction" style="font-size: 24px; font-weight: 800; color: #475569; margin-top: 2px;">{{ $incidentsList->filter(fn($i) => !in_array(strtolower($i['status'] ?? ''), ['progress', 'resolved'], true))->count() }}</div>
+        </div>
         <div onclick="filterByQuickStatus('progress')" style="background: #fff; padding: 14px 18px; border-radius: 12px; border: 1px solid var(--bill-border); border-left: 4px solid #3b82f6; cursor: pointer; transition: transform 0.15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
             <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">In Progress</div>
-            <div id="statProgress" style="font-size: 24px; font-weight: 800; color: #3b82f6; margin-top: 2px;">{{ $incidentsList->where('status', '!=', 'resolved')->count() }}</div>
+            <div id="statProgress" style="font-size: 24px; font-weight: 800; color: #3b82f6; margin-top: 2px;">{{ $incidentsList->where('status', 'progress')->count() }}</div>
         </div>
         <div onclick="filterByQuickStatus('resolved')" style="background: #fff; padding: 14px 18px; border-radius: 12px; border: 1px solid var(--bill-border); border-left: 4px solid #10b981; cursor: pointer; transition: transform 0.15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
             <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Resolved</div>
@@ -86,6 +90,7 @@
             <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 6px; display: block;">Status</label>
             <select id="statusFilter" class="filter-select" onchange="applyIncidentFilters()" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #fff;">
                 <option value="all">All Statuses</option>
+                <option value="no_action">No Action</option>
                 <option value="progress">In Progress</option>
                 <option value="resolved">Resolved</option>
             </select>
@@ -104,16 +109,16 @@
         <!-- Incidents Database Table -->
         <div class="analytic-card" style="padding: 0; overflow: hidden; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
             <div class="bill-table-container">
-                <table class="bill-table" id="incidentsTable">
+                <table class="bill-table" id="incidentsTable" style="width: 100%; table-layout: auto;">
                     <thead>
                         <tr>
-                            <th data-sort="text" style="width: 110px;">Ticket ID</th>
-                            <th data-sort="date" style="width: 150px;">Date &amp; Time</th>
-                            <th data-sort="text" style="width: 140px;">Category</th>
-                            <th data-sort="text" style="width: 170px;">Reported By</th>
+                            <th data-sort="text" style="width: 95px; white-space: nowrap;">Ticket ID</th>
+                            <th data-sort="date" style="width: 120px; white-space: nowrap;">Date &amp; Time</th>
+                            <th data-sort="text" style="width: 125px; white-space: nowrap;">Category</th>
+                            <th data-sort="text" style="width: 145px;">Reported By</th>
                             <th data-sort="text">Subject &amp; Summary</th>
-                            <th data-sort="text" style="width: 130px;">Status</th>
-                            <th style="width: 110px; text-align: center;">Action</th>
+                            <th data-sort="text" style="width: 115px; white-space: nowrap;">Status</th>
+                            <th style="width: 85px; text-align: center; white-space: nowrap;">Action</th>
                         </tr>
                     </thead>
                     <tbody id="incidentsTableBody">
@@ -121,18 +126,23 @@
                             @php
                                 $cat = $inc['type'] ?? 'Others';
                                 $meta = $categoryMeta[$cat] ?? $categoryMeta['Others'];
-                                $status = strtolower($inc['status'] ?? 'progress');
-                                if ($status === 'pending') {
-                                    $status = 'progress';
+                                $status = strtolower($inc['status'] ?? 'no_action');
+                                if ($status === 'pending' || $status === '') {
+                                    $status = 'no_action';
                                 }
                                 $statusLabel = match($status) {
                                     'resolved' => 'Resolved',
-                                    default => 'In Progress'
+                                    'progress' => 'In Progress',
+                                    default => 'No Action'
                                 };
                                 $statusClass = match($status) {
                                     'resolved' => 'badge-success',
-                                    default => 'badge-primary'
+                                    'progress' => 'badge-primary',
+                                    default => 'badge-secondary'
                                 };
+                                $statusInlineStyle = $status === 'no_action'
+                                    ? 'background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;'
+                                    : '';
                                 $photoCount = is_array($inc['photos'] ?? null) ? count($inc['photos']) : (!empty($inc['img']) ? 1 : 0);
                                 $hasVideo = !empty($inc['video']) || !empty($inc['video_url']);
                                 $dateObj = !empty($inc['date']) ? \Carbon\Carbon::parse($inc['date']) : null;
@@ -177,11 +187,11 @@
                                     <div style="font-weight: 700; color: #0f172a; margin-bottom: 2px;">
                                         {{ $inc['sub'] }}
                                     </div>
-                                    <div style="font-size: 12px; color: #64748b; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;">
+                                    <div style="font-size: 12px; color: #64748b; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
                                         {{ $inc['desc'] }}
                                     </div>
-                                    @if($photoCount > 0 || $hasVideo)
-                                        <div style="display: flex; gap: 6px; margin-top: 4px; align-items: center;">
+                                    @if($photoCount > 0 || $hasVideo || !empty($inc['admin_reply']))
+                                        <div style="display: flex; gap: 6px; margin-top: 4px; align-items: center; flex-wrap: wrap;">
                                             @if($photoCount > 0)
                                                 <span style="font-size: 10px; font-weight: 700; background: #eff6ff; color: #1d4ed8; padding: 1px 6px; border-radius: 4px; border: 1px solid #bfdbfe;">
                                                     📷 {{ $photoCount }} photo{{ $photoCount > 1 ? 's' : '' }}
@@ -192,13 +202,18 @@
                                                     🎥 video
                                                 </span>
                                             @endif
+                                            @if(!empty($inc['admin_reply']))
+                                                <span style="font-size: 10px; font-weight: 700; background: #ecfdf5; color: #047857; padding: 1px 6px; border-radius: 4px; border: 1px solid #a7f3d0;">
+                                                    💬 Replied
+                                                </span>
+                                            @endif
                                         </div>
                                     @endif
                                 </td>
 
                                 <!-- Status -->
                                 <td data-sort-val="{{ $status }}">
-                                    <span class="badge {{ $statusClass }}" style="padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
+                                    <span class="badge {{ $statusClass }}" style="padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; {{ $statusInlineStyle }}">
                                         {{ $statusLabel }}
                                     </span>
                                 </td>
@@ -365,9 +380,21 @@
             <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
                 <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Update Triage Status</span>
                 <select id="modalIncStatus" class="filter-select" style="width: 100%; margin-top: 8px; padding: 10px; border-radius: 8px; font-weight: 700; background: #fff; border: 1px solid #cbd5e1; font-size: 13px;">
+                    <option value="" disabled hidden>-- Select Status (Currently: No Action) --</option>
                     <option value="progress">In Progress</option>
                     <option value="resolved">Resolved</option>
                 </select>
+            </div>
+
+            <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Reply to Resident</span>
+                    <span id="modalIncReplyMeta" style="font-size: 11px; color: #047857; font-weight: 600;"></span>
+                </div>
+                <textarea id="modalIncReply" rows="3" style="width: 100%; margin-top: 8px; padding: 10px 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-size: 13px; font-family: inherit; resize: vertical; box-sizing: border-box;" placeholder="Type a reply to the resident about this issue..."></textarea>
+                <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                    <button type="button" id="btnSendIncReply" class="btn btn-outline" style="padding: 7px 14px; border-radius: 8px; border: 1px solid #0284c7; color: #0284c7; background: #fff; font-weight: 700; font-size: 12px; cursor: pointer;" onclick="sendIncidentReply()">Send Reply</button>
+                </div>
             </div>
         </div>
         <div style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid var(--bill-border); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
@@ -1037,6 +1064,7 @@
 
         const rows = document.querySelectorAll('.incident-row');
         let visibleCount = 0;
+        let noActionCount = 0;
         let progressCount = 0;
         let resolvedCount = 0;
 
@@ -1086,13 +1114,16 @@
                 visibleCount++;
                 if (rowStatus === 'resolved') {
                     resolvedCount++;
-                } else {
+                } else if (rowStatus === 'progress') {
                     progressCount++;
+                } else {
+                    noActionCount++;
                 }
             }
         });
 
         document.getElementById('statTotal').textContent = visibleCount;
+        if (document.getElementById('statNoAction')) document.getElementById('statNoAction').textContent = noActionCount;
         if (document.getElementById('statProgress')) document.getElementById('statProgress').textContent = progressCount;
         if (document.getElementById('statResolved')) document.getElementById('statResolved').textContent = resolvedCount;
 
@@ -1126,7 +1157,22 @@
         }
         document.getElementById('modalIncDate').textContent = formattedDate;
         document.getElementById('modalIncDesc').textContent = inc.desc;
-        document.getElementById('modalIncStatus').value = (inc.status || 'progress').toLowerCase() === 'resolved' ? 'resolved' : 'progress';
+        const normalizedStatus = (inc.status || 'no_action').toLowerCase();
+        document.getElementById('modalIncStatus').value = normalizedStatus === 'resolved' ? 'resolved' : (normalizedStatus === 'progress' ? 'progress' : '');
+
+        const replyInput = document.getElementById('modalIncReply');
+        const replyMeta = document.getElementById('modalIncReplyMeta');
+        if (replyInput) replyInput.value = inc.admin_reply || '';
+        if (replyMeta) {
+            if (inc.admin_reply && inc.replied_at) {
+                const rDate = new Date(inc.replied_at);
+                replyMeta.textContent = !isNaN(rDate)
+                    ? 'Last replied: ' + rDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                    : 'Replied';
+            } else {
+                replyMeta.textContent = '';
+            }
+        }
 
         const fullViewLink = document.getElementById('modalIncFullView');
         if (fullViewLink) {
@@ -1185,6 +1231,14 @@
     async function saveIncidentStatus() {
         if (!currentIncidentId) return;
         const newStatus = document.getElementById('modalIncStatus').value;
+        if (!newStatus) {
+            if (window.Swal) {
+                Swal.fire({ icon: 'warning', text: 'Please select In Progress or Resolved.' });
+            } else {
+                alert('Please select In Progress or Resolved.');
+            }
+            return;
+        }
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
         
         try {
@@ -1210,9 +1264,10 @@
                     row.dataset.status = newStatus.toLowerCase();
                     const statusTd = row.children[5];
                     if (statusTd) {
-                        const statusClass = newStatus === 'resolved' ? 'badge-success' : 'badge-primary';
-                        const statusLabel = newStatus === 'resolved' ? 'RESOLVED' : 'IN PROGRESS';
-                        statusTd.innerHTML = `<span class="badge ${statusClass}" style="padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">${statusLabel}</span>`;
+                        const statusClass = newStatus === 'resolved' ? 'badge-success' : (newStatus === 'progress' ? 'badge-primary' : 'badge-secondary');
+                        const statusLabel = newStatus === 'resolved' ? 'RESOLVED' : (newStatus === 'progress' ? 'IN PROGRESS' : 'NO ACTION');
+                        const inlineStyle = newStatus === 'no_action' ? 'background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;' : '';
+                        statusTd.innerHTML = `<span class="badge ${statusClass}" style="padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; ${inlineStyle}">${statusLabel}</span>`;
                         statusTd.setAttribute('data-sort-val', newStatus.toLowerCase());
                     }
                 }
@@ -1235,6 +1290,63 @@
                 Swal.fire({ icon: 'error', text: 'An error occurred while updating status.' });
             } else {
                 alert('An error occurred while updating status.');
+            }
+        }
+    }
+
+    async function sendIncidentReply() {
+        if (!currentIncidentId) return;
+        const replyEl = document.getElementById('modalIncReply');
+        const btn = document.getElementById('btnSendIncReply');
+        const replyText = (replyEl?.value || '').trim();
+        if (!replyText) {
+            if (window.Swal) Swal.fire({ icon: 'warning', text: 'Please type a reply message first.' });
+            else alert('Please type a reply message first.');
+            return;
+        }
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+        }
+
+        try {
+            const response = await fetch(`/admin/incidents/${currentIncidentId}/reply`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken || '',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ admin_reply: replyText })
+            });
+
+            const result = await response.json();
+            if (response.ok && result.success) {
+                const target = rawIncidents.find(i => String(i.id) === String(currentIncidentId));
+                if (target) {
+                    target.admin_reply = result.admin_reply;
+                    target.replied_at = result.replied_at;
+                }
+                const metaEl = document.getElementById('modalIncReplyMeta');
+                if (metaEl) metaEl.textContent = 'Sent just now';
+
+                if (window.Swal) {
+                    Swal.fire({ icon: 'success', title: 'Reply Sent!', text: 'Your reply has been sent to the resident.', timer: 1500, showConfirmButton: false });
+                }
+            } else {
+                if (window.Swal) Swal.fire({ icon: 'error', text: result.message || 'Failed to send reply.' });
+                else alert(result.message || 'Failed to send reply.');
+            }
+        } catch (error) {
+            console.error(error);
+            if (window.Swal) Swal.fire({ icon: 'error', text: 'An error occurred while sending reply.' });
+            else alert('An error occurred while sending reply.');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Send Reply';
             }
         }
     }

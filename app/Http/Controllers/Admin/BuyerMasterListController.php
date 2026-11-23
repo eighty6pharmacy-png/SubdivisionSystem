@@ -20,7 +20,7 @@ class BuyerMasterListController extends Controller
         $query = BuyerMasterList::query();
 
         if ($request->status === 'cancelled') {
-            $query->onlyTrashed()->with(['user', 'lot', 'reservations.lot' => fn ($q) => $q->withTrashed(), 'financingRecord']);
+            $query->onlyTrashed()->with(['user', 'lot', 'reservations.lot', 'financingRecord']);
         } else {
             $query->with(['user', 'lot', 'reservations.lot', 'financingRecord']);
         }
@@ -65,6 +65,7 @@ class BuyerMasterListController extends Controller
     {
         $this->prepareBuyerContactEmail($request);
         $validated = $request->validate($this->buyerFormRules(), $this->buyerFormMessages());
+        $validated = $this->resolveBuyerAge($validated);
 
         $existingBuyer = BuyerMasterList::whereHas('user', function ($q) use ($validated) {
             $q->where('first_name', $validated['first_name'])
@@ -119,6 +120,7 @@ class BuyerMasterListController extends Controller
 
         $this->prepareBuyerContactEmail($request);
         $validated = $request->validate($this->buyerFormRules(), $this->buyerFormMessages());
+        $validated = $this->resolveBuyerAge($validated);
 
         if (!empty($validated['block_no']) && !empty($validated['lot_no'])) {
             $lotId = $this->matchingLotId($validated['block_no'], $validated['lot_no']);
@@ -225,6 +227,19 @@ class BuyerMasterListController extends Controller
     }
 
     /**
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    private function resolveBuyerAge(array $validated): array
+    {
+        if (! empty($validated['birth_date']) && (! isset($validated['age']) || $validated['age'] === '')) {
+            $validated['age'] = \Carbon\Carbon::parse($validated['birth_date'])->age;
+        }
+
+        return $validated;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function buyerFormRules(): array
@@ -233,6 +248,9 @@ class BuyerMasterListController extends Controller
             'first_name' => 'required|string|max:255',
             'middle_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
+            'birth_date' => 'nullable|date|before_or_equal:today',
+            'age' => 'nullable|integer|min:0|max:150',
+            'sex' => ['nullable', 'string', Rule::in(BuyerMasterList::SEX_OPTIONS)],
             'email' => ['required', 'email:rfc,dns', 'max:255', function (string $attribute, mixed $value, \Closure $fail) {
                 $domain = substr(strrchr(strtolower((string) $value), '@') ?: '', 1);
                 if ($domain === '' || (! checkdnsrr($domain, 'MX') && ! checkdnsrr($domain, 'A'))) {
@@ -247,6 +265,7 @@ class BuyerMasterListController extends Controller
             'id_type' => ['required', 'string', Rule::in(BuyerMasterList::ID_TYPES)],
             'proof_of_id' => 'required|string|max:255',
             'pagibig_number' => 'nullable|string|max:255',
+            'tin_number' => 'nullable|string|max:50',
 
             'block_no' => 'nullable|string|max:50',
             'lot_no' => 'nullable|string|max:50',
@@ -274,6 +293,12 @@ class BuyerMasterListController extends Controller
             'id_type.required' => 'Select the type of ID.',
             'id_type.in' => 'Select a valid ID type.',
             'proof_of_id.required' => 'The ID number is required.',
+            'birth_date.date' => 'Please enter a valid birth date.',
+            'birth_date.before_or_equal' => 'Birth date cannot be in the future.',
+            'age.integer' => 'Age must be a whole number.',
+            'age.min' => 'Age cannot be negative.',
+            'age.max' => 'Please enter a valid age.',
+            'sex.in' => 'Select a valid sex.',
         ];
     }
 
@@ -565,6 +590,10 @@ class BuyerMasterListController extends Controller
         $templateProcessor->setValue('last_name', strtoupper($buyer->last_name ?? ''));
         $templateProcessor->setValue('middle_name', strtoupper($buyer->middle_name ?? ''));
         $templateProcessor->setValue('middle_initial', $middle_initial);
+        $templateProcessor->setValue('birth_date', $buyer->birth_date ? $buyer->birth_date->format('M d, Y') : '');
+        $templateProcessor->setValue('age', $buyer->age !== null ? (string) $buyer->age : '');
+        $templateProcessor->setValue('sex', strtoupper($buyer->sex ?? ''));
+        $templateProcessor->setValue('tin_number', strtoupper($buyer->tin_number ?? ''));
         $templateProcessor->setValue('civil_status', strtoupper($buyer->civil_status ?? ''));
         $templateProcessor->setValue('spouse_name', strtoupper($buyer->spouse_name ?? ''));
         $templateProcessor->setValue('present_address', strtoupper($buyer->present_address ?? ''));
@@ -669,9 +698,9 @@ class BuyerMasterListController extends Controller
 
         $query = BuyerMasterList::query();
         if ($status === 'cancelled') {
-            $query->onlyTrashed()->with(['user', 'lot', 'reservations.lot' => fn ($q) => $q->withTrashed(), 'financingRecord']);
+            $query->onlyTrashed()->with(['user', 'lot', 'reservations.lot', 'financingRecord']);
         } elseif ($status === 'all') {
-            $query->withTrashed()->with(['user', 'lot', 'reservations.lot' => fn ($q) => $q->withTrashed(), 'financingRecord']);
+            $query->withTrashed()->with(['user', 'lot', 'reservations.lot', 'financingRecord']);
         } else {
             $query->with(['user', 'lot', 'reservations.lot', 'financingRecord']);
         }

@@ -38,9 +38,24 @@ class BuyerMasterList extends Model
         'Barangay ID',
     ];
 
+    /**
+     * Accepted values for buyer sex.
+     *
+     * @var list<string>
+     */
+    public const SEX_OPTIONS = [
+        'Male',
+        'Female',
+    ];
+
     protected $table = 'buyers';
 
     protected $with = ['user', 'lot'];
+
+    protected $casts = [
+        'birth_date' => 'date:Y-m-d',
+        'age' => 'integer',
+    ];
 
     /**
      * These values live on the linked user account or lot. The master-list modal reads them from the buyer payload.
@@ -64,6 +79,9 @@ class BuyerMasterList extends Model
      */
     protected $fillable = [
         'user_id',
+        'birth_date',
+        'age',
+        'sex',
         'civil_status',
         'spouse_name',
         'present_address',
@@ -71,6 +89,7 @@ class BuyerMasterList extends Model
         'id_type',
         'proof_of_id',
         'pagibig_number',
+        'tin_number',
         'lot_id',
         'tct_no',
         'pid',
