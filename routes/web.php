@@ -967,6 +967,29 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'pending_count' => $waterBillsAll->whereIn('status', ['unpaid', 'pending', 'overdue'])->count(),
         ];
 
+        \App\Models\Reservation::cancelExpiredUnpaid();
+        $reservationItems = collect(getReservationFees());
+        $reservationStatusSummary = [
+            'active' => $reservationItems->whereIn('status', ['Reserved', 'Pending'])->count(),
+            'cancelled' => $reservationItems->where('status', 'Cancelled')->count(),
+        ];
+
+        $downpaymentItems = collect(getDownpaymentFees());
+        $downpaymentStatusSummary = [
+            'early' => $downpaymentItems->where('payment_behavior', 'Early')->count(),
+            'on_time' => $downpaymentItems->where('payment_behavior', 'On-Time')->count(),
+            'late' => $downpaymentItems->where('payment_behavior', 'Late')->count(),
+            'pending' => $downpaymentItems->where('payment_behavior', 'Not available yet')->count(),
+        ];
+
+        $financeLinked = \App\Models\FinancingRecord::whereHas('buyerMasterList.reservations.downpayments');
+        $financeStatusSummary = [
+            'pending' => (clone $financeLinked)->where('status', 'Pending')->count(),
+            'processing' => (clone $financeLinked)->where('status', 'Processing')->count(),
+            'released' => (clone $financeLinked)->where('status', 'Released')->count(),
+            'cleared' => (clone $financeLinked)->where('status', 'Cleared')->count(),
+        ];
+
         return view('admin.dashboard', compact(
             'openIncidentsCount', 
             'appointmentsTodayCount', 
@@ -989,7 +1012,10 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'waterUsageSeries',
             'waterAmountSeries',
             'elecSummary',
-            'waterSummary'
+            'waterSummary',
+            'reservationStatusSummary',
+            'downpaymentStatusSummary',
+            'financeStatusSummary'
         ));
     });
 
@@ -1680,10 +1706,10 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     Route::put('/reservation-fee/{id}', function (\Illuminate\Http\Request $request, $id) {
         $res = \App\Models\Reservation::with('lot')->findOrFail($id);
 
-        if (in_array($res->status, [\App\Enums\ReservationStatus::Cancelled->value, \App\Enums\ReservationStatus::Converted->value], true)) {
+        if ($res->status === \App\Enums\ReservationStatus::Cancelled->value) {
             return response()->json([
                 'success' => false,
-                'message' => 'Cancelled or converted reservations cannot be edited.',
+                'message' => 'Cancelled reservations cannot be edited.',
             ], 422);
         }
 
@@ -1790,7 +1816,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             return response()->json(['success' => false, 'message' => 'Reservation not found.'], 404);
         }
 
-        if (in_array($res->status, [\App\Enums\ReservationStatus::Converted->value, \App\Enums\ReservationStatus::Cancelled->value], true)) {
+        if ($res->status === \App\Enums\ReservationStatus::Cancelled->value) {
             return response()->json(['success' => false, 'message' => 'SMS reminders are only available for active reservations.'], 422);
         }
 
@@ -1890,7 +1916,6 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             ->whereIn('status', [
                 \App\Enums\ReservationStatus::Reserved->value,
                 \App\Enums\ReservationStatus::Pending->value,
-                \App\Enums\ReservationStatus::Converted->value,
             ])
             ->whereDoesntHave('downpayments')
             ->orderByDesc('created_at');
@@ -1916,25 +1941,40 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                 'buyer_id' => $buyerId,
                 'lot_id' => $lot->id,
                 'amount' => 0,
-                'status' => \App\Enums\ReservationStatus::Converted->value,
+                'status' => \App\Enums\ReservationStatus::Reserved->value,
                 'reservation_date' => now(),
                 'notes' => $buyer ? "{$buyer->first_name} {$buyer->last_name}" : 'New Buyer'
             ]);
         }
 
         try {
-            $dp = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $buyerId, $res) {
-                $res->status = \App\Enums\ReservationStatus::Converted->value;
-                $res->save();
+            $dp = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $buyerId, $res, $monthsToPay) {
+                if ($res->status === 'Converted') {
+                    $res->status = \App\Enums\ReservationStatus::Reserved->value;
+                    $res->save();
+                }
+
+                $contract = (float) ($request->input('contract_amount') ?? 0);
+                $reservationFee = (float) ($res->amount ?? 0);
+                $dpPercentage = (float) ($request->input('dp_percentage') ?? 0);
+
+                if ($dpPercentage > 0 && $contract > 0) {
+                    $grossDp = round($contract * ($dpPercentage / 100), 2);
+                    $netDp = max(0, round($grossDp - $reservationFee, 2));
+                } else {
+                    $netDp = max(0, round((float) ($request->input('dpAmount') ?? 0), 2));
+                    $grossDp = round($netDp + $reservationFee, 2);
+                }
+                $monthlyAmortization = $monthsToPay > 0 ? round($netDp / $monthsToPay, 2) : 0;
 
                 $dp = \App\Models\Downpayment::create([
                     'reservation_id' => $res->id,
                     'amount' => 0,
-                    'balance' => $request->input('dpAmount') ?? 0,
+                    'balance' => $netDp,
                     'due_date' => \Carbon\Carbon::parse($request->input('nextDate') ?? now()->addMonth()),
                     'status' => \App\Enums\DownpaymentStatus::GoodStanding->value,
-                    'monthly_amortization' => $request->input('monthly_amortization') ?? 15000,
-                    'months_to_pay' => $request->input('months_to_pay') ?? 24,
+                    'monthly_amortization' => $monthlyAmortization,
+                    'months_to_pay' => $monthsToPay,
                     'contract_date' => $request->input('contract_date') ? \Carbon\Carbon::parse($request->input('contract_date')) : now(),
                     'penalty_percentage' => $request->input('penalty_percentage') ?? 0
                 ]);
@@ -1948,8 +1988,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                     $buyer->lot_id = $lotId;
                     $buyer->save();
 
-                    $contract = (float) ($request->input('contract_amount') ?? 0);
-                    $equity = (float) ($request->input('dpAmount') ?? 0);
+                    $equity = $grossDp;
                     $record = $buyer->financingRecord ?? new \App\Models\FinancingRecord([
                         'buyer_id' => $buyer->id,
                         'lot_id' => $lotId,
@@ -2053,7 +2092,6 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $stats = [
             'total' => count($billsArr),
             'active' => collect($billsArr)->filter(fn($b) => in_array(strtolower($b['status']), ['active', 'reserved', 'pending']))->count(),
-            'converted' => collect($billsArr)->filter(fn($b) => strtolower($b['status']) === 'converted')->count(),
             'cancelled' => collect($billsArr)->filter(fn($b) => strtolower($b['status']) === 'cancelled')->count(),
             'total_amount' => collect($billsArr)->filter(fn($b) => strtolower($b['status']) !== 'cancelled')->sum('amount'),
         ];
@@ -2087,10 +2125,14 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
     })->name('admin.reservation-fee.report.pdf');
 
+    Route::get('/reservation-fee/{id}/receipt', [\App\Http\Controllers\Admin\ReservationReceiptController::class, 'pdf'])->name('admin.reservation-fee.receipt');
+    Route::get('/reservation-fee/{id}/receipt-data', [\App\Http\Controllers\Admin\ReservationReceiptController::class, 'showData'])->name('admin.reservation-fee.receipt-data');
+    Route::put('/reservation-fee/{id}/receipt-data', [\App\Http\Controllers\Admin\ReservationReceiptController::class, 'updateData'])->name('admin.reservation-fee.receipt-data.update');
+
     Route::get('/reservation-fee', function () {
-        \App\Models\Reservation::whereHas('downpayments')
-            ->where('status', '!=', \App\Enums\ReservationStatus::Converted->value)
-            ->update(['status' => \App\Enums\ReservationStatus::Converted->value]);
+        \App\Models\Reservation::where('status', 'Converted')
+            ->update(['status' => \App\Enums\ReservationStatus::Reserved->value]);
+        \App\Models\Reservation::cancelExpiredUnpaid();
 
         // Trigger automated 5-day-before-expiry & 1-day-overdue SMS reminders after response
         // if any active reservations are due today and haven't been reminded yet (works even without cron).
@@ -2251,22 +2293,31 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'today_paid' => 15000.00
         ];
         
-        \App\Models\Reservation::whereHas('downpayments')
-            ->where('status', '!=', \App\Enums\ReservationStatus::Converted->value)
-            ->update(['status' => \App\Enums\ReservationStatus::Converted->value]);
+        \App\Models\Reservation::where('status', 'Converted')
+            ->update(['status' => \App\Enums\ReservationStatus::Reserved->value]);
+        \App\Models\Reservation::cancelExpiredUnpaid();
 
-        // Fetch all buyers from the Master List
-        // Eager-load their financing record and any reservations that don't have downpayments yet
-        $masterListBuyers = \App\Models\BuyerMasterList::with([
-            'lot',
-            'financingRecord',
-            'reservations' => function ($q) {
-                $q->whereDoesntHave('downpayments')->with('lot');
-            }
-        ])
-        ->get()
-        ->sortBy(fn ($buyer) => $buyer->last_name)
-        ->values();
+        // Fetch only buyers from the Master List who have an active reservation without a downpayment yet
+        $readyReservationFilter = function ($q) {
+            $q->whereDoesntHave('downpayments')
+              ->whereIn('status', [
+                  \App\Enums\ReservationStatus::Reserved->value,
+                  \App\Enums\ReservationStatus::Pending->value,
+              ]);
+        };
+
+        $masterListBuyers = \App\Models\BuyerMasterList::whereHas('reservations', $readyReservationFilter)
+            ->with([
+                'lot',
+                'financingRecord',
+                'reservations' => function ($q) use ($readyReservationFilter) {
+                    $readyReservationFilter($q);
+                    $q->with('lot')->orderByDesc('created_at');
+                }
+            ])
+            ->get()
+            ->sortBy(fn ($buyer) => $buyer->last_name)
+            ->values();
 
         return view('admin.downpayment-fee.index', [
             'bills' => getDownpaymentFees(),
@@ -2861,7 +2912,21 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
         ]);
     });
     Route::get('/map', function () {
-        return view('resident.map');
+        $user = \Illuminate\Support\Facades\Auth::user();
+        $lots = $user ? $user->lots()->get() : collect();
+        $selectedLotId = request('lot_id') ?: session('resident_selected_lot_id');
+        if ($selectedLotId && !$lots->contains('id', $selectedLotId)) {
+            $selectedLotId = null;
+        }
+        if (!$selectedLotId) {
+            $selectedLotId = $lots->first()?->id;
+        }
+        if ($selectedLotId) {
+            session(['resident_selected_lot_id' => $selectedLotId]);
+        }
+        $selectedLot = $lots->firstWhere('id', $selectedLotId) ?? $lots->first();
+
+        return view('resident.map', compact('lots', 'selectedLot'));
     });
     Route::get('/visitors', function () {
         return view('resident.visitors.index');

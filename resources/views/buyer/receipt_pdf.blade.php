@@ -3,151 +3,188 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Downpayment Receipt - {{ \Carbon\Carbon::parse($hist->payment_date ?? $hist->created_at)->format('M d, Y h:i A') }}</title>
+    <title>Sales Invoice - Downpayment Receipt - {{ \Carbon\Carbon::parse($hist->payment_date ?? $hist->created_at)->format('M d, Y h:i A') }}</title>
     <style>
         @page {
             size: a4 portrait;
-            margin: 12mm 15mm 15mm 15mm;
+            margin: 12mm 14mm 12mm 14mm;
         }
         body {
             font-family: 'DejaVu Sans', sans-serif;
             color: #000;
-            font-size: 13px;
+            font-size: 11px;
+            line-height: 1.35;
             margin: 0;
             padding: 0;
         }
-
-        .header {
-            text-align: center;
-            border-bottom: 2px solid #000;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
+        .invoice-wrapper {
+            border: 1.5px solid #000;
+            padding: 14px 16px;
+            background-color: #fff;
             position: relative;
         }
-
-        .header h1 {
-            color: #000;
+        .corp-header {
+            text-align: center;
+            margin-bottom: 10px;
+            position: relative;
+        }
+        .corp-header h1 {
             margin: 0;
-            font-size: 22px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .header p {
-            margin: 5px 0 0 0;
-            color: #000;
-            font-size: 12px;
-        }
-
-        .watermark {
-            position: absolute;
-            top: 5px;
-            right: 10px;
-            border: 3px solid #10b981;
-            padding: 6px 14px;
-            font-size: 24px;
+            font-size: 16px;
             font-weight: bold;
-            border-radius: 6px;
-            transform: rotate(12deg);
-            opacity: 0.85;
-            color: #10b981;
-            letter-spacing: 2px;
             text-transform: uppercase;
-        }
-
-        .row {
-            width: 100%;
-            margin-bottom: 20px;
-        }
-
-        .col-full {
-            width: 100%;
-            display: inline-block;
-            vertical-align: top;
-        }
-
-        .box {
-            border: 1px solid #000;
-            padding: 12px;
-            border-radius: 4px;
-            background-color: #fff;
-        }
-
-        .box h3 {
-            margin-top: 0;
-            border-bottom: 1px solid #000;
-            padding-bottom: 5px;
-            font-size: 14px;
+            letter-spacing: 0.4px;
             color: #000;
-            text-transform: uppercase;
         }
-
-        table {
+        .corp-header p {
+            margin: 2px 0 0 0;
+            font-size: 10px;
+            color: #000;
+        }
+        .title-row {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
         }
-
-        th,
-        td {
-            padding: 8px;
-            border: 1px solid #000;
-            color: #000;
+        .title-row td {
+            border: none;
+            padding: 0;
+            vertical-align: middle;
         }
-
-        th {
-            text-align: left;
-            color: #000;
-            background-color: #f0f0f0;
+        .sales-invoice-badge {
+            display: inline-block;
+            background-color: #000;
+            color: #fff;
             font-weight: bold;
+            font-size: 13px;
+            letter-spacing: 0.8px;
+            padding: 4px 14px;
+            text-transform: uppercase;
         }
-
-        .text-right {
+        .invoice-no {
             text-align: right;
-        }
-
-        .fw-bold {
+            font-size: 13px;
             font-weight: bold;
+            color: #000;
         }
-
-        .total-row td {
+        .invoice-no span.num {
+            font-family: monospace;
+            font-size: 13px;
+            color: #000;
+            margin-left: 4px;
+        }
+        .meta-grid {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+        .meta-grid td {
+            border: none;
+            padding: 3px 4px;
+            vertical-align: bottom;
+            font-size: 10.5px;
+            color: #000;
+        }
+        .meta-label {
+            white-space: nowrap;
+            width: 1%;
+            font-weight: normal;
+        }
+        .meta-line {
+            border-bottom: 1px solid #000 !important;
+            font-weight: bold;
+            padding-left: 6px !important;
+        }
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 8px;
+        }
+        .items-table th,
+        .items-table td {
+            border: 1px solid #000;
+            padding: 5px 6px;
+            font-size: 10.5px;
+            vertical-align: top;
+            color: #000;
+        }
+        .items-table th {
+            text-align: center;
+            font-weight: bold;
+            background-color: #fff;
+            text-transform: uppercase;
+            font-size: 10px;
+            color: #000;
+        }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .fw-bold { font-weight: bold; }
+        .tax-label {
+            font-size: 9.5px;
+        }
+        .total-due-row td {
             border-top: 2px solid #000;
             border-bottom: 2px solid #000;
-            font-size: 14px;
+            font-size: 12px;
+            font-weight: bold;
+            background-color: #fff;
+            padding: 6px;
+            color: #000;
+        }
+        .footer-grid {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 14px;
+        }
+        .footer-grid td {
+            border: none;
+            padding: 0;
+            vertical-align: bottom;
+            color: #000;
+        }
+        .sig-line {
+            border-top: 1px solid #000;
+            width: 220px;
+            margin-left: auto;
+            padding-top: 4px;
+            text-align: center;
+            font-size: 10px;
             font-weight: bold;
             color: #000;
-            background-color: #f5f5f5;
         }
-
-        .footer {
-            margin-top: 30px;
+        .validity-note {
             text-align: center;
-            font-size: 12px;
+            font-size: 9px;
+            font-style: italic;
+            margin-top: 10px;
             color: #000;
-            border-top: 1px solid #000;
-            padding-top: 14px;
         }
     </style>
 </head>
 
 <body>
-    <div class="header">
-        <h1>Mayon Builders Realty & Development Corporation</h1>
-        <p>Z1, Tagbong, Pili, Camarines Sur</p>
-        <p><strong>OFFICIAL DOWNPAYMENT RECEIPT</strong></p>
-
-        <div class="watermark paid">PAID</div>
-    </div>
-
     @php
-        $paymentType = $hist->method ?? 'Office Payment';
+        $rawMethod = trim((string) ($hist->method ?? 'Office'));
+        $methodLower = strtolower($rawMethod);
+        if (str_contains($methodLower, 'gcash')) {
+            $paymentType = 'GCash';
+        } elseif (str_contains($methodLower, 'maya')) {
+            $paymentType = 'Maya';
+        } elseif (str_contains($methodLower, 'office')) {
+            $paymentType = 'Office';
+        } else {
+            $paymentType = $rawMethod ?: 'Office';
+        }
+
         $trn = empty($hist->trn) ? 'Manual' : $hist->trn;
         $paymentDateRaw = isset($hist->payment_date) && $hist->payment_date ? $hist->payment_date : $hist->created_at;
-        $paymentDate = \Carbon\Carbon::parse($paymentDateRaw)->timezone(config('app.timezone', 'Asia/Manila'))->format('F d, Y h:i A');
+        $tz = config('app.timezone', 'Asia/Manila');
+        $paymentDateShort = \Carbon\Carbon::parse($paymentDateRaw)->timezone($tz)->format('M d, Y');
+        $paymentDateFull = \Carbon\Carbon::parse($paymentDateRaw)->timezone($tz)->format('F d, Y h:i A');
         $monthly = (float) ($dp->monthly_amortization ?? 0);
         $paid = (float) $hist->amount_paid;
         $principal = $paid > ($monthly + 0.009) ? round($monthly, 2) : round($paid, 2);
-        $penalty = round($paid - $principal, 2);
+        $penalty = round(max(0, $paid - $principal), 2);
         $penaltyRate = (float) ($dp->penalty_percentage ?? 0);
         $totalDp = (float) $dp->amount + (float) $dp->balance;
         $all = \App\Models\Payment::where('downpayment_id', $dp->id)
@@ -172,93 +209,163 @@
             $dueThis = \Carbon\Carbon::parse($dp->due_date)->subMonths($monthsBack)->format('M d, Y');
         }
         $tcp = (float) ($buyer->financingRecord?->contract_price ?? 0);
+        $buyerFullName = trim(($buyer->first_name ?? '') . ' ' . ($buyer->middle_name ? $buyer->middle_name . ' ' : '') . ($buyer->last_name ?? ''));
+        $addressParts = array_filter([
+            ($buyer->block_no || $buyer->lot_no) ? ('Block ' . ($buyer->block_no ?? 'N/A') . ', Lot ' . ($buyer->lot_no ?? 'N/A')) : null,
+            $buyer->postal_address ?? null,
+        ]);
+        $buyerAddress = $addressParts ? implode(' — ', $addressParts) : 'N/A';
+        $invoiceNo = str_pad((string) $hist->id, 4, '0', STR_PAD_LEFT);
     @endphp
 
-    <div class="row">
-        <div class="col-full box">
-            <h3>Buyer Details</h3>
-            <table style="border:none; margin-bottom:0;">
-                <tr>
-                    <td style="padding:5px; border:none; width:30%;"><strong>Buyer Name:</strong></td>
-                    <td style="padding:5px; border:none; width:70%;">{{ $buyer->first_name }} {{ $buyer->last_name }}</td>
-                </tr>
-                <tr>
-                    <td style="padding:5px; border:none;"><strong>Block & Lot:</strong></td>
-                    <td style="padding:5px; border:none;">Block {{ $buyer->block_no ?? 'N/A' }}, Lot {{ $buyer->lot_no ?? 'N/A' }}</td>
-                </tr>
-                <tr>
-                    <td style="padding:5px; border:none;"><strong>Installment:</strong></td>
-                    <td style="padding:5px; border:none;">{{ $installmentNo }} of {{ $term }}</td>
-                </tr>
-                <tr>
-                    <td style="padding:5px; border:none;"><strong>Due Date:</strong></td>
-                    <td style="padding:5px; border:none; color: #dc2626;">{{ $dueThis }}</td>
-                </tr>
-                <tr>
-                    <td style="padding:5px; border:none;"><strong>Payment Date &amp; Time:</strong></td>
-                    <td style="padding:5px; border:none; font-weight: bold;">{{ $paymentDate }}</td>
-                </tr>
-                <tr>
-                    <td style="padding:5px; border:none;"><strong>Payment Method:</strong></td>
-                    <td style="padding:5px; border:none;"><strong>{{ $paymentType }}</strong></td>
-                </tr>
-                <tr>
-                    <td style="padding:5px; border:none;"><strong>Reference Number:</strong></td>
-                    <td style="padding:5px; border:none; font-family: monospace;">{{ $trn }}</td>
-                </tr>
-            </table>
+    <div class="invoice-wrapper">
+        <div class="corp-header">
+            <h1>Mayon Builders Realty &amp; Development Corporation</h1>
+            <p>Tagbong, 4418, Pili, (Capital), Camarines Sur, Philippines</p>
+            <p>VAT Reg. TIN 009-860-405-00001</p>
         </div>
-    </div>
 
-    <div class="row">
-        <h3>This Payment Breakdown</h3>
-        <p style="font-size:12px;color:#666;">Penalty is charged only when the installment is paid after its due date. It is collected in addition to the installment and is not applied to the remaining downpayment balance.</p>
-        <table>
+        <table class="title-row">
+            <tr>
+                <td style="width: 50%;">
+                    <span class="sales-invoice-badge">SALES INVOICE</span>
+                </td>
+                <td class="invoice-no" style="width: 50%;">
+                    N&#186; <span class="num">{{ $invoiceNo }}</span>
+                </td>
+            </tr>
+        </table>
+
+        <table class="meta-grid">
+            <tr>
+                <td class="meta-label">Sold to:</td>
+                <td class="meta-line" style="width: 44%;">{{ $buyerFullName ?: 'Buyer' }}</td>
+                <td style="width: 3%;"></td>
+                <td class="meta-label">Date:</td>
+                <td class="meta-line" style="width: 32%;">{{ $paymentDateShort }}</td>
+            </tr>
+            <tr>
+                <td class="meta-label">Address:</td>
+                <td class="meta-line">{{ $buyerAddress }}</td>
+                <td></td>
+                <td class="meta-label">Terms:</td>
+                <td class="meta-line">Installment {{ $installmentNo }} of {{ $term }}</td>
+            </tr>
+            <tr>
+                <td class="meta-label">Business Style:</td>
+                <td class="meta-line">Althesa Village</td>
+                <td></td>
+                <td class="meta-label">OSCA/PWD ID No.:</td>
+                <td class="meta-line">&nbsp;</td>
+            </tr>
+            <tr>
+                <td class="meta-label">Payment Method:</td>
+                <td class="meta-line">{{ $paymentType }}</td>
+                <td></td>
+                <td class="meta-label">Cardholder's:</td>
+                <td class="meta-line">&nbsp;</td>
+            </tr>
+            <tr>
+                <td class="meta-label">Due Date:</td>
+                <td class="meta-line">{{ $dueThis }}</td>
+                <td></td>
+                <td class="meta-label">Signature:</td>
+                <td class="meta-line">&nbsp;</td>
+            </tr>
+        </table>
+
+        <table class="items-table">
             <thead>
                 <tr>
-                    <th>Description</th>
-                    <th class="text-right">Amount</th>
+                    <th style="width: 7%;">QTY</th>
+                    <th style="width: 8%;">UNIT</th>
+                    <th style="width: 49%;">DESCRIPTION</th>
+                    <th style="width: 17%;">UNIT PRICE</th>
+                    <th style="width: 19%;">AMOUNT</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td>Total contract price (TCP)</td>
-                    <td class="text-right">PHP {{ number_format($tcp, 2) }}</td>
+                    <td class="text-center">1</td>
+                    <td class="text-center">mo.</td>
+                    <td>
+                        <strong>Downpayment — Installment {{ $installmentNo }} of {{ $term }}</strong>
+                    </td>
+                    <td class="text-right">&#8369;{{ number_format($principal, 2) }}</td>
+                    <td class="text-right">&#8369;{{ number_format($principal, 2) }}</td>
                 </tr>
                 <tr>
-                    <td>Total downpayment</td>
-                    <td class="text-right">PHP {{ number_format($totalDp, 2) }}</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                    <td>Block {{ $buyer->block_no ?? 'N/A' }}, Lot {{ $buyer->lot_no ?? 'N/A' }} (TCP: &#8369;{{ number_format($tcp, 2) }})</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
                 </tr>
                 <tr>
-                    <td>Monthly installment</td>
-                    <td class="text-right">PHP {{ number_format($monthly, 2) }}</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                    <td>
+                        Total Downpayment: &#8369;{{ number_format($totalDp, 2) }} &bull;
+                        Applied: &#8369;{{ number_format($principal, 2) }} &bull;
+                        Remaining Balance: &#8369;{{ number_format($remaining, 2) }}
+                    </td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                </tr>
+
+                <!-- Bottom Tax / Summary section matching Sales Invoice format -->
+                <tr>
+                    <td colspan="2" rowspan="6" style="border-right: none;">&nbsp;</td>
+                    <td class="tax-label">VATable Sales</td>
+                    <td class="tax-label">Total Sales (VAT Inclusive)</td>
+                    <td class="text-right fw-bold">&#8369;{{ number_format($paid, 2) }}</td>
                 </tr>
                 <tr>
-                    <td>Installment principal (month {{ $installmentNo }})</td>
-                    <td class="text-right">PHP {{ number_format($principal, 2) }}</td>
+                    <td class="tax-label">VAT-Exempt Sales &nbsp;&nbsp; <strong>&#8369;{{ number_format($paid, 2) }}</strong></td>
+                    <td class="tax-label">Less: VAT</td>
+                    <td class="text-right">&#8212;</td>
                 </tr>
                 <tr>
-                    <td>Late payment penalty ({{ number_format($penaltyRate, 2) }}%)</td>
-                    <td class="text-right">PHP {{ number_format($penalty, 2) }}</td>
-                </tr>
-                <tr class="total-row">
-                    <td>Total amount received</td>
-                    <td class="text-right">PHP {{ number_format($paid, 2) }}</td>
+                    <td class="tax-label">Zero Rated Sales</td>
+                    <td class="tax-label">Amount: Net of VAT</td>
+                    <td class="text-right">&#8369;{{ number_format($paid, 2) }}</td>
                 </tr>
                 <tr>
-                    <td>Applied to downpayment</td>
-                    <td class="text-right">PHP {{ number_format($principal, 2) }}</td>
+                    <td class="tax-label">VAT Amount</td>
+                    <td class="tax-label">Less: SC/PWD Discount</td>
+                    <td class="text-right">&#8212;</td>
                 </tr>
                 <tr>
-                    <td>Remaining downpayment after this payment</td>
-                    <td class="text-right">PHP {{ number_format($remaining, 2) }}</td>
+                    <td rowspan="2">&nbsp;</td>
+                    <td class="tax-label">Amount Due</td>
+                    <td class="text-right">&#8369;{{ number_format($paid, 2) }}</td>
+                </tr>
+                <tr>
+                    <td class="tax-label">Add: VAT</td>
+                    <td class="text-right">&#8212;</td>
+                </tr>
+                <tr class="total-due-row">
+                    <td colspan="4" class="text-right" style="text-transform: uppercase;">TOTAL AMOUNT DUE</td>
+                    <td class="text-right">&#8369;{{ number_format($paid, 2) }}</td>
                 </tr>
             </tbody>
         </table>
-    </div>
 
-    <div class="footer">
-        <p style="margin: 0; font-size: 11px; color: #475569;">Official Downpayment Receipt &bull; Payment recorded on: <strong>{{ $paymentDate }}</strong> &bull; Reference Number: <strong style="font-family: monospace;">{{ $trn }}</strong></p>
+        <table class="footer-grid">
+            <tr>
+                <td style="width: 55%; font-size: 9px; color: #000;">
+                    Official Downpayment Receipt &bull; Payment Method: <strong>{{ $paymentType }}</strong><br>
+                    Recorded: {{ $paymentDateFull }}
+                </td>
+                <td style="width: 45%; text-align: right; padding-top: 22px;">
+                    <div class="sig-line">Cashier / Authorized Signature</div>
+                </td>
+            </tr>
+        </table>
+
+        <div class="validity-note">
+            "THIS INVOICE SHALL BE VALID FOR FIVE (5) YEARS FROM THE DATE OF ATP."
+        </div>
     </div>
 </body>
 

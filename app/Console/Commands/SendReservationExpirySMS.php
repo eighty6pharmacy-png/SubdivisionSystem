@@ -89,7 +89,9 @@ class SendReservationExpirySMS extends Command
             }
         }
 
-        $this->info("Reservation expiry SMS reminders processed. Sent: {$sentCount}");
+        $cancelledCount = Reservation::cancelExpiredUnpaid();
+
+        $this->info("Reservation expiry SMS reminders processed. Sent: {$sentCount}, Auto-cancelled: {$cancelledCount}");
         return self::SUCCESS;
     }
 

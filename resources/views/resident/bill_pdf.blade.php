@@ -2,167 +2,207 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>{{ (isset($bill->status) && strtolower($bill->status) === 'paid') ? 'Official Receipt' : 'Statement of Account' }} - {{ ucfirst($bill->type) }} - {{ \Carbon\Carbon::parse($bill->created_at)->format('F Y') }}</title>
+    <title>{{ (isset($bill->status) && strtolower($bill->status) === 'paid') ? 'Official Receipt' : 'Statement of Account' }} - {{ ucfirst($bill->type) }} - {{ \Carbon\Carbon::parse($bill->billing_period ?? $bill->created_at)->format('F Y') }}</title>
     <style>
         @page {
             size: a4 portrait;
-            margin: 8mm 12mm 8mm 12mm;
+            margin: 14mm 18mm 14mm 18mm;
         }
         body {
             font-family: 'DejaVu Sans', sans-serif;
-            color: #000;
+            color: #111;
             font-size: 11px;
-            line-height: 1.3;
+            line-height: 1.38;
             margin: 0;
             padding: 0;
         }
-        .header {
-            text-align: center;
-            border-bottom: 2px solid #000;
-            padding-bottom: 6px;
-            margin-bottom: 10px;
+        .statement-box {
+            border: 1.5px solid #111;
+            padding: 16px 20px;
+            max-width: 520px;
+            margin: 0 auto;
+            background-color: #fff;
             position: relative;
         }
-        .header h1 {
-            color: #000;
+        .status-mark {
+            position: absolute;
+            top: 12px;
+            right: 14px;
+            border: 2px solid;
+            padding: 3px 10px;
+            font-size: 12px;
+            font-weight: bold;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+        }
+        .status-mark.paid {
+            color: #047857;
+            border-color: #047857;
+            background-color: #ecfdf5;
+        }
+        .status-mark.partial {
+            color: #b45309;
+            border-color: #b45309;
+            background-color: #fffbeb;
+            font-size: 10.5px;
+        }
+        .status-mark.unpaid {
+            color: #dc2626;
+            border-color: #dc2626;
+            background-color: #fef2f2;
+        }
+        .corp-header {
+            text-align: center;
+            margin-bottom: 12px;
+            padding-right: 70px;
+            padding-left: 70px;
+        }
+        .corp-header h1 {
             margin: 0;
-            font-size: 17px;
+            font-size: 13px;
+            font-weight: bold;
+            color: #111;
+        }
+        .corp-header p {
+            margin: 2px 0 0 0;
+            font-size: 10.5px;
+            color: #222;
+        }
+        .corp-header .bill-type {
+            margin-top: 4px;
+            font-size: 11.5px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+        .customer-info {
+            margin-bottom: 10px;
+            font-size: 10.5px;
+        }
+        .customer-info p {
+            margin: 2px 0;
+        }
+        .divider {
+            border-top: 1px dashed #333;
+            margin: 8px 0;
+        }
+        .divider-solid {
+            border-top: 1px solid #111;
+            margin: 8px 0;
+        }
+        .notice-title {
+            text-align: center;
+            margin: 6px 0;
+        }
+        .notice-title h2 {
+            margin: 0;
+            font-size: 12px;
+            font-weight: bold;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        .header p {
+        .notice-title p {
             margin: 2px 0 0 0;
-            color: #000;
-            font-size: 10.5px;
-        }
-        .watermark {
-            position: absolute;
-            top: 2px;
-            right: 8px;
-            border: 2px solid;
-            padding: 4px 10px;
-            font-size: 16px;
+            font-size: 11px;
             font-weight: bold;
-            border-radius: 4px;
-            transform: rotate(8deg);
-            opacity: 0.85;
-            letter-spacing: 1.5px;
             text-transform: uppercase;
         }
-        .watermark.paid {
-            color: #10b981;
-            border-color: #10b981;
-        }
-        .watermark.partial {
-            color: #2563eb;
-            border-color: #2563eb;
-            font-size: 13px;
-        }
-        .watermark.unpaid {
-            color: #ef4444;
-            border-color: #ef4444;
-        }
-        .row {
-            width: 100%;
-            margin-bottom: 10px;
-        }
-        .col-half {
-            width: 48%;
-            display: inline-block;
-            vertical-align: top;
-        }
-        .box {
-            border: 1px solid #000;
-            padding: 6px 10px;
-            border-radius: 4px;
-            background-color: #fff;
-            box-sizing: border-box;
-        }
-        .box h3 {
-            margin-top: 0;
-            border-bottom: 1px solid #000;
-            padding-bottom: 3px;
-            margin-bottom: 4px;
-            font-size: 11.5px;
-            color: #000;
-            text-transform: uppercase;
-        }
-        table {
+        .clean-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 10px;
+            margin: 4px 0;
         }
-        th, td {
-            padding: 4px 6px;
-            border: 1px solid #000;
-            color: #000;
+        .clean-table th,
+        .clean-table td {
+            border: none;
+            padding: 2.5px 4px;
             font-size: 10.5px;
+            color: #111;
         }
-        th {
+        .clean-table th {
+            font-weight: bold;
             text-align: left;
-            color: #000;
-            background-color: #f0f0f0;
+        }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .fw-bold { font-weight: bold; }
+        .section-heading {
+            text-align: center;
             font-weight: bold;
+            font-size: 11px;
+            text-transform: uppercase;
+            margin: 6px 0 4px 0;
+            letter-spacing: 0.4px;
         }
-        .text-right {
-            text-align: right;
+        .payment-box {
+            border: 1px solid #047857;
+            background-color: #f0fdf4;
+            padding: 7px 10px;
+            border-radius: 4px;
+            margin: 8px 0;
+            font-size: 10px;
         }
-        .fw-bold {
-            font-weight: bold;
+        .payment-box.partial {
+            border-color: #b45309;
+            background-color: #fffbeb;
         }
-        .total-row td {
-            border-top: 2px solid #000;
-            border-bottom: 2px solid #000;
-            font-size: 11.5px;
-            font-weight: bold;
-            color: #000;
-            background-color: #f5f5f5;
+        .dates-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 6px 0;
         }
-        .highlight-row td {
+        .dates-table td {
+            border: none;
+            padding: 2px 4px;
             font-size: 10.5px;
-            font-weight: bold;
-            color: #000;
-            background-color: #fafafa;
         }
-        .footer {
-            margin-top: 14px;
+        .note-block {
+            margin-top: 8px;
+            font-size: 10px;
+        }
+        .conforme-block {
+            margin-top: 16px;
+            font-size: 10.5px;
+        }
+        .conforme-name {
+            text-align: center;
+            margin-top: 18px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .conforme-role {
             text-align: center;
             font-size: 10px;
-            color: #000;
-            border-top: 1px solid #000;
-            padding-top: 8px;
+            color: #333;
         }
     </style>
 </head>
 <body>
     @php
-        $rawStatus = strtolower($bill->status);
+        $rawStatus = strtolower((string) ($bill->status ?? 'unpaid'));
         $totalPaid = $bill->payments ? (float) $bill->payments->sum('amount_paid') : 0;
         $isPaid = $rawStatus === 'paid';
         $isPartiallyPaid = !$isPaid && ($rawStatus === 'partially_paid' || $totalPaid > 0);
-    @endphp
 
-    <div class="header">
-        <h1>Mayon Builders Realty & Development Corporation</h1>
-        <p>Z1, Tagbong, Pili, Camarines Sur</p>
-        <p><strong>{{ $isPaid ? 'OFFICIAL RECEIPT & STATEMENT OF ACCOUNT' : 'STATEMENT OF ACCOUNT' }} ({{ strtoupper($bill->type) }})</strong></p>
-        
-        @if($isPaid)
-            <div class="watermark paid">PAID</div>
-        @elseif($isPartiallyPaid)
-            <div class="watermark partial">PARTIALLY PAID</div>
-        @else
-            <div class="watermark unpaid">UNPAID</div>
-        @endif
-    </div>
+        $tz = config('app.timezone', 'Asia/Manila');
+        $billingPeriodDate = $bill->billing_period ?? $bill->created_at;
+        $billingMonthYear = strtoupper(\Carbon\Carbon::parse($billingPeriodDate)->format('F Y'));
 
-    @php
-        $prevDate = $bill->previous_reading_date ? \Carbon\Carbon::parse($bill->previous_reading_date)->format('M d, Y') : \Carbon\Carbon::parse($bill->created_at)->subMonth()->format('M 01, Y');
-        $currDate = $bill->current_reading_date ? \Carbon\Carbon::parse($bill->current_reading_date)->format('M d, Y') : \Carbon\Carbon::parse($bill->created_at)->format('M d, Y');
+        $prevDate = $bill->previous_reading_date
+            ? \Carbon\Carbon::parse($bill->previous_reading_date)->format('d/m/Y')
+            : \Carbon\Carbon::parse($bill->created_at)->subMonth()->format('d/m/Y');
+        $currDate = $bill->current_reading_date
+            ? \Carbon\Carbon::parse($bill->current_reading_date)->format('d/m/Y')
+            : \Carbon\Carbon::parse($bill->created_at)->format('d/m/Y');
+
         $unit = $bill->type === 'electricity' ? 'kWh' : 'm³';
-        $dueDateFormatted = $bill->due_date ? \Carbon\Carbon::parse($bill->due_date)->format('M d, Y') : 'Due Date';
-        
-        $rate = (float)$bill->usage_value > 0 ? ((float)$bill->amount / (float)$bill->usage_value) : (float)(\App\Models\Setting::find('elec_rate')?->value ?? 10.00);
+        $issuedDateFormatted = $bill->created_at ? \Carbon\Carbon::parse($bill->created_at)->format('d/m/Y') : 'N/A';
+        $dueDateFormatted = $bill->due_date ? \Carbon\Carbon::parse($bill->due_date)->format('d/m/Y') : 'N/A';
+
+        $rate = (float)$bill->usage_value > 0
+            ? ((float)$bill->amount / (float)$bill->usage_value)
+            : (float)(\App\Models\Setting::find('elec_rate')?->value ?? 10.00);
         if ($bill->type === 'water') {
             $rate = (float)(\App\Models\Setting::find('water_rate')?->value ?? 15.00);
         }
@@ -174,188 +214,218 @@
         $penaltyRate = (float) (\App\Models\Setting::find($penaltyKey)?->value ?? 5);
         $penaltyAmount = round($amountBeforeDue * ($penaltyRate / 100), 2);
         $amountAfterDue = $amountBeforeDue + $penaltyAmount;
-        $tz = config('app.timezone', 'Asia/Manila');
         $isPastDue = $bill->due_date && \Carbon\Carbon::parse($bill->due_date, $tz)->endOfDay()->isPast();
         $effectiveTotalDue = (!$isPaid && ($bill->is_at_risk || $isPastDue)) ? $amountAfterDue : $amountBeforeDue;
         $remainingBalance = max(0, round($effectiveTotalDue - $totalPaid, 2));
+
+        $residentName = $bill->user->name ?? $bill->billed_to_name ?? 'Resident';
+        $addressLine = 'Block ' . ($bill->lot->block ?? 'N/A') . ', Lot ' . ($bill->lot->lot_number ?? 'N/A') . ', Zone 1, Tagbong, Pili, Camarines Sur';
 
         $mop = 'N/A';
         $trn = 'N/A';
         $paidDate = 'N/A';
         if ($bill->payments && $bill->payments->count() > 0) {
             $latestPayment = $bill->payments->sortByDesc('payment_date')->first();
-            $mop = $latestPayment->method ?? 'Office Payment';
+            $rawMop = trim((string) ($latestPayment->method ?? 'Office'));
+            $mopLower = strtolower($rawMop);
+            if (str_contains($mopLower, 'gcash')) {
+                $mop = 'GCash';
+            } elseif (str_contains($mopLower, 'maya')) {
+                $mop = 'Maya';
+            } elseif (str_contains($mopLower, 'office')) {
+                $mop = 'Office';
+            } else {
+                $mop = $rawMop ?: 'Office';
+            }
             $trn = $latestPayment->trn ?? 'N/A';
             $pDateRaw = $latestPayment->payment_date ?? $latestPayment->created_at;
-            $paidDate = \Carbon\Carbon::parse($pDateRaw)->timezone(config('app.timezone', 'Asia/Manila'))->format('F d, Y h:i A');
+            $paidDate = \Carbon\Carbon::parse($pDateRaw)->timezone($tz)->format('M d, Y h:i A');
         }
     @endphp
 
-    <div class="row">
-        <div class="col-half box" style="margin-right: 2%;">
-            <h3>Account Details</h3>
-            <table style="border:none; margin-bottom:0;">
-                <tr>
-                    <td style="padding:2px 4px; border:none; width:40%;"><strong>Name:</strong></td>
-                    <td style="padding:2px 4px; border:none;">{{ $bill->user->name ?? $bill->billed_to_name ?? 'Resident' }}</td>
-                </tr>
-                <tr>
-                    <td style="padding:2px 4px; border:none;"><strong>Address:</strong></td>
-                    <td style="padding:2px 4px; border:none;">Block {{ $bill->lot->block ?? 'N/A' }}, Lot {{ $bill->lot->lot_number ?? 'N/A' }}</td>
-                </tr>
-                <tr>
-                    <td style="padding:2px 4px; border:none;"><strong>Billing Period:</strong></td>
-                    <td style="padding:2px 4px; border:none;">{{ \Carbon\Carbon::parse($bill->created_at)->format('F Y') }}</td>
-                </tr>
-                <tr>
-                    <td style="padding:2px 4px; border:none;"><strong>Due Date:</strong></td>
-                    <td style="padding:2px 4px; border:none; font-weight:bold;">{{ $dueDateFormatted }}</td>
-                </tr>
-                @if($isPaid || ($bill->payments && $bill->payments->count() > 0))
-                <tr>
-                    <td style="padding:2px 4px; border:none;"><strong>MOP:</strong></td>
-                    <td style="padding:2px 4px; border:none;">{{ $mop }}</td>
-                </tr>
-                <tr>
-                    <td style="padding:2px 4px; border:none;"><strong>Reference (TRN):</strong></td>
-                    <td style="padding:2px 4px; border:none; font-family: monospace; font-size: 10px;">{{ $trn }}</td>
-                </tr>
-                <tr>
-                    <td style="padding:2px 4px; border:none;"><strong>Payment Date &amp; Time:</strong></td>
-                    <td style="padding:2px 4px; border:none; font-size: 10px; font-weight: bold;">{{ $paidDate }}</td>
-                </tr>
-                @endif
-            </table>
-        </div>
-        <div class="col-half box">
-            <h3>Meter Information</h3>
-            <table style="border:none; margin-bottom:0;">
-                <tr>
-                    <td style="padding:2px 4px; border:none; width:50%;"><strong>Previous Reading:</strong><br><span style="font-size:9.5px;color:#000;">{{ $prevDate }}</span></td>
-                    <td style="padding:2px 4px; border:none;" class="text-right">{{ number_format((float)$bill->previous_reading, 2) }}</td>
-                </tr>
-                <tr>
-                    <td style="padding:2px 4px; border:none;"><strong>Current Reading:</strong><br><span style="font-size:9.5px;color:#000;">{{ $currDate }}</span></td>
-                    <td style="padding:2px 4px; border:none;" class="text-right">{{ $bill->current_reading !== null ? number_format((float)$bill->current_reading, 2) : 'N/A' }}</td>
-                </tr>
-                <tr>
-                    <td style="padding:2px 4px; border:none;"><strong>Consumption:</strong></td>
-                    <td style="padding:2px 4px; border:none;" class="text-right fw-bold">{{ number_format((float)$bill->usage_value, 2) }} {{ $unit }}</td>
-                </tr>
-            </table>
-        </div>
-    </div>
-
-    <h3 style="color:#000; border-bottom:1px solid #000; padding-bottom:3px; margin: 0 0 6px 0; font-size: 11.5px; text-transform:uppercase;">Billing Summary</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>Description</th>
-                <th class="text-right">Amount (PHP)</th>
-            </tr>
-        </thead>
-        <tbody>
-            @if($bill->type === 'water')
-                @php
-                    $waterMinM3 = (float)(\App\Models\Setting::find('water_min_m3')?->value ?? 10);
-                    $waterMinRate = (float)(\App\Models\Setting::find('water_min_rate')?->value ?? 250.00);
-                    $excessM3 = max(0, (float)$bill->usage_value - $waterMinM3);
-                    if ($excessM3 > 0 && (float)$bill->amount > $waterMinRate) {
-                        $waterExcessRate = round(((float)$bill->amount - $waterMinRate) / $excessM3, 2);
-                        $excessCharge = (float)$bill->amount - $waterMinRate;
-                    } else {
-                        $waterExcessRate = (float)(\App\Models\Setting::find('water_rate')?->value ?? 15.00);
-                        $excessCharge = $excessM3 * $waterExcessRate;
-                    }
-                @endphp
-                <tr>
-                    <td>Minimum Charge (First {{ number_format($waterMinM3, 2) }} {{ $unit }})</td>
-                    <td class="text-right">₱{{ number_format($waterMinRate, 2) }}</td>
-                </tr>
-                @if($excessM3 > 0)
-                <tr>
-                    <td>Excess Consumption ({{ number_format($excessM3, 2) }} {{ $unit }} x ₱{{ number_format($waterExcessRate, 2) }}/{{ $unit }})</td>
-                    <td class="text-right">₱{{ number_format($excessCharge, 2) }}</td>
-                </tr>
-                @endif
-                <tr>
-                    <td><strong>Current Month Charges</strong></td>
-                    <td class="text-right"><strong>₱{{ number_format($currentCharges, 2) }}</strong></td>
-                </tr>
-            @else
-                <tr>
-                    <td><strong>Current Month Charges</strong> ({{ number_format((float)$bill->usage_value, 2) }} {{ $unit }} x ₱{{ number_format($rate, 2) }}/{{ $unit }})</td>
-                    <td class="text-right"><strong>₱{{ number_format($currentCharges, 2) }}</strong></td>
-                </tr>
-            @endif
-            <tr>
-                <td>Previous Balance (Arrears)</td>
-                <td class="text-right">₱{{ number_format($prevBalance, 2) }}</td>
-            </tr>
-            <tr>
-                <td>Late Payment Penalty ({{ $penaltyRate }}% if paid after due date)</td>
-                <td class="text-right">₱{{ number_format($penaltyAmount, 2) }}</td>
-            </tr>
-            <tr class="highlight-row">
-                <td><strong>Amount before {{ $dueDateFormatted }}</strong></td>
-                <td class="text-right"><strong>₱{{ number_format($amountBeforeDue, 2) }}</strong></td>
-            </tr>
-            <tr class="total-row">
-                <td><strong>Amount after {{ $dueDateFormatted }}</strong></td>
-                <td class="text-right"><strong>₱{{ number_format($amountAfterDue, 2) }}</strong></td>
-            </tr>
-            @if($isPaid || $totalPaid > 0)
-            <tr>
-                <td class="fw-bold">Total Paid</td>
-                <td class="text-right fw-bold">₱{{ number_format($totalPaid, 2) }}</td>
-            </tr>
-            @endif
-            @if(!$isPaid && $totalPaid > 0)
-            <tr class="highlight-row">
-                <td class="fw-bold">Remaining Balance Due</td>
-                <td class="text-right fw-bold">₱{{ number_format($remainingBalance, 2) }}</td>
-            </tr>
-            @endif
-        </tbody>
-    </table>
-
-    @if($bill->payments && $bill->payments->count() > 0)
-    <h3 style="color:#000; border-bottom:1px solid #000; padding-bottom:3px; margin: 10px 0 6px 0; font-size: 11.5px; text-transform:uppercase;">Payment Transactions</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>Payment Date &amp; Time</th>
-                <th>Reference (TRN)</th>
-                <th>Payment Method</th>
-                <th class="text-right">Amount Paid</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach($bill->payments->sortByDesc('payment_date') as $pay)
-            @php
-                $payDateRaw = $pay->payment_date ?? $pay->created_at;
-                $payDateFormatted = \Carbon\Carbon::parse($payDateRaw)->timezone(config('app.timezone', 'Asia/Manila'))->format('F d, Y h:i A');
-            @endphp
-            <tr>
-                <td><strong>{{ $payDateFormatted }}</strong></td>
-                <td style="font-family: monospace; font-size: 10px;">{{ $pay->trn }}</td>
-                <td>{{ $pay->method ?? 'Office Payment' }}</td>
-                <td class="text-right fw-bold">₱{{ number_format($pay->amount_paid, 2) }}</td>
-            </tr>
-            @endforeach
-        </tbody>
-    </table>
-    @endif
-
-    <div class="footer">
+    <div class="statement-box">
         @if($isPaid)
-            <p style="font-weight: bold; margin: 0;">This bill has been fully settled. Thank you for your payment!</p>
-            @if($paidDate !== 'N/A')
-                <p style="margin: 3px 0 0; font-size: 9.5px; color: #475569;">Payment Recorded: <strong>{{ $paidDate }}</strong></p>
-            @endif
+            <div class="status-mark paid">PAID</div>
+        @elseif($isPartiallyPaid)
+            <div class="status-mark partial">PARTIALLY PAID</div>
         @else
-            <p style="margin: 0;">Please pay on or before the due date to avoid penalty charges.</p>
+            <div class="status-mark unpaid">UNPAID</div>
         @endif
+
+        <div class="corp-header">
+            <h1>Mayon Builders Realty &amp; Development Corporation</h1>
+            <p>Zone 1, Tagbong, Pili, Camarines Sur</p>
+            <p>STATEMENT OF ACCOUNT</p>
+            <div class="bill-type">{{ $bill->type === 'water' ? 'WATER BILL' : 'ELECTRICITY BILL' }}</div>
+        </div>
+
+        <div class="customer-info">
+            <p><strong>Name:</strong> {{ $residentName }}</p>
+            <p><strong>Address:</strong> {{ $addressLine }}</p>
+        </div>
+
+        <div class="divider-solid"></div>
+
+        <div class="notice-title">
+            <h2>BILLING NOTICE</h2>
+            <p>{{ $billingMonthYear }}</p>
+        </div>
+
+        <div class="divider"></div>
+
+        <table class="clean-table">
+            <thead>
+                <tr>
+                    <th style="width: 40%;"></th>
+                    <th style="width: 32%; text-align: center;">Date</th>
+                    <th style="width: 28%; text-align: right;">Reading</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="fw-bold">Previous</td>
+                    <td class="text-center">{{ $prevDate }}</td>
+                    <td class="text-right">{{ number_format((float)$bill->previous_reading, 2) }}</td>
+                </tr>
+                <tr>
+                    <td class="fw-bold">Present</td>
+                    <td class="text-center">{{ $currDate }}</td>
+                    <td class="text-right">{{ $bill->current_reading !== null ? number_format((float)$bill->current_reading, 2) : 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td>Consumption</td>
+                    <td class="text-center">:</td>
+                    <td class="text-right fw-bold">{{ number_format((float)$bill->usage_value, 2) }} {{ $unit }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="divider"></div>
+
+        <div class="section-heading">SUMMARY OF CHARGES</div>
+
+        <table class="clean-table">
+            <thead>
+                <tr>
+                    <th style="width: 46%;">Description</th>
+                    <th style="width: 29%; text-align: center;">Computation</th>
+                    <th style="width: 25%; text-align: right;">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if($bill->type === 'water')
+                    @php
+                        $waterMinM3 = (float)(\App\Models\Setting::find('water_min_m3')?->value ?? 10);
+                        $waterMinRate = (float)(\App\Models\Setting::find('water_min_rate')?->value ?? 250.00);
+                        $excessM3 = max(0, (float)$bill->usage_value - $waterMinM3);
+                        if ($excessM3 > 0 && (float)$bill->amount > $waterMinRate) {
+                            $waterExcessRate = round(((float)$bill->amount - $waterMinRate) / $excessM3, 2);
+                            $excessCharge = (float)$bill->amount - $waterMinRate;
+                        } else {
+                            $waterExcessRate = (float)(\App\Models\Setting::find('water_rate')?->value ?? 15.00);
+                            $excessCharge = $excessM3 * $waterExcessRate;
+                        }
+                        $displayMinRate = $currentCharges > 0 ? $waterMinRate : 0;
+                    @endphp
+                    <tr>
+                        <td>Current Bill (Minimum)</td>
+                        <td class="text-center">First {{ number_format($waterMinM3, 0) }}m&sup3;</td>
+                        <td class="text-right">&#8369;{{ number_format($displayMinRate, 2) }}</td>
+                    </tr>
+                    <tr>
+                        <td>Excess Consumption</td>
+                        <td class="text-center">{{ number_format($excessM3, 2) }} x {{ number_format($waterExcessRate, 2) }}</td>
+                        <td class="text-right">&#8369;{{ number_format($excessCharge, 2) }}</td>
+                    </tr>
+                @else
+                    <tr>
+                        <td>Consumption</td>
+                        <td class="text-center">{{ number_format((float)$bill->usage_value, 2) }} x {{ number_format($rate, 2) }}</td>
+                        <td class="text-right">&#8369;{{ number_format($currentCharges, 2) }}</td>
+                    </tr>
+                @endif
+                <tr>
+                    <td>Previous Unpaid Bill</td>
+                    <td class="text-center">Arrears</td>
+                    <td class="text-right">&#8369;{{ number_format($prevBalance, 2) }}</td>
+                </tr>
+                <tr>
+                    <td>Late Payment Bill</td>
+                    <td class="text-center">{{ number_format($penaltyRate, 0) }}%</td>
+                    <td class="text-right">&#8369;{{ number_format($penaltyAmount, 2) }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="divider"></div>
+
+        <table class="clean-table">
+            <tbody>
+                <tr>
+                    <td class="fw-bold" style="width: 68%;">Amount Before {{ $dueDateFormatted }}</td>
+                    <td class="text-right fw-bold" style="width: 32%;">&#8369;{{ number_format($amountBeforeDue, 2) }}</td>
+                </tr>
+                <tr>
+                    <td class="fw-bold">Amount After {{ $dueDateFormatted }}</td>
+                    <td class="text-right fw-bold">&#8369;{{ number_format($amountAfterDue, 2) }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        @if($isPaid || $isPartiallyPaid)
+            <div class="payment-box {{ $isPartiallyPaid ? 'partial' : '' }}">
+                <table class="clean-table" style="margin: 0;">
+                    <tr>
+                        <td style="width: 45%;"><strong>Payment Method:</strong></td>
+                        <td class="text-right fw-bold">{{ $mop }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Amount Paid:</strong></td>
+                        <td class="text-right fw-bold">&#8369;{{ number_format($totalPaid, 2) }}</td>
+                    </tr>
+                    @if($isPartiallyPaid)
+                    <tr>
+                        <td><strong>Remaining Balance:</strong></td>
+                        <td class="text-right fw-bold">&#8369;{{ number_format($remainingBalance, 2) }}</td>
+                    </tr>
+                    @endif
+                    <tr>
+                        <td><strong>Reference (TRN):</strong></td>
+                        <td class="text-right" style="font-family: monospace;">{{ $trn }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Payment Date:</strong></td>
+                        <td class="text-right">{{ $paidDate }}</td>
+                    </tr>
+                </table>
+            </div>
+        @endif
+
+        <table class="dates-table">
+            <tr>
+                <td style="width: 35%;">Date Issued:</td>
+                <td class="text-right" style="width: 65%;">{{ $issuedDateFormatted }}</td>
+            </tr>
+            <tr>
+                <td>Due Date:</td>
+                <td class="text-right fw-bold">{{ $dueDateFormatted }}</td>
+            </tr>
+        </table>
+
+        <div class="note-block">
+            <strong>Note:</strong><br>
+            @if($isPaid)
+                This bill has been <strong>PAID</strong> via <strong>{{ $mop }}</strong>. Thank you for your payment!
+            @else
+                Please settle your payable on/before the due date. Thank you!
+            @endif
+        </div>
+
+        <div class="conforme-block">
+            <strong>Conforme:</strong>
+            <div class="conforme-name">{{ strtoupper($residentName) }}</div>
+            <div class="conforme-role">Owner</div>
+        </div>
     </div>
 </body>
 </html>

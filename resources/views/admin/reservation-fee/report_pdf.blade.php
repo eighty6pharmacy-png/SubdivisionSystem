@@ -195,10 +195,6 @@
                 <div class="summary-value">{{ $stats['active'] }}</div>
             </td>
             <td>
-                <div class="summary-label">Converted</div>
-                <div class="summary-value">{{ $stats['converted'] }}</div>
-            </td>
-            <td>
                 <div class="summary-label">Cancelled</div>
                 <div class="summary-value">{{ $stats['cancelled'] }}</div>
             </td>

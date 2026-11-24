@@ -248,19 +248,30 @@
             </div>
         </div>
 
-        <!-- Monthly Downpayment & Amortization Sales Trend Bar Graph -->
-        <div
-            style="background: #fff; border: 1px solid var(--bill-border); border-radius: 16px; padding: 16px 20px; margin-bottom: 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <div>
-                    <h3 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0;">Monthly Downpayment &
-                        Amortization Revenue Trends</h3>
-                    <p style="font-size: 11px; color: #64748b; margin: 2px 0 0 0;">12-month buyer installment collections &
-                        monthly amortization sales (in ₱ Thousands)</p>
+        @php
+            $dpEarlyCount = collect($bills)->where('payment_behavior', 'Early')->count();
+            $dpOnTimeCount = collect($bills)->where('payment_behavior', 'On-Time')->count();
+            $dpLateCount = collect($bills)->where('payment_behavior', 'Late')->count();
+            $dpPendingCount = collect($bills)->where('payment_behavior', 'Not available yet')->count();
+        @endphp
+
+        <!-- Summary Charts Row -->
+        <div class="responsive-grid grid-2-1" style="margin-bottom: 0;">
+            <div style="background: #fff; border: 1px solid var(--bill-border); border-radius: 16px; padding: 16px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);">
+                <div style="margin-bottom: 12px;">
+                    <h3 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0;">Monthly Collections</h3>
+                </div>
+                <div style="height: 190px; position: relative;">
+                    <canvas id="downpaymentSalesChart"></canvas>
                 </div>
             </div>
-            <div style="height: 180px; position: relative;">
-                <canvas id="downpaymentSalesChart"></canvas>
+            <div style="background: #fff; border: 1px solid var(--bill-border); border-radius: 16px; padding: 16px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);">
+                <div style="margin-bottom: 12px;">
+                    <h3 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0;">Payment Status</h3>
+                </div>
+                <div style="height: 190px; position: relative; display: flex; justify-content: center;">
+                    <canvas id="downpaymentStatusChart"></canvas>
+                </div>
             </div>
         </div>
 
@@ -511,24 +522,24 @@
                     onchange="autoFillDownpaymentBuyer(this)">
                     <option value="">-- Choose Buyer --</option>
                     @foreach($masterListBuyers as $b)
-                        @php
-                            $readyReservation = $b->reservations->first();
-                            $dispBlock = $readyReservation?->lot?->block ?? $b->block_no ?? '?';
-                            $dispLot = $readyReservation?->lot?->lot_number ?? $b->lot_no ?? '?';
-                            $lotPrice = $readyReservation?->lot?->contract_price ?? $b->lot?->contract_price;
-                            $effectiveTcp = ($lotPrice !== null && $lotPrice !== '' && (float) $lotPrice > 0)
-                                ? $lotPrice
-                                : ($b->financingRecord?->contract_price ?? '');
-                        @endphp
-                        <option value="{{ $b->id }}" data-first="{{ $b->first_name }}" data-last="{{ $b->last_name }}"
-                            data-block="{{ $dispBlock }}" data-lot="{{ $dispLot }}" data-tcp="{{ $effectiveTcp }}"
-                            data-lot-price="{{ $lotPrice ?? '' }}"
-                            data-equity="{{ $b->financingRecord?->paid_by_vendee_equity ?? '' }}"
-                            data-reservation-id="{{ $readyReservation?->id ?? '' }}"
-                            data-reservation-amount="{{ $readyReservation?->amount ?? '' }}">
-                            {{ $b->last_name }}, {{ $b->first_name }}
-                            {{ $b->middle_name ? substr($b->middle_name, 0, 1) . '.' : '' }} — (Block {{ $dispBlock }}, Lot {{ $dispLot }})
-                        </option>
+                        @foreach($b->reservations as $readyReservation)
+                            @php
+                                $dispBlock = $readyReservation->lot?->block ?? $b->block_no ?? '?';
+                                $dispLot = $readyReservation->lot?->lot_number ?? $b->lot_no ?? '?';
+                                $lotPrice = $readyReservation->lot?->contract_price ?? $b->lot?->contract_price;
+                                $effectiveTcp = ($lotPrice !== null && $lotPrice !== '' && (float) $lotPrice > 0)
+                                    ? $lotPrice
+                                    : ($b->financingRecord?->contract_price ?? '');
+                            @endphp
+                            <option value="{{ $b->id }}" data-first="{{ $b->first_name }}" data-last="{{ $b->last_name }}"
+                                data-block="{{ $dispBlock }}" data-lot="{{ $dispLot }}" data-tcp="{{ $effectiveTcp }}"
+                                data-lot-price="{{ $lotPrice ?? '' }}"
+                                data-reservation-id="{{ $readyReservation->id }}"
+                                data-reservation-amount="{{ (float) ($readyReservation->amount ?? 0) }}">
+                                {{ $b->last_name }}, {{ $b->first_name }}
+                                {{ $b->middle_name ? substr($b->middle_name, 0, 1) . '.' : '' }} — (Block {{ $dispBlock }}, Lot {{ $dispLot }})
+                            </option>
+                        @endforeach
                     @endforeach
                 </select>
             </div>
@@ -630,6 +641,7 @@
                             DP Amount ₱</label>
                         <input type="text" id="calcDpAmount" class="filter-select"
                             style="width: 100%; padding: 12px; background: #e2e8f0; font-weight: 800;" readonly>
+                        <div id="calcReservationNote" style="display: none; font-size: 11px; font-weight: 600; color: #059669; margin-top: 6px;"></div>
                     </div>
                     <div>
                         <label
@@ -849,14 +861,25 @@
             return { valid: true, value: Number(rawDigits) };
         }
 
-        function preselectDownpaymentBuyer(buyerId) {
+        function preselectDownpaymentBuyer(buyerId, reservationId = null) {
             const select = document.getElementById('dpBuyerMasterList');
             if (!select || !buyerId) return false;
-            const hasOption = Array.from(select.options).some(o => o.value === String(buyerId));
-            if (!hasOption) return false;
-            select.value = String(buyerId);
+            const options = Array.from(select.options);
+            let targetIndex = -1;
+            if (reservationId) {
+                targetIndex = options.findIndex(o =>
+                    o.value === String(buyerId) &&
+                    o.getAttribute('data-reservation-id') === String(reservationId)
+                );
+            }
+            if (targetIndex === -1) {
+                targetIndex = options.findIndex(o => o.value === String(buyerId));
+            }
+            if (targetIndex === -1) return false;
+
+            select.selectedIndex = targetIndex;
             if (window.jQuery && $.fn.select2) {
-                $('#dpBuyerMasterList').val(String(buyerId)).trigger('change');
+                $('#dpBuyerMasterList').val(String(buyerId)).trigger('change.select2');
             }
             autoFillDownpaymentBuyer(select);
             return true;
@@ -871,7 +894,17 @@
             const tcpInput = document.getElementById('calcTcp');
             if (tcpInput) {
                 tcpInput.style.borderColor = '#cbd5e1';
+                tcpInput.value = '';
             }
+            const buyerSelect = document.getElementById('dpBuyerMasterList');
+            if (buyerSelect) {
+                buyerSelect.selectedIndex = 0;
+            }
+            selectedReservationId = '';
+            currentReservationFee = 0;
+            document.getElementById('calcDpPercent').value = 30;
+            document.getElementById('calcMonths').value = 24;
+            document.getElementById('calcPenalty').value = 0;
             document.getElementById('newContractModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
             calculateAmortization();
@@ -951,15 +984,15 @@
             const remainingAfter = Math.max(0, totalDp - principalThroughThis);
             const monthsAfter = installmentNo !== '—' ? `${installmentNo} of ${bill.total_months}` : `${bill.months_paid} of ${bill.total_months}`;
 
-            const penaltyRow = penalty > 0
-                ? `<tr><td>Late payment penalty (${penaltyRate}%)</td><td class="text-right">${money(penalty)}</td></tr>`
-                : `<tr><td>Late payment penalty (${penaltyRate}%)</td><td class="text-right">${money(0)}</td></tr>`;
+            const invoiceNo = String(historyId || '0001').padStart(4, '0');
+            const mopLower = String(mop || '').toLowerCase();
+            const cleanMop = mopLower.includes('gcash') ? 'GCash' : (mopLower.includes('maya') ? 'Maya' : (mopLower.includes('office') ? 'Office' : mop));
 
             const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Downpayment Receipt</title>
+<title>Sales Invoice - Downpayment Receipt</title>
 <style>
   @page { size: portrait; margin: 0; }
   body {
@@ -968,85 +1001,174 @@
     margin: 0 auto;
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     color: #000;
-    font-size: 13px;
-    padding: 12mm 15mm;
+    font-size: 11px;
+    line-height: 1.35;
+    padding: 12mm 14mm;
     background: #fff;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     box-sizing: border-box;
   }
-  .header{text-align:center;border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:18px;position:relative;}
-  .header h1{color:#000;margin:0;font-size:22px;text-transform:uppercase;letter-spacing:0.5px;}
-  .header p{margin:4px 0 0;color:#000;font-size:12px;}
-  .watermark{position:absolute;top:8px;right:12px;border:3px solid #10b981;color:#10b981;padding:6px 14px;font-size:22px;font-weight:bold;border-radius:6px;transform:rotate(12deg);opacity:0.85;letter-spacing:2px;text-transform:uppercase;}
-  .row{width:100%;margin-bottom:16px;}
-  .col-half{width:48%;display:inline-block;vertical-align:top;}
-  .box{border:1px solid #000;padding:12px;border-radius:4px;background:#fff;box-sizing:border-box;}
-  .box h3{margin-top:0;border-bottom:1px solid #000;padding-bottom:5px;font-size:14px;color:#000;text-transform:uppercase;}
-  table{width:100%;border-collapse:collapse;margin-bottom:16px;}
-  th,td{padding:7px 9px;border:1px solid #000;color:#000;}
-  th{text-align:left;color:#000;background:#f0f0f0;font-weight:bold;}
-  .text-right{text-align:right;}
-  .total-row td{border-top:2px solid #000;border-bottom:2px solid #000;font-size:14px;font-weight:bold;color:#000;background:#f5f5f5;}
-  .note{font-size:12px;color:#000;margin:0 0 14px;}
-  .footer{margin-top:24px;text-align:center;font-size:12px;color:#000;border-top:1px solid #000;padding-top:12px;}
+  .invoice-wrapper { border: 1.5px solid #000; padding: 14px 16px; background: #fff; position: relative; }
+  .corp-header { text-align: center; margin-bottom: 10px; position: relative; }
+  .corp-header h1 { margin: 0; font-size: 16px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.4px; color: #000; }
+  .corp-header p { margin: 2px 0 0; font-size: 10px; color: #000; }
+  .title-row { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  .title-row td { border: none; padding: 0; vertical-align: middle; }
+  .sales-invoice-badge {
+    display: inline-block; background: #000; color: #fff; font-weight: bold;
+    font-size: 13px; letter-spacing: 0.8px; padding: 4px 14px; text-transform: uppercase;
+  }
+  .invoice-no { text-align: right; font-size: 13px; font-weight: bold; color: #000; }
+  .invoice-no .num { font-family: monospace; font-size: 13px; color: #000; margin-left: 4px; }
+  .meta-grid { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  .meta-grid td { border: none; padding: 3px 4px; vertical-align: bottom; font-size: 10.5px; color: #000; }
+  .meta-label { white-space: nowrap; width: 1%; }
+  .meta-line { border-bottom: 1px solid #000; font-weight: bold; padding-left: 6px; color: #000; }
+  .items-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+  .items-table th, .items-table td { border: 1px solid #000; padding: 5px 6px; font-size: 10.5px; vertical-align: top; color: #000; }
+  .items-table th { text-align: center; font-weight: bold; background: #fff; text-transform: uppercase; font-size: 10px; color: #000; }
+  .text-center { text-align: center; }
+  .text-right { text-align: right; }
+  .fw-bold { font-weight: bold; }
+  .tax-label { font-size: 9.5px; }
+  .total-due-row td { border-top: 2px solid #000; border-bottom: 2px solid #000; font-size: 12px; font-weight: bold; background: #fff; padding: 6px; color: #000; }
+  .footer-grid { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  .footer-grid td { border: none; padding: 0; vertical-align: bottom; color: #000; }
+  .sig-line { border-top: 1px solid #000; width: 220px; margin-left: auto; padding-top: 4px; text-align: center; font-size: 10px; font-weight: bold; color: #000; }
+  .validity-note { text-align: center; font-size: 9px; font-style: italic; margin-top: 10px; color: #000; }
 </style>
 </head>
 <body>
-<div class="header">
-  <h1>Mayon Builders Realty & Development Corporation</h1>
-  <p>Z1, Tagbong, Pili, Camarines Sur</p>
-  <p><strong>OFFICIAL DOWNPAYMENT RECEIPT</strong></p>
-  <div class="watermark">PAID</div>
-</div>
-<div class="row">
-  <div class="col-half box" style="margin-right:2%;">
-    <h3>Buyer Details</h3>
-    <table style="border:none;margin-bottom:0;">
-      <tr><td style="padding:4px;border:none;width:42%;"><strong>Name:</strong></td><td style="padding:4px;border:none;">${bill.buyer}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Contact:</strong></td><td style="padding:4px;border:none;">${bill.contact || 'N/A'}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Address:</strong></td><td style="padding:4px;border:none;">Block ${bill.block} Lot ${bill.lot}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Contract date:</strong></td><td style="padding:4px;border:none;">${formatIsoDate(bill.contract_date, true)}</td></tr>
-    </table>
+<div class="invoice-wrapper">
+  <div class="corp-header">
+    <h1>Mayon Builders Realty &amp; Development Corporation</h1>
+    <p>Tagbong, 4418, Pili, (Capital), Camarines Sur, Philippines</p>
+    <p>VAT Reg. TIN 009-860-405-00001</p>
   </div>
-  <div class="col-half box">
-    <h3>Payment Details</h3>
-    <table style="border:none;margin-bottom:0;">
-      <tr><td style="padding:4px;border:none;width:48%;"><strong>Installment:</strong></td><td style="padding:4px;border:none;">${installmentNo} of ${bill.total_months}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Due date:</strong></td><td style="padding:4px;border:none;font-weight:bold;">${dueDate}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Payment Date &amp; Time:</strong></td><td style="padding:4px;border:none;font-weight:bold;">${paidDate}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Method:</strong></td><td style="padding:4px;border:none;">${mop}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Reference (TRN):</strong></td><td style="padding:4px;border:none;font-family:monospace;font-size:11px;">${trn}</td></tr>
-      <tr><td style="padding:4px;border:none;"><strong>Timing:</strong></td><td style="padding:4px;border:none;">${behavior}</td></tr>
-    </table>
-  </div>
-</div>
-<h3 style="color:#000;border-bottom:1px solid #000;padding-bottom:5px;margin:16px 0 10px 0;font-size:14px;text-transform:uppercase;">Contract Snapshot</h3>
-<table>
-  <tbody>
-    <tr><td>Total contract price (TCP)</td><td class="text-right">${money(bill.tcp)}</td></tr>
-    <tr><td>Total downpayment</td><td class="text-right">${money(totalDp)}</td></tr>
-    <tr><td>Monthly installment</td><td class="text-right">${money(monthly)}</td></tr>
-    <tr><td>Penalty rate</td><td class="text-right">${penaltyRate}%</td></tr>
-    <tr><td>Term</td><td class="text-right">${bill.total_months} months</td></tr>
-  </tbody>
-</table>
-<h3 style="color:#000;border-bottom:1px solid #000;padding-bottom:5px;margin:16px 0 10px 0;font-size:14px;text-transform:uppercase;">This Payment Breakdown</h3>
-<p class="note">Penalty is charged only when the installment is paid after its due date. It is collected in addition to the installment and is not applied to the remaining downpayment balance.</p>
-<table>
-  <thead><tr><th>Description</th><th class="text-right">Amount (PHP)</th></tr></thead>
-  <tbody>
-    <tr><td>Installment principal (month ${installmentNo})</td><td class="text-right">${money(principal)}</td></tr>
-    ${penaltyRow}
-    <tr class="total-row"><td>Total amount received</td><td class="text-right">${money(amount)}</td></tr>
-    <tr><td>Applied to downpayment</td><td class="text-right">${money(principal)}</td></tr>
-    <tr><td>Remaining downpayment after this payment</td><td class="text-right">${money(remainingAfter)}</td></tr>
-    <tr><td>Months paid after this payment</td><td class="text-right">${monthsAfter}</td></tr>
-  </tbody>
-</table>
-<div class="footer">
-  <p style="font-weight:bold;margin:0;">This installment has been settled. Thank you for your payment.</p>
-  <p style="margin:4px 0 0;font-size:11px;color:#64748b;">Transaction Reference: ${trn} · Payment Date &amp; Time: ${paidDate}</p>
+  <table class="title-row">
+    <tr>
+      <td style="width:50%;"><span class="sales-invoice-badge">SALES INVOICE</span></td>
+      <td class="invoice-no" style="width:50%;">N&#186; <span class="num">${invoiceNo}</span></td>
+    </tr>
+  </table>
+  <table class="meta-grid">
+    <tr>
+      <td class="meta-label">Sold to:</td>
+      <td class="meta-line" style="width:44%;">${bill.buyer}</td>
+      <td style="width:3%;"></td>
+      <td class="meta-label">Date:</td>
+      <td class="meta-line" style="width:32%;">${paidDate}</td>
+    </tr>
+    <tr>
+      <td class="meta-label">Address:</td>
+      <td class="meta-line">Block ${bill.block}, Lot ${bill.lot}</td>
+      <td></td>
+      <td class="meta-label">Terms:</td>
+      <td class="meta-line">Installment ${installmentNo} of ${bill.total_months}</td>
+    </tr>
+    <tr>
+      <td class="meta-label">Business Style:</td>
+      <td class="meta-line">Althesa Village</td>
+      <td></td>
+      <td class="meta-label">OSCA/PWD ID No.:</td>
+      <td class="meta-line">&nbsp;</td>
+    </tr>
+    <tr>
+      <td class="meta-label">Payment Method:</td>
+      <td class="meta-line">${cleanMop}</td>
+      <td></td>
+      <td class="meta-label">Cardholder's:</td>
+      <td class="meta-line">&nbsp;</td>
+    </tr>
+    <tr>
+      <td class="meta-label">Due Date:</td>
+      <td class="meta-line">${dueDate}</td>
+      <td></td>
+      <td class="meta-label">Signature:</td>
+      <td class="meta-line">&nbsp;</td>
+    </tr>
+  </table>
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th style="width:7%;">QTY</th>
+        <th style="width:8%;">UNIT</th>
+        <th style="width:49%;">DESCRIPTION</th>
+        <th style="width:17%;">UNIT PRICE</th>
+        <th style="width:19%;">AMOUNT</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="text-center">1</td>
+        <td class="text-center">mo.</td>
+        <td><strong>Downpayment — Installment ${installmentNo} of ${bill.total_months}</strong></td>
+        <td class="text-right">${money(principal)}</td>
+        <td class="text-right">${money(principal)}</td>
+      </tr>
+      <tr>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+        <td>Block ${bill.block}, Lot ${bill.lot} (TCP: ${money(bill.tcp)})</td>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+      </tr>
+      <tr>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+        <td>Total Downpayment: ${money(totalDp)} &bull; Applied: ${money(principal)} &bull; Remaining: ${money(remainingAfter)} (${monthsAfter})</td>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+      </tr>
+      <tr>
+        <td colspan="2" rowspan="6" style="border-right:none;">&nbsp;</td>
+        <td class="tax-label">VATable Sales</td>
+        <td class="tax-label">Total Sales (VAT Inclusive)</td>
+        <td class="text-right fw-bold">${money(amount)}</td>
+      </tr>
+      <tr>
+        <td class="tax-label">VAT-Exempt Sales &nbsp;&nbsp; <strong>${money(amount)}</strong></td>
+        <td class="tax-label">Less: VAT</td>
+        <td class="text-right">&#8212;</td>
+      </tr>
+      <tr>
+        <td class="tax-label">Zero Rated Sales</td>
+        <td class="tax-label">Amount: Net of VAT</td>
+        <td class="text-right">${money(amount)}</td>
+      </tr>
+      <tr>
+        <td class="tax-label">VAT Amount</td>
+        <td class="tax-label">Less: SC/PWD Discount</td>
+        <td class="text-right">&#8212;</td>
+      </tr>
+      <tr>
+        <td rowspan="2">&nbsp;</td>
+        <td class="tax-label">Amount Due</td>
+        <td class="text-right">${money(amount)}</td>
+      </tr>
+      <tr>
+        <td class="tax-label">Add: VAT</td>
+        <td class="text-right">&#8212;</td>
+      </tr>
+      <tr class="total-due-row">
+        <td colspan="4" class="text-right" style="text-transform:uppercase;">TOTAL AMOUNT DUE</td>
+        <td class="text-right">${money(amount)}</td>
+      </tr>
+    </tbody>
+  </table>
+  <table class="footer-grid">
+    <tr>
+      <td style="width:55%;font-size:9px;color:#000;">
+        Official Downpayment Receipt &bull; Payment Method: <strong>${cleanMop}</strong><br>
+        Recorded: ${paidDate}
+      </td>
+      <td style="width:45%;text-align:right;padding-top:22px;">
+        <div class="sig-line">Cashier / Authorized Signature</div>
+      </td>
+    </tr>
+  </table>
+  <div class="validity-note">"THIS INVOICE SHALL BE VALID FOR FIVE (5) YEARS FROM THE DATE OF ATP."</div>
 </div>
 </body>
 </html>`;
@@ -1217,6 +1339,9 @@
         const inpMonths = document.getElementById('calcMonths');
         const outDp = document.getElementById('calcDpAmount');
         const outAmort = document.getElementById('calcAmortization');
+        const outResNote = document.getElementById('calcReservationNote');
+        let currentReservationFee = 0;
+        let selectedReservationId = '';
 
         function calculateAmortization() {
             const tcpStr = inpTcp.value.replace(/,/g, '');
@@ -1224,11 +1349,22 @@
             const percent = parseFloat(inpPercent.value) || 0;
             const months = parseInt(inpMonths.value) || 1;
 
-            const dpAmount = tcp * (percent / 100);
-            const amortization = dpAmount / months;
+            const grossDp = tcp * (percent / 100);
+            const totalDp = Math.max(0, grossDp - currentReservationFee);
+            const amortization = totalDp / months;
 
-            outDp.value = dpAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            outDp.value = totalDp.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             outAmort.textContent = `₱${amortization.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+            if (outResNote) {
+                if (currentReservationFee > 0) {
+                    outResNote.textContent = `Reservation fee deducted: -₱${currentReservationFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    outResNote.style.display = 'block';
+                } else {
+                    outResNote.textContent = '';
+                    outResNote.style.display = 'none';
+                }
+            }
         }
 
         inpTcp.addEventListener('input', calculateAmortization);
@@ -1258,6 +1394,10 @@
                 document.getElementById('calcTcp').value = Number(match.contract_price).toLocaleString('en-US');
                 validateTcpInput(true);
                 calculateAmortization();
+            } else {
+                selectedReservationId = '';
+                currentReservationFee = 0;
+                calculateAmortization();
             }
         }
 
@@ -1266,10 +1406,11 @@
 
         function autoFillDownpaymentBuyer(select) {
             const option = select.options[select.selectedIndex];
-            if (option.value) {
-                document.getElementById('calcFirstName').value = option.getAttribute('data-first');
-                document.getElementById('calcLastName').value = option.getAttribute('data-last');
+            if (option && option.value) {
+                document.getElementById('calcFirstName').value = option.getAttribute('data-first') || '';
+                document.getElementById('calcLastName').value = option.getAttribute('data-last') || '';
 
+                selectedReservationId = option.getAttribute('data-reservation-id') || '';
                 const blk = option.getAttribute('data-block');
                 const lot = option.getAttribute('data-lot');
                 if (blk) {
@@ -1290,7 +1431,8 @@
                 }
 
                 const tcp = option.getAttribute('data-tcp');
-                const equity = option.getAttribute('data-equity'); // DP
+                const resAmt = parseFloat(option.getAttribute('data-reservation-amount'));
+                currentReservationFee = !isNaN(resAmt) && resAmt > 0 ? resAmt : 0;
                 if (tcp) {
                     document.getElementById('calcTcp').value = Number(tcp).toLocaleString('en-US');
                     validateTcpInput(true);
@@ -1306,11 +1448,11 @@
                         tcpInput.style.borderColor = '#cbd5e1';
                     }
                 }
-                if (equity && tcp) {
-                    const perc = (Number(equity) / Number(tcp)) * 100;
-                    document.getElementById('calcDpPercent').value = perc.toFixed(2);
-                }
 
+                calculateAmortization();
+            } else {
+                selectedReservationId = '';
+                currentReservationFee = 0;
                 calculateAmortization();
             }
         }
@@ -1390,13 +1532,14 @@
 
             const tcp = tcpValidation.value;
             const selectedOption = buyerSelect.options[buyerSelect.selectedIndex];
-            const reservationId = selectedOption?.getAttribute('data-reservation-id') || '';
+            const reservationId = selectedReservationId || selectedOption?.getAttribute('data-reservation-id') || '';
             const firstName = document.getElementById('calcFirstName').value || selectedOption?.getAttribute('data-first') || 'New';
             const lastName = document.getElementById('calcLastName').value || selectedOption?.getAttribute('data-last') || 'Buyer';
             const contractDate = new Date().toISOString().split('T')[0];
             const blk = document.getElementById('calcBlk')?.value || selectedOption?.getAttribute('data-block') || '';
             const lot = document.getElementById('calcLot')?.value || selectedOption?.getAttribute('data-lot') || '';
-            const dpAmount = tcp * (percent / 100);
+            const grossDp = tcp * (percent / 100);
+            const dpAmount = Math.max(0, grossDp - currentReservationFee);
             const amortization = dpAmount / months;
 
             const nextDate = new Date();
@@ -1501,6 +1644,33 @@
                     }
                 });
             }
+
+            const dpStatusCtx = document.getElementById('downpaymentStatusChart')?.getContext('2d');
+            if (dpStatusCtx) {
+                new Chart(dpStatusCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Early', 'On-Time', 'Late', 'Pending'],
+                        datasets: [{
+                            data: [{{ $dpEarlyCount }}, {{ $dpOnTimeCount }}, {{ $dpLateCount }}, {{ $dpPendingCount }}],
+                            backgroundColor: ['#3b82f6', '#10b981', '#ef4444', '#94a3b8'],
+                            borderWidth: 0,
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '72%',
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { usePointStyle: true, boxWidth: 8, font: { size: 11, weight: '600' } }
+                            }
+                        }
+                    }
+                });
+            }
         });
         window.addEventListener('DOMContentLoaded', () => {
             bindGisDropdowns('calcBlk', 'calcLot');
@@ -1518,7 +1688,8 @@
             if (shouldOpenCreate) {
                 openContractModal();
                 const buyerId = params.get('buyer_id');
-                const preselected = buyerId ? preselectDownpaymentBuyer(buyerId) : false;
+                const reservationId = params.get('reservation_id');
+                const preselected = buyerId ? preselectDownpaymentBuyer(buyerId, reservationId) : false;
                 if (buyerId && !preselected) {
                     Swal.fire({
                         icon: 'info',

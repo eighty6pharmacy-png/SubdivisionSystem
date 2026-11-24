@@ -69,6 +69,39 @@
         </div>
     </div>
 
+    <!-- Reservation, Downpayment & Finance Status Summary -->
+    <div class="responsive-grid fade-up-2" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; margin-bottom: 24px;">
+        <div class="card" style="padding: 18px 20px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span class="card-title">Reservation</span>
+                <a href="/admin/reservation-fee" style="font-size: 12px; font-weight: 700; color: #2563eb; text-decoration: none;">View &rarr;</a>
+            </div>
+            <div style="height: 170px; position: relative; display: flex; justify-content: center;">
+                <canvas id="dashReservationStatusChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card" style="padding: 18px 20px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span class="card-title">Downpayment</span>
+                <a href="/admin/downpayment-fee" style="font-size: 12px; font-weight: 700; color: #2563eb; text-decoration: none;">View &rarr;</a>
+            </div>
+            <div style="height: 170px; position: relative; display: flex; justify-content: center;">
+                <canvas id="dashDownpaymentStatusChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card" style="padding: 18px 20px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span class="card-title">Finance</span>
+                <a href="/admin/financing" style="font-size: 12px; font-weight: 700; color: #2563eb; text-decoration: none;">View &rarr;</a>
+            </div>
+            <div style="height: 170px; position: relative; display: flex; justify-content: center;">
+                <canvas id="dashFinanceStatusChart"></canvas>
+            </div>
+        </div>
+    </div>
+
     <!-- Community Utilities & Consumption Analytics Section (Electricity & Water) -->
     <div class="fade-up-2" style="margin-bottom: 24px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
@@ -629,6 +662,45 @@
                     }
                 });
             }
+
+            const initSummaryDonut = (id, labels, data, colors) => {
+                const c = document.getElementById(id)?.getContext('2d');
+                if (!c) return;
+                new Chart(c, {
+                    type: 'doughnut',
+                    data: {
+                        labels,
+                        datasets: [{ data, backgroundColor: colors, borderWidth: 0, hoverOffset: 4 }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '70%',
+                        plugins: {
+                            legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11, weight: '600' } } }
+                        }
+                    }
+                });
+            };
+
+            initSummaryDonut(
+                'dashReservationStatusChart',
+                ['Active', 'Cancelled'],
+                [{{ $reservationStatusSummary['active'] ?? 0 }}, {{ $reservationStatusSummary['cancelled'] ?? 0 }}],
+                ['#f59e0b', '#ef4444']
+            );
+            initSummaryDonut(
+                'dashDownpaymentStatusChart',
+                ['Early', 'On-Time', 'Late', 'Pending'],
+                [{{ $downpaymentStatusSummary['early'] ?? 0 }}, {{ $downpaymentStatusSummary['on_time'] ?? 0 }}, {{ $downpaymentStatusSummary['late'] ?? 0 }}, {{ $downpaymentStatusSummary['pending'] ?? 0 }}],
+                ['#3b82f6', '#10b981', '#ef4444', '#94a3b8']
+            );
+            initSummaryDonut(
+                'dashFinanceStatusChart',
+                ['Pending', 'Processing', 'Released', 'Cleared'],
+                [{{ $financeStatusSummary['pending'] ?? 0 }}, {{ $financeStatusSummary['processing'] ?? 0 }}, {{ $financeStatusSummary['released'] ?? 0 }}, {{ $financeStatusSummary['cleared'] ?? 0 }}],
+                ['#94a3b8', '#f59e0b', '#3b82f6', '#10b981']
+            );
         });
 
         // Utility Chart Metric Toggle Switchers

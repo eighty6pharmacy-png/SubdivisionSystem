@@ -18,15 +18,15 @@
 
             <div style="margin-bottom: 32px;">
                 <div class="layer-item active" onclick="setLayer('occupancy', this)">
-                    <span style="font-size: 16px;">🏠</span>
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
                     <span>Occupancy Status</span>
                 </div>
                 <div class="layer-item" onclick="setLayer('electricity', this)">
-                    <span style="font-size: 16px;">⚡</span>
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
                     <span>Electricity Status</span>
                 </div>
                 <div class="layer-item" onclick="setLayer('water', this)">
-                    <span style="font-size: 16px;">💧</span>
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3c-4 6-6 9-6 12a6 6 0 1012 0c0-3-2-6-6-12z"/></svg>
                     <span>Water Status</span>
                 </div>
             </div>
@@ -82,34 +82,12 @@
 
             <div style="background: #fff; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
                 <label
-                    style="font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; font-weight: 800; margin-bottom: 16px; display: block;">Map
+                    style="font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; font-weight: 800; margin-bottom: 12px; display: block;">Map
                     Controls</label>
-
-                <div style="margin-bottom: 16px;">
-                    <div
-                        style="display: flex; justify-content: space-between; font-size: 11px; color: #64748b; margin-bottom: 6px;">
-                        <span>Rotation</span>
-                        <span id="rotVal">164°</span>
-                    </div>
-                    <input type="range" id="rotateZ" min="-180" max="180" value="164" oninput="updateMapTransform()"
-                        style="width: 100%;">
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <div
-                        style="display: flex; justify-content: space-between; font-size: 11px; color: #64748b; margin-bottom: 6px;">
-                        <span>Manual Zoom</span>
-                        <span id="zoomVal">18.0z</span>
-                    </div>
-                    <input type="range" id="zoom" min="16" max="21" step="0.1" value="18" oninput="updateMapTransform()"
-                        style="width: 100%;">
-                </div>
 
                 <button class="btn btn-outline"
                     style="width: 100%; justify-content: center; padding: 10px; font-size: 12px; border-radius: 8px;"
                     onclick="resetMap()">Reset View</button>
-                <p style="font-size: 10px; color: #94a3b8; margin-top: 12px; text-align: center;">Tip: Scroll mouse to zoom
-                </p>
             </div>
         </aside>
 
@@ -163,10 +141,10 @@
                 <div class="info-card" style="background: white; border-style: dashed;">
                     <label style="font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; font-weight: 800; margin-bottom: 12px; display: block;">Property Status</label>
                     <button id="btnUpdateOccupancy" class="btn btn-primary" style="width: 100%; padding: 10px; font-size: 11px; justify-content: center; background: #334155; border: none;">
-                        <span style="margin-right: 4px;">🔄</span> Update Occupancy Status
+                        Update Occupancy Status
                     </button>
                     <div id="occupancyLockedMsg" style="display: none; padding: 10px; font-size: 11px; text-align: center; color: #64748b; background: #f8fafc; border-radius: 8px;">
-                        <span style="margin-right: 4px;">🔒</span> Occupancy locked (Resident assigned)
+                        Occupancy locked (Resident assigned)
                     </div>
                 </div>
             </div>
@@ -211,7 +189,7 @@
                         <span style="margin-right: 4px;">✎</span> Edit Info
                     </button>
                     <button id="btnSampleComputation" class="btn" style="flex: 1; padding: 10px 8px; font-size: 12px; justify-content: center; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; border: none; font-weight: 700; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.25); cursor: pointer; transition: all 0.2s; white-space: nowrap;">
-                        <span style="margin-right: 4px;">📊</span> Computation
+                        Computation
                     </button>
                 </div>
             </div>
@@ -515,11 +493,10 @@
                 map = L.map('adminMapContainer', { 
                     zoomSnap: 0.1,
                     rotate: true,
-                    bearing: 164,
-                    rotateControl: {
-                        closeOnZeroBearing: false,
-                        position: 'topleft'
-                    }
+                    bearing: -140,
+                    rotateControl: false,
+                    touchRotate: false,
+                    shiftKeyRotate: false
                 }).setView([13.545991366048902, 123.25622881776766], 18);
 
                 const [rawAmenities, rawBufferedRoads, rawHouses, lotsData, appSettings] = await Promise.all([
@@ -540,11 +517,6 @@
                 const houses = (calib && typeof transformGeoJSON === 'function' && rawHouses) ? transformGeoJSON(rawHouses, calib) : rawHouses;
 
                 if (calib) {
-                    map.setBearing(0);
-                    const rotInp = document.getElementById('rotateZ');
-                    const rotVal = document.getElementById('rotVal');
-                    if (rotInp) rotInp.value = 0;
-                    if (rotVal) rotVal.innerText = '0°';
                     if (calib.baseLayer === 'satellite') {
                         L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 22, maxNativeZoom: 20 }).addTo(map);
                     } else if (calib.baseLayer === 'street') {
@@ -616,13 +588,9 @@
                     }
                 }
 
-                setTimeout(() => {
-                    const z = map.getZoom();
-                    const zoomInp = document.getElementById('zoom');
-                    const zoomVal = document.getElementById('zoomVal');
-                    if (zoomInp) zoomInp.value = z.toFixed(1);
-                    if (zoomVal) zoomVal.innerText = z.toFixed(1) + 'z';
-                }, 200);
+                if (map && map.setBearing) {
+                    map.setBearing(-140);
+                }
             } catch (err) {
                 console.error('Failed to load GIS map:', err);
             } finally {
@@ -767,7 +735,7 @@
 
             const btnSample = document.getElementById('btnSampleComputation');
             if (btnSample) {
-                btnSample.innerHTML = '<span style="margin-right: 4px;">📊</span> Computation';
+                btnSample.textContent = 'Computation';
                 if (hasPrice) {
                     btnSample.style.opacity = '1';
                     btnSample.style.background = 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)';
@@ -800,42 +768,12 @@
         }
 
         function resetMap() {
-            if (houseLayer) {
+            if (map && houseLayer && houseLayer.getBounds && houseLayer.getBounds().isValid()) {
                 map.fitBounds(houseLayer.getBounds(), { padding: [30, 30] });
-                setTimeout(() => {
-                    const z = map.getZoom();
-                    const zoomInp = document.getElementById('zoom');
-                    const zoomVal = document.getElementById('zoomVal');
-                    if (zoomInp) zoomInp.value = z.toFixed(1);
-                    if (zoomVal) zoomVal.innerText = z.toFixed(1) + 'z';
-                }, 200);
             }
-            const rotZInp = document.getElementById('rotateZ');
-            if (rotZInp) rotZInp.value = 164; 
-            updateMapTransform();
-        }
-
-        function updateMapTransform() {
-            const rotZInp = document.getElementById('rotateZ');
-            const zoomInp = document.getElementById('zoom');
-            
-            if (!rotZInp || !zoomInp) return;
-
-            const rZ = parseFloat(rotZInp.value);
-            const z = parseFloat(zoomInp.value);
-            
-            if (map) {
-                map.setZoom(z);
-                if (map.setBearing) {
-                    map.setBearing(rZ);
-                }
+            if (map && map.setBearing) {
+                map.setBearing(-140);
             }
-
-            // Update Sidebar Labels
-            const rotVal = document.getElementById('rotVal');
-            const zoomVal = document.getElementById('zoomVal');
-            if (rotVal) rotVal.innerText = rZ + '°';
-            if (zoomVal) zoomVal.innerText = z.toFixed(1) + 'z';
         }
 
         async function updateOccupancyStatus() {
@@ -1083,12 +1021,7 @@
 
         // Initialize defaults properly
         document.addEventListener('DOMContentLoaded', () => {
-            const rotZInp = document.getElementById('rotateZ');
-            if (rotZInp) rotZInp.value = 164;
-            
-            initAdminMap().then(() => {
-                updateMapTransform();
-            });
+            initAdminMap();
         });
     </script>
 @endsection

@@ -174,14 +174,29 @@
     </div>
 
     <!-- Monthly Water Sales & Collection Trend Bar Graph -->
-    <div style="background: #fff; border: 1px solid var(--bill-border); border-radius: 16px; padding: 16px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+    @php
+        $chartData = getMonthlyChartData('water');
+        $twelveMonthTotal = array_sum($chartData['data'] ?? []);
+    @endphp
+    <div class="revenue-chart-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
             <div>
                 <h3 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0;">Monthly Water Revenue Trends</h3>
-                <p style="font-size: 11px; color: #64748b; margin: 2px 0 0 0;">12-month collection performance (in ₱ Thousands)</p>
+                <p style="font-size: 11px; color: #64748b; margin: 2px 0 0 0;">12-month collection performance</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: #64748b;">
+                    <span style="width: 10px; height: 10px; border-radius: 3px; background: #0284c7;"></span> Current Month
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: #64748b;">
+                    <span style="width: 10px; height: 10px; border-radius: 3px; background: #22d3ee;"></span> Prior Months
+                </span>
+                <span style="background: #e0f2fe; color: #0369a1; font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 9999px;">
+                    12-Mo Total: ₱{{ number_format($twelveMonthTotal, 2) }}
+                </span>
             </div>
         </div>
-        <div style="height: 180px; position: relative;">
+        <div style="height: 220px; position: relative;">
             <canvas id="waterSalesChart"></canvas>
         </div>
     </div>
@@ -189,77 +204,90 @@
     <!-- Analytics Dashboard -->
     <div class="analytics-grid">
 
-        <!-- Card 1: Payment Behaviour + Methods -->
+        <!-- Card 1: Paid Status Breakdown -->
+        @php
+            $paidAccounts = collect($bills)->where('status', 'paid')->count();
+            $partialAccounts = collect($bills)->where('status', 'partially_paid')->count();
+            $unpaidAccounts = max(0, $totalBills - $paidAccounts - $partialAccounts);
+            $paidPct = $totalBills > 0 ? round(($paidAccounts / $totalBills) * 100) : 0;
+            $partialPct = $totalBills > 0 ? round(($partialAccounts / $totalBills) * 100) : 0;
+            $unpaidPct = $totalBills > 0 ? max(0, 100 - $paidPct - $partialPct) : 0;
+            $partialOffset = $paidPct;
+            $unpaidOffset = $paidPct + $partialPct;
+        @endphp
         <div class="analytic-card">
             <div class="card-title">
-                <span>Payment Behaviour</span>
-                <span style="font-size:11px; color:#94a3b8; font-weight:600;">Current Cycle</span>
+                <span>Payment Status (Paid)</span>
+                <span class="card-badge">Current Cycle</span>
             </div>
             <div class="donut-chart-container">
-                @php
-                    $latePct = $stats['percentages']['Late / At Risk'] ?? 0;
-                    $onTimePct = $stats['percentages']['On-Time'] ?? 0;
-                    $earlyPct = $stats['percentages']['Early Payers'] ?? 0;
-                    $onTimeOffset = $latePct;
-                    $earlyOffset = $latePct + $onTimePct;
-                @endphp
-                <svg width="200" height="200" viewBox="0 0 42 42" class="donut-svg">
-                    <circle class="donut-segment segment-late"   cx="21" cy="21" r="15.915" stroke-dasharray="{{ $latePct }} {{ 100 - $latePct }}"></circle>
-                    <circle class="donut-segment segment-ontime" cx="21" cy="21" r="15.915" stroke-dasharray="{{ $onTimePct }} {{ 100 - $onTimePct }}" stroke-dashoffset="-{{ $onTimeOffset }}"></circle>
-                    <circle class="donut-segment segment-early"  cx="21" cy="21" r="15.915" stroke-dasharray="{{ $earlyPct }} {{ 100 - $earlyPct }}" stroke-dashoffset="-{{ $earlyOffset }}"></circle>
-                </svg>
-                <div class="donut-legend">
+                <div class="donut-ring-wrap">
+                    <svg viewBox="0 0 42 42" class="donut-svg">
+                        <circle class="donut-segment segment-track" cx="21" cy="21" r="15.915" stroke-dasharray="100 0"></circle>
+                        @if($totalBills > 0)
+                            <circle class="donut-segment segment-paid" cx="21" cy="21" r="15.915" stroke-dasharray="{{ $paidPct }} {{ 100 - $paidPct }}" stroke-dashoffset="0"></circle>
+                            <circle class="donut-segment segment-partial" cx="21" cy="21" r="15.915" stroke-dasharray="{{ $partialPct }} {{ 100 - $partialPct }}" stroke-dashoffset="-{{ $partialOffset }}"></circle>
+                            <circle class="donut-segment segment-unpaid" cx="21" cy="21" r="15.915" stroke-dasharray="{{ $unpaidPct }} {{ 100 - $unpaidPct }}" stroke-dashoffset="-{{ $unpaidOffset }}"></circle>
+                        @endif
+                    </svg>
+                    <div class="donut-center-label">
+                        <div class="donut-center-pct" id="paidDonutPct">{{ $paidPct }}%</div>
+                        <span class="donut-center-sub">Paid</span>
+                        <span class="donut-center-count" id="paidDonutSub">{{ $paidAccounts }} / {{ $totalBills }}</span>
+                    </div>
+                </div>
+                <div class="donut-legend" id="paidDonutLegend">
                     <div class="legend-item">
-                        <span class="legend-label"><span class="dot" style="background: var(--bill-success);"></span> Early Payers</span>
-                        <strong>{{ $earlyPct }}%</strong>
+                        <span class="legend-label"><span class="dot" style="background: #10b981;"></span> Paid</span>
+                        <span><span class="legend-count">{{ $paidAccounts }} accts</span><strong>{{ $paidPct }}%</strong></span>
                     </div>
                     <div class="legend-item">
-                        <span class="legend-label"><span class="dot" style="background: var(--bill-primary);"></span> On-Time</span>
-                        <strong>{{ $onTimePct }}%</strong>
+                        <span class="legend-label"><span class="dot" style="background: #3b82f6;"></span> Partially Paid</span>
+                        <span><span class="legend-count">{{ $partialAccounts }} accts</span><strong>{{ $partialPct }}%</strong></span>
                     </div>
                     <div class="legend-item">
-                        <span class="legend-label"><span class="dot" style="background: var(--bill-warning);"></span> Late</span>
-                        <strong>{{ $latePct }}%</strong>
+                        <span class="legend-label"><span class="dot" style="background: #f59e0b;"></span> Unpaid</span>
+                        <span><span class="legend-count">{{ $unpaidAccounts }} accts</span><strong>{{ $unpaidPct }}%</strong></span>
                     </div>
                 </div>
             </div>
-
         </div>
+
         <!-- Card 2: Collection Efficiency Ratio -->
         <div class="analytic-card">
             <div class="card-title">
                 <span>Collection Efficiency</span>
+                <span class="card-badge">Revenue Ratio</span>
             </div>
             <div class="cer-gauge-wrap">
                 <div class="cer-gauge-ring">
-                    <svg width="200" height="200" viewBox="0 0 120 120">
+                    <svg viewBox="0 0 120 120">
                         <circle class="gauge-bg" cx="60" cy="60" r="52"></circle>
-                        <circle class="gauge-fill" cx="60" cy="60" r="52"
+                        <circle id="cerGaugeFill" class="gauge-fill" cx="60" cy="60" r="52"
                             stroke-dasharray="{{ round($cerStroke, 2) }} {{ round($circumference, 2) }}"
                             stroke-dashoffset="0"></circle>
                     </svg>
                     <div class="cer-gauge-label">
-                        {{ $cerPct }}%
+                        <span id="cerGaugePct" style="font-size: 30px; font-weight: 800; color: #0f172a; margin-top: 0;">{{ $cerPct }}%</span>
                         <span>CER</span>
                     </div>
                 </div>
                 <div class="cer-meta">
                     <div class="cer-meta-row">
                         <span>Total Billed</span>
-                        <strong>₱{{ number_format($totalBilled, 2) }}</strong>
+                        <strong id="cerTotalBilled">₱{{ number_format($totalBilled, 2) }}</strong>
                     </div>
                     <div class="cer-meta-row">
                         <span>Total Collected</span>
-                        <strong style="color: var(--bill-success);">₱{{ number_format($totalCollected, 2) }}</strong>
+                        <strong id="cerTotalCollected" style="color: var(--bill-success);">₱{{ number_format($totalCollected, 2) }}</strong>
                     </div>
                     <div class="cer-meta-row">
                         <span>Outstanding</span>
-                        <strong style="color: var(--bill-danger);">₱{{ number_format($totalBilled - $totalCollected, 2) }}</strong>
+                        <strong id="cerOutstanding" style="color: var(--bill-danger);">₱{{ number_format(max(0, $totalBilled - $totalCollected), 2) }}</strong>
                     </div>
-                    <div style="height: 1px; background: var(--bill-border); margin: 4px 0;"></div>
                     <div class="cer-meta-row">
                         <span>Accounts Paid</span>
-                        <strong>{{ $paidBills }} / {{ $totalBills }}</strong>
+                        <strong id="cerAccountsPaid">{{ $paidBills }} / {{ $totalBills }}</strong>
                     </div>
                 </div>
             </div>
@@ -862,55 +890,77 @@
             }
         }
 
-        updatePredictiveDonut();
+        // Update Collection Efficiency card
+        const cerPct = totalBilled > 0 ? Math.round((totalCollected / totalBilled) * 100) : 0;
+        const circumference = 2 * Math.PI * 52;
+        const cerStroke = (cerPct / 100) * circumference;
+        const cerFill = document.getElementById('cerGaugeFill');
+        if (cerFill) cerFill.setAttribute('stroke-dasharray', `${cerStroke.toFixed(2)} ${circumference.toFixed(2)}`);
+        const cerPctEl = document.getElementById('cerGaugePct');
+        if (cerPctEl) cerPctEl.textContent = `${cerPct}%`;
+        const cerBilledEl = document.getElementById('cerTotalBilled');
+        if (cerBilledEl) cerBilledEl.textContent = `₱${totalBilled.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        const cerColEl = document.getElementById('cerTotalCollected');
+        if (cerColEl) cerColEl.textContent = `₱${totalCollected.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        const cerOutEl = document.getElementById('cerOutstanding');
+        if (cerOutEl) cerOutEl.textContent = `₱${Math.max(0, totalBilled - totalCollected).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        const cerAcctsEl = document.getElementById('cerAccountsPaid');
+        if (cerAcctsEl) cerAcctsEl.textContent = `${countPaid} / ${countPaid + countUnpaid}`;
+
+        updatePaidDonut();
     }
 
-    function updatePredictiveDonut() {
+    function updatePaidDonut() {
         const rows = document.querySelectorAll('.bill-row');
-        let early = 0, ontime = 0, late = 0;
-        let valid = 0;
+        let paid = 0, partial = 0, unpaid = 0;
 
         rows.forEach(row => {
-            const behavior = row.dataset.behavior;
-            if (behavior === 'Early') early++;
-            if (behavior === 'On-Time') ontime++;
-            if (behavior === 'Late') late++;
-            if (['Early','On-Time','Late'].includes(behavior)) valid++;
+            const st = (row.dataset.status || '').toLowerCase();
+            if (st === 'paid') paid++;
+            else if (st === 'partially_paid') partial++;
+            else unpaid++;
         });
-        
-        let total = valid;
 
-        const pEarly = total > 0 ? Math.round((early / total) * 100) : 0;
-        const pOntime = total > 0 ? Math.round((ontime / total) * 100) : 0;
-        const pLate = total > 0 ? Math.round((late / total) * 100) : 0;
+        const total = paid + partial + unpaid;
+        const pPaid = total > 0 ? Math.round((paid / total) * 100) : 0;
+        const pPartial = total > 0 ? Math.round((partial / total) * 100) : 0;
+        const pUnpaid = total > 0 ? Math.max(0, 100 - pPaid - pPartial) : 0;
+
+        const pctEl = document.getElementById('paidDonutPct');
+        if (pctEl) pctEl.textContent = `${pPaid}%`;
+        const subEl = document.getElementById('paidDonutSub');
+        if (subEl) subEl.textContent = `${paid} / ${total}`;
 
         const donutSvg = document.querySelector('.donut-svg');
         if (donutSvg) {
             if (total === 0) {
-                donutSvg.innerHTML = `
-                    <circle class="donut-segment" cx="21" cy="21" r="15.915" stroke-dasharray="100 0" stroke="#e2e8f0"></circle>
-                `;
+                donutSvg.innerHTML = `<circle class="donut-segment segment-track" cx="21" cy="21" r="15.915" stroke-dasharray="100 0"></circle>`;
             } else {
                 donutSvg.innerHTML = `
-                    <circle class="donut-segment segment-late" cx="21" cy="21" r="15.915" stroke-dasharray="${pLate} ${100-pLate}"></circle>
-                    <circle class="donut-segment segment-ontime" cx="21" cy="21" r="15.915" stroke-dasharray="${pOntime} ${100-pOntime}" stroke-dashoffset="-${pLate}"></circle>
-                    <circle class="donut-segment segment-early" cx="21" cy="21" r="15.915" stroke-dasharray="${pEarly} ${100-pEarly}" stroke-dashoffset="-${pLate + pOntime}"></circle>
+                    <circle class="donut-segment segment-track" cx="21" cy="21" r="15.915" stroke-dasharray="100 0"></circle>
+                    <circle class="donut-segment segment-paid" cx="21" cy="21" r="15.915" stroke-dasharray="${pPaid} ${100 - pPaid}" stroke-dashoffset="0"></circle>
+                    <circle class="donut-segment segment-partial" cx="21" cy="21" r="15.915" stroke-dasharray="${pPartial} ${100 - pPartial}" stroke-dashoffset="-${pPaid}"></circle>
+                    <circle class="donut-segment segment-unpaid" cx="21" cy="21" r="15.915" stroke-dasharray="${pUnpaid} ${100 - pUnpaid}" stroke-dashoffset="-${pPaid + pPartial}"></circle>
                 `;
             }
-            
-            const legend = document.querySelector('.donut-legend');
-            if (total === 0) {
-                legend.innerHTML = `
-                    <div class="legend-item" style="justify-content: center; color: #64748b;">No behavioral data yet.</div>
-                `;
-            } else {
-                legend.innerHTML = `
-                    <div class="legend-item"><span class="legend-label"><span class="dot" style="background: var(--bill-success);"></span> Early Payers</span><strong>${pEarly}%</strong></div>
-                    <div class="legend-item"><span class="legend-label"><span class="dot" style="background: var(--bill-primary);"></span> On-Time</span><strong>${pOntime}%</strong></div>
-                    <div class="legend-item"><span class="legend-label"><span class="dot" style="background: var(--bill-warning);"></span> Late</span><strong>${pLate}%</strong></div>
-                `;
+
+            const legend = document.getElementById('paidDonutLegend') || document.querySelector('.donut-legend');
+            if (legend) {
+                if (total === 0) {
+                    legend.innerHTML = `<div class="legend-item" style="justify-content: center; color: #64748b;">No billing records yet.</div>`;
+                } else {
+                    legend.innerHTML = `
+                        <div class="legend-item"><span class="legend-label"><span class="dot" style="background: #10b981;"></span> Paid</span><span><span class="legend-count">${paid} accts</span><strong>${pPaid}%</strong></span></div>
+                        <div class="legend-item"><span class="legend-label"><span class="dot" style="background: #3b82f6;"></span> Partially Paid</span><span><span class="legend-count">${partial} accts</span><strong>${pPartial}%</strong></span></div>
+                        <div class="legend-item"><span class="legend-label"><span class="dot" style="background: #f59e0b;"></span> Unpaid</span><span><span class="legend-count">${unpaid} accts</span><strong>${pUnpaid}%</strong></span></div>
+                    `;
+                }
             }
         }
+    }
+
+    function updatePredictiveDonut() {
+        updatePaidDonut();
     }
 
     let smartPrevDate = '';
@@ -1811,50 +1861,66 @@
 
         const resident = bill.resident || 'N/A';
         const lot = bill.lot || 'N/A';
+        const addressLine = `${lot}, Zone 1, Tagbong, Pili, Camarines Sur`;
         const status = (bill.status || 'unpaid').toLowerCase();
-        const usageM3 = bill.usage_m3 || 0;
-        const prevReading = bill.prev_reading || 0;
-        const currReading = bill.curr_reading || 0;
+        const usageM3 = Number(bill.usage_m3 || 0);
+        const prevReading = Number(bill.prev_reading || 0);
+        const currReading = Number(bill.curr_reading || 0);
         const prevBalance = parseFloat(bill.previous_balance) || 0;
         const totalPaid = parseFloat(bill.total_paid) || 0;
         const issuedDate = bill.issued_date || 'N/A';
         const dueDate = bill.due || 'N/A';
-        const minM3 = bill.min_m3 || 10;
-        const minRate = bill.min_rate || 250;
-        const excessRate = bill.excess_rate || currentRate;
-        const excessCharge = usageM3 > minM3 ? (usageM3 - minM3) * excessRate : 0;
-        const currentCharges = minRate + excessCharge;
+        const prevDate = bill.prev_reading_date || issuedDate;
+        const currDate = bill.curr_reading_date || issuedDate;
+        const billingMonthYear = (bill.billing_period || issuedDate || '').toString().toUpperCase();
+        const minM3 = Number(bill.min_m3 || 10);
+        const minRate = Number(bill.min_rate || 250);
+        const excessRate = Number(bill.excess_rate || currentRate);
+        const excessM3 = Math.max(0, usageM3 - minM3);
+        const excessCharge = excessM3 * excessRate;
+        const baseAmount = Number(bill.base_amount !== undefined ? bill.base_amount : (minRate + excessCharge));
+        const displayMinRate = baseAmount > 0 ? minRate : 0;
+        const currentCharges = baseAmount;
         const amountBeforeDue = currentCharges + prevBalance;
-        const arrearsPenalty = amountBeforeDue * 0.05;
+        const penaltyRate = Number(bill.penalty_rate || currentPenaltyRate || 5);
+        const arrearsPenalty = Math.round(amountBeforeDue * (penaltyRate / 100) * 100) / 100;
         const amountAfterDue = amountBeforeDue + arrearsPenalty;
 
         const history = bill.payment_history || [];
         const latestPay = history.length > 0 ? history[0] : null;
         const trn = latestPay ? (latestPay.trn || 'N/A') : 'N/A';
-        const mop = latestPay ? (latestPay.method || 'Office Payment') : 'N/A';
+        const rawMop = latestPay ? (latestPay.method || 'Office') : 'N/A';
+        const mopLower = String(rawMop).toLowerCase();
+        const mop = mopLower.includes('gcash') ? 'GCash' : (mopLower.includes('maya') ? 'Maya' : (mopLower.includes('office') ? 'Office' : rawMop));
         const paidDate = latestPay ? (latestPay.date || 'N/A') : 'N/A';
 
-        const statusColor = status === 'paid' ? '#10b981' : (status === 'partially_paid' ? '#d97706' : '#ef4444');
-        const statusLabel = status === 'paid' ? 'PAID' : (status === 'partially_paid' ? 'PARTIALLY PAID' : 'UNPAID');
-        const isAtRisk = Boolean(bill.at_risk) && status !== 'paid';
+        const isPaid = status === 'paid';
+        const isPartial = !isPaid && (status === 'partially_paid' || totalPaid > 0);
+        const statusColor = isPaid ? '#047857' : (isPartial ? '#b45309' : '#dc2626');
+        const statusBg = isPaid ? '#ecfdf5' : (isPartial ? '#fffbeb' : '#fef2f2');
+        const statusLabel = isPaid ? 'PAID' : (isPartial ? 'PARTIALLY PAID' : 'UNPAID');
+        const isAtRisk = Boolean(bill.at_risk) && !isPaid;
         const effectiveTotal = isAtRisk ? amountAfterDue : amountBeforeDue;
-        const remainingBal = status === 'paid' ? 0 : Math.max(0, effectiveTotal - totalPaid);
+        const remainingBal = isPaid ? 0 : Math.max(0, effectiveTotal - totalPaid);
+        const fmt = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-        const paidRowsHtml = (status === 'paid' || totalPaid > 0) ? `
-            <tr><td style="padding:4px;border:none;"><strong>MOP:</strong></td><td style="padding:4px;border:none;">${mop}</td></tr>
-            <tr><td style="padding:4px;border:none;"><strong>Reference (TRN):</strong></td><td style="padding:4px;border:none;font-family:monospace;font-size:11px;">${trn}</td></tr>
-            <tr><td style="padding:4px;border:none;"><strong>Payment Date &amp; Time:</strong></td><td style="padding:4px;border:none;font-size:11px;font-weight:bold;">${paidDate}</td></tr>
-        ` : '';
-
-        const excessRowHtml = excessCharge > 0 ? `
-            <tr><td>Excess Consumption (${usageM3 - minM3}m³ x ₱${excessRate}/m³)</td><td class="text-right">₱${excessCharge.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
+        const paymentBoxHtml = (isPaid || isPartial) ? `
+            <div class="payment-box ${isPartial ? 'partial' : ''}">
+                <table class="clean-table" style="margin:0;">
+                    <tr><td style="width:45%;"><strong>Payment Method:</strong></td><td class="text-right fw-bold">${mop}</td></tr>
+                    <tr><td><strong>Amount Paid:</strong></td><td class="text-right fw-bold">₱${fmt(totalPaid)}</td></tr>
+                    ${isPartial ? `<tr><td><strong>Remaining Balance:</strong></td><td class="text-right fw-bold">₱${fmt(remainingBal)}</td></tr>` : ''}
+                    <tr><td><strong>Reference (TRN):</strong></td><td class="text-right" style="font-family:monospace;">${trn}</td></tr>
+                    <tr><td><strong>Payment Date:</strong></td><td class="text-right">${paidDate}</td></tr>
+                </table>
+            </div>
         ` : '';
 
         const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title></title>
+<title>Statement of Account - Water Bill</title>
 <style>
   @page { size: portrait; margin: 0; }
   body {
@@ -1862,141 +1928,121 @@
     max-width: 760px;
     margin: 0 auto;
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    color: #000;
+    color: #111;
     font-size: 11px;
-    line-height: 1.3;
-    padding: 8mm 12mm;
+    line-height: 1.38;
+    padding: 12mm 16mm;
     background: #fff;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     box-sizing: border-box;
   }
-  .header {
-    text-align: center;
-    border-bottom: 2px solid #000;
-    padding-bottom: 6px;
-    margin-bottom: 10px;
-    position: relative;
+  .statement-box { border: 1.5px solid #111; padding: 16px 20px; max-width: 520px; margin: 0 auto; background: #fff; position: relative; }
+  .status-mark {
+    position: absolute; top: 12px; right: 14px; border: 2px solid ${statusColor};
+    color: ${statusColor}; background: ${statusBg}; padding: 3px 10px;
+    font-size: ${isPartial ? '10.5px' : '12px'}; font-weight: bold; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: 1.2px;
   }
-  .header h1 {
-    color: #000;
-    margin: 0;
-    font-size: 17px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  .header p {
-    margin: 2px 0 0;
-    color: #000;
-    font-size: 10.5px;
-  }
-  .watermark {
-    position: absolute;
-    top: 2px;
-    right: 8px;
-    border: 2px solid ${statusColor};
-    color: ${statusColor};
-    padding: 4px 10px;
-    font-size: 16px;
-    font-weight: bold;
-    border-radius: 4px;
-    transform: rotate(8deg);
-    opacity: 0.85;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-  }
-  .row { width: 100%; margin-bottom: 10px; }
-  .col-half { width: 48%; display: inline-block; vertical-align: top; }
-  .box {
-    border: 1px solid #000;
-    padding: 6px 10px;
-    border-radius: 4px;
-    background: #fff;
-    box-sizing: border-box;
-  }
-  .box h3 {
-    margin-top: 0;
-    border-bottom: 1px solid #000;
-    padding-bottom: 3px;
-    margin-bottom: 4px;
-    font-size: 11.5px;
-    color: #000;
-    text-transform: uppercase;
-  }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-  th, td { padding: 4px 6px; border: 1px solid #000; color: #000; font-size: 10.5px; }
-  th { text-align: left; color: #000; background: #f0f0f0; font-weight: bold; }
+  .corp-header { text-align: center; margin-bottom: 12px; padding: 0 70px; }
+  .corp-header h1 { margin: 0; font-size: 13px; font-weight: bold; color: #111; }
+  .corp-header p { margin: 2px 0 0; font-size: 10.5px; color: #222; }
+  .corp-header .bill-type { margin-top: 4px; font-size: 11.5px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.4px; }
+  .customer-info { margin-bottom: 10px; font-size: 10.5px; }
+  .customer-info p { margin: 2px 0; }
+  .divider { border-top: 1px dashed #333; margin: 8px 0; }
+  .divider-solid { border-top: 1px solid #111; margin: 8px 0; }
+  .notice-title { text-align: center; margin: 6px 0; }
+  .notice-title h2 { margin: 0; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+  .notice-title p { margin: 2px 0 0; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+  .clean-table { width: 100%; border-collapse: collapse; margin: 4px 0; }
+  .clean-table th, .clean-table td { border: none; padding: 2.5px 4px; font-size: 10.5px; color: #111; }
+  .clean-table th { font-weight: bold; text-align: left; }
   .text-right { text-align: right; }
+  .text-center { text-align: center; }
   .fw-bold { font-weight: bold; }
-  .total-row td {
-    border-top: 2px solid #000;
-    border-bottom: 2px solid #000;
-    font-size: 11.5px;
-    font-weight: bold;
-    color: #000;
-    background: #f5f5f5;
-  }
-  .highlight-row td {
-    font-size: 10.5px;
-    font-weight: bold;
-    color: #000;
-    background: #fafafa;
-  }
-  .footer {
-    margin-top: 14px;
-    text-align: center;
-    font-size: 10px;
-    color: #000;
-    border-top: 1px solid #000;
-    padding-top: 8px;
-  }
+  .section-heading { text-align: center; font-weight: bold; font-size: 11px; text-transform: uppercase; margin: 6px 0 4px; letter-spacing: 0.4px; }
+  .payment-box { border: 1px solid #047857; background: #f0fdf4; padding: 7px 10px; border-radius: 4px; margin: 8px 0; font-size: 10px; }
+  .payment-box.partial { border-color: #b45309; background: #fffbeb; }
+  .dates-table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+  .dates-table td { border: none; padding: 2px 4px; font-size: 10.5px; }
+  .note-block { margin-top: 8px; font-size: 10px; }
+  .conforme-block { margin-top: 16px; font-size: 10.5px; }
+  .conforme-name { text-align: center; margin-top: 18px; font-weight: bold; text-transform: uppercase; }
+  .conforme-role { text-align: center; font-size: 10px; color: #333; }
 </style>
 </head>
 <body>
-<div class="header">
-  <h1>Mayon Builders Realty & Development Corporation</h1>
-  <p>Z1, Tagbong, Pili, Camarines Sur</p>
-  <p><strong>STATEMENT OF ACCOUNT (WATER)</strong></p>
-  <div class="watermark">${statusLabel}</div>
-</div>
-<div class="row">
-  <div class="col-half box" style="margin-right:2%;">
-    <h3>Account Details</h3>
-    <table style="border:none;margin-bottom:0;">
-      <tr><td style="padding:2px 4px;border:none;width:42%;"><strong>Name:</strong></td><td style="padding:2px 4px;border:none;">${resident}</td></tr>
-      <tr><td style="padding:2px 4px;border:none;"><strong>Address:</strong></td><td style="padding:2px 4px;border:none;">${lot}</td></tr>
-      <tr><td style="padding:2px 4px;border:none;"><strong>Date Issued:</strong></td><td style="padding:2px 4px;border:none;">${issuedDate}</td></tr>
-      <tr><td style="padding:2px 4px;border:none;"><strong>Due Date:</strong></td><td style="padding:2px 4px;border:none;font-weight:bold;">${dueDate}</td></tr>
-      ${paidRowsHtml}
-    </table>
+<div class="statement-box">
+  <div class="status-mark">${statusLabel}</div>
+  <div class="corp-header">
+    <h1>Mayon Builders Realty &amp; Development Corporation</h1>
+    <p>Zone 1, Tagbong, Pili, Camarines Sur</p>
+    <p>STATEMENT OF ACCOUNT</p>
+    <div class="bill-type">WATER BILL</div>
   </div>
-  <div class="col-half box">
-    <h3>Meter Information</h3>
-    <table style="border:none;margin-bottom:0;">
-      <tr><td style="padding:2px 4px;border:none;width:55%;"><strong>Previous Reading:</strong></td><td style="padding:2px 4px;border:none;text-align:right;">${prevReading}</td></tr>
-      <tr><td style="padding:2px 4px;border:none;"><strong>Current Reading:</strong></td><td style="padding:2px 4px;border:none;text-align:right;">${currReading}</td></tr>
-      <tr><td style="padding:2px 4px;border:none;"><strong>Consumption:</strong></td><td style="padding:2px 4px;border:none;text-align:right;font-weight:bold;">${usageM3} m³</td></tr>
-      <tr><td style="padding:2px 4px;border:none;"><strong>Min. Charge (First ${minM3}m³):</strong></td><td style="padding:2px 4px;border:none;text-align:right;">₱${minRate.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
-    </table>
+  <div class="customer-info">
+    <p><strong>Name:</strong> ${resident}</p>
+    <p><strong>Address:</strong> ${addressLine}</p>
   </div>
-</div>
-<h3 style="color:#000;border-bottom:1px solid #000;padding-bottom:3px;margin:10px 0 6px 0;font-size:11.5px;text-transform:uppercase;">Billing Summary</h3>
-<table>
-  <thead><tr><th>Description</th><th class="text-right">Amount (PHP)</th></tr></thead>
-  <tbody>
-    <tr><td>Minimum Charge (First ${minM3}m³)</td><td class="text-right">₱${minRate.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
-    ${excessRowHtml}
-    <tr><td><strong>Current Month Charges</strong></td><td class="text-right"><strong>₱${currentCharges.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></td></tr>
-    <tr><td>Previous Balance (Arrears)</td><td class="text-right">₱${prevBalance.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
-    <tr><td>Late Payment Penalty (5% if paid after due date)</td><td class="text-right">₱${arrearsPenalty.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
-    <tr class="highlight-row"><td><strong>Amount before ${dueDate}</strong></td><td class="text-right"><strong>₱${amountBeforeDue.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></td></tr>
-    <tr class="total-row"><td><strong>Amount after ${dueDate}</strong></td><td class="text-right"><strong>₱${amountAfterDue.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></td></tr>
-    ${totalPaid > 0 ? `<tr><td class="fw-bold">Total Paid</td><td class="text-right fw-bold" style="color:#10b981;">₱${totalPaid.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>` : ''}
-    ${status !== 'paid' && totalPaid > 0 ? `<tr class="total-row"><td class="fw-bold">Remaining Balance Due</td><td class="text-right fw-bold" style="color:#d97706;">₱${remainingBal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>` : ''}
-  </tbody>
-</table>
-<div class="footer">
-  ${status === 'paid' ? '<p style="font-weight:bold;margin:0;">This bill has been fully settled. Thank you for your payment!</p>' : '<p style="margin:0;">Please pay on or before the due date to avoid penalty charges.</p>'}
+  <div class="divider-solid"></div>
+  <div class="notice-title">
+    <h2>BILLING NOTICE</h2>
+    <p>${billingMonthYear}</p>
+  </div>
+  <div class="divider"></div>
+  <table class="clean-table">
+    <thead>
+      <tr>
+        <th style="width:40%;"></th>
+        <th style="width:32%;text-align:center;">Date</th>
+        <th style="width:28%;text-align:right;">Reading</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="fw-bold">Previous</td><td class="text-center">${prevDate}</td><td class="text-right">${fmt(prevReading)}</td></tr>
+      <tr><td class="fw-bold">Present</td><td class="text-center">${currDate}</td><td class="text-right">${fmt(currReading)}</td></tr>
+      <tr><td>Consumption</td><td class="text-center">:</td><td class="text-right fw-bold">${fmt(usageM3)} m&sup3;</td></tr>
+    </tbody>
+  </table>
+  <div class="divider"></div>
+  <div class="section-heading">SUMMARY OF CHARGES</div>
+  <table class="clean-table">
+    <thead>
+      <tr>
+        <th style="width:46%;">Description</th>
+        <th style="width:29%;text-align:center;">Computation</th>
+        <th style="width:25%;text-align:right;">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Current Bill (Minimum)</td><td class="text-center">First ${minM3}m&sup3;</td><td class="text-right">₱${fmt(displayMinRate)}</td></tr>
+      <tr><td>Excess Consumption</td><td class="text-center">${fmt(excessM3)} x ${fmt(excessRate)}</td><td class="text-right">₱${fmt(excessCharge)}</td></tr>
+      <tr><td>Previous Unpaid Bill</td><td class="text-center">Arrears</td><td class="text-right">₱${fmt(prevBalance)}</td></tr>
+      <tr><td>Late Payment Bill</td><td class="text-center">${penaltyRate}%</td><td class="text-right">₱${fmt(arrearsPenalty)}</td></tr>
+    </tbody>
+  </table>
+  <div class="divider"></div>
+  <table class="clean-table">
+    <tbody>
+      <tr><td class="fw-bold" style="width:68%;">Amount Before ${dueDate}</td><td class="text-right fw-bold" style="width:32%;">₱${fmt(amountBeforeDue)}</td></tr>
+      <tr><td class="fw-bold">Amount After ${dueDate}</td><td class="text-right fw-bold">₱${fmt(amountAfterDue)}</td></tr>
+    </tbody>
+  </table>
+  ${paymentBoxHtml}
+  <table class="dates-table">
+    <tr><td style="width:35%;">Date Issued:</td><td class="text-right" style="width:65%;">${issuedDate}</td></tr>
+    <tr><td>Due Date:</td><td class="text-right fw-bold">${dueDate}</td></tr>
+  </table>
+  <div class="note-block">
+    <strong>Note:</strong><br>
+    ${isPaid ? `This bill has been <strong>PAID</strong> via <strong>${mop}</strong>. Thank you for your payment!` : 'Please settle your payable on/before the due date. Thank you!'}
+  </div>
+  <div class="conforme-block">
+    <strong>Conforme:</strong>
+    <div class="conforme-name">${String(resident).toUpperCase()}</div>
+    <div class="conforme-role">Owner</div>
+  </div>
 </div>
 </body>
 </html>`;
@@ -2161,59 +2207,90 @@
         applyFilters();
         recalculateLedger();
 
-        const ctx = document.getElementById('waterSalesChart')?.getContext('2d');
-        if (ctx) {
-            @php
-                $chartData = getMonthlyChartData('water');
-            @endphp
+        initSalesChart();
+    });
 
-            window.salesChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: @json($chartData['labels']),
-                    datasets: [{
-                        label: 'Water Collection (₱)',
-                        data: @json($chartData['data']),
-                        backgroundColor: @json($chartData['colors']),
-                        borderRadius: 6,
-                        borderSkipped: false
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return 'Revenue: ₱' + context.raw.toLocaleString();
-                                }
+    function initSalesChart() {
+        const canvas = document.getElementById('waterSalesChart');
+        const ctx = canvas?.getContext('2d');
+        if (!ctx) return;
+
+        if (window.salesChart && typeof window.salesChart.destroy === 'function') {
+            window.salesChart.destroy();
+        }
+
+        @php
+            $chartData = getMonthlyChartData('water');
+        @endphp
+
+        const labels = @json($chartData['labels']);
+        const values = @json($chartData['data']);
+
+        const currentGrad = ctx.createLinearGradient(0, 0, 0, 220);
+        currentGrad.addColorStop(0, '#0284c7');
+        currentGrad.addColorStop(1, '#38bdf8');
+
+        const priorGrad = ctx.createLinearGradient(0, 0, 0, 220);
+        priorGrad.addColorStop(0, '#06b6d4');
+        priorGrad.addColorStop(1, '#a5f3fc');
+
+        const bgColors = values.map((_, idx) => idx === values.length - 1 ? currentGrad : priorGrad);
+
+        window.salesChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Water Collection (₱)',
+                    data: values,
+                    backgroundColor: bgColors,
+                    borderRadius: 8,
+                    borderSkipped: false,
+                    maxBarThickness: 38
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#0f172a',
+                        titleFont: { size: 12, weight: '700' },
+                        bodyFont: { size: 12, weight: '600' },
+                        padding: 10,
+                        cornerRadius: 8,
+                        displayColors: false,
+                        callbacks: {
+                            label: function(context) {
+                                return 'Revenue: ₱' + Number(context.raw || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                             }
                         }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            max: 100000,
-                            ticks: {
-                                callback: function(value) {
-                                    return '₱' + (value / 1000) + 'k';
-                                },
-                                font: { weight: '600', size: 11 },
-                                color: '#64748b'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        suggestedMax: 10000,
+                        border: { display: false },
+                        ticks: {
+                            callback: function(value) {
+                                return value >= 1000 ? '₱' + (value / 1000).toLocaleString() + 'k' : '₱' + value;
                             },
-                            grid: { color: '#f1f5f9' }
+                            font: { weight: '600', size: 11 },
+                            color: '#64748b'
                         },
-                        x: {
-                            ticks: { font: { weight: '600', size: 11 }, color: '#64748b' },
-                            grid: { display: false }
-                        }
+                        grid: { color: '#f1f5f9' }
+                    },
+                    x: {
+                        border: { display: false },
+                        ticks: { font: { weight: '600', size: 11 }, color: '#64748b' },
+                        grid: { display: false }
                     }
                 }
-            });
-        }
-    });
+            }
+        });
+    }
     window.addEventListener('DOMContentLoaded', () => {
         const params = new URLSearchParams(window.location.search);
         if (params.get('action') === 'settings') {
@@ -2260,6 +2337,7 @@
                         el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', applyFilters);
                     }
                 });
+                initSalesChart();
                 applyFilters();
                 recalculateLedger();
             })

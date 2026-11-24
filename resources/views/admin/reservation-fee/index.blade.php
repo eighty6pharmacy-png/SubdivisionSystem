@@ -34,7 +34,8 @@
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
                 <h2 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0;">Reservation Pipeline Summary</h2>
                 <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; background: #ecfeff; border: 1px solid #a5f3fc; color: #0e7490; font-size: 12px; font-weight: 700;">
-                    📱 Auto SMS: Active (5 days before expiry &amp; 1 day overdue)
+                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #06b6d4; display: inline-block;"></span>
+                    Auto SMS: Active (5d pre-expiry &amp; 1d overdue)
                 </span>
             </div>
 
@@ -68,28 +69,37 @@
                         {{ collect($bills)->whereIn('status', ['Reserved', 'Pending'])->count() }}
                     </div>
                 </div>
-                <div style="background: #f8fafc; padding: 12px 14px; border-radius: 10px; border-left: 4px solid #94a3b8;">
-                    <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Converted</div>
+                <div style="background: #f8fafc; padding: 12px 14px; border-radius: 10px; border-left: 4px solid #ef4444;">
+                    <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Cancelled</div>
                     <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 2px;">
-                        {{ collect($bills)->where('status', 'Converted')->count() }}
+                        {{ collect($bills)->where('status', 'Cancelled')->count() }}
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Monthly Reservation Sales & Collection Trend Bar Graph -->
-        <div
-            style="background: #fff; border: 1px solid var(--bill-border); border-radius: 16px; padding: 16px 20px; margin-bottom: 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <div>
-                    <h3 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0;">Monthly Reservation Fee
-                        Revenue Trends</h3>
-                    <p style="font-size: 11px; color: #64748b; margin: 2px 0 0 0;">12-month initial lot reservation deposits
-                        & total client bookings (in ₱ Thousands)</p>
+        @php
+            $resActiveCount = collect($bills)->whereIn('status', ['Reserved', 'Pending'])->count();
+            $resCancelledCount = collect($bills)->where('status', 'Cancelled')->count();
+        @endphp
+
+        <!-- Summary Charts Row -->
+        <div class="responsive-grid grid-2-1" style="margin-bottom: 0;">
+            <div style="background: #fff; border: 1px solid var(--bill-border); border-radius: 16px; padding: 16px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);">
+                <div style="margin-bottom: 12px;">
+                    <h3 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0;">Monthly Revenue</h3>
+                </div>
+                <div style="height: 190px; position: relative;">
+                    <canvas id="reservationSalesChart"></canvas>
                 </div>
             </div>
-            <div style="height: 180px; position: relative;">
-                <canvas id="reservationSalesChart"></canvas>
+            <div style="background: #fff; border: 1px solid var(--bill-border); border-radius: 16px; padding: 16px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);">
+                <div style="margin-bottom: 12px;">
+                    <h3 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0;">Status Summary</h3>
+                </div>
+                <div style="height: 190px; position: relative; display: flex; justify-content: center;">
+                    <canvas id="reservationStatusChart"></canvas>
+                </div>
             </div>
         </div>
 
@@ -104,7 +114,6 @@
                 <select id="statusFilter" class="filter-select" style="padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;">
                     <option value="all">All Statuses</option>
                     <option value="active">Active</option>
-                    <option value="converted">Converted</option>
                     <option value="cancelled">Cancelled</option>
                 </select>
             </div>
@@ -146,13 +155,11 @@
                             @php
                                 $statusKey = match ($bill['status']) {
                                     'Reserved', 'Pending' => 'active',
-                                    'Converted' => 'converted',
                                     'Cancelled' => 'cancelled',
                                     default => strtolower((string) $bill['status']),
                                 };
                                 $statusLabel = match ($statusKey) {
                                     'active' => 'Active',
-                                    'converted' => 'Converted',
                                     'cancelled' => 'Cancelled',
                                     default => $bill['status'],
                                 };
@@ -207,14 +214,14 @@
                                 <td class="status-cell">
                                     @if($statusKey === 'active')
                                         <span class="badge badge-warning" style="background: #fef3c7; color: #d97706;">{{ $statusLabel }}</span>
-                                    @elseif($statusKey === 'converted')
-                                        <span class="badge badge-success">{{ $statusLabel }}</span>
                                     @else
                                         <span class="badge badge-danger">{{ $statusLabel }}</span>
                                     @endif
                                 </td>
                                 <td class="action-cell">
-                                    <div style="display: flex; gap: 8px;">
+                                    <div style="display: flex; gap: 6px;">
+                                        <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px; border-color: #0284c7; color: #0284c7; font-weight: 700;"
+                                            onclick="openReservationReceiptModal('{{ $bill['id'] }}')">Receipt</button>
                                         <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;"
                                             onclick="viewDetail('{{ $bill['id'] }}')">Details</button>
                                     </div>
@@ -277,13 +284,18 @@
                         style="display: none; margin-top: 32px; padding: 14px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; line-height: 1.5; border: 1px solid #e2e8f0; background: #f8fafc; color: #475569;">
                     </div>
 
+                    <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-outline" style="border-color: #0284c7; color: #0284c7; font-weight: 700; background: #f0f9ff;"
+                            onclick="openReservationReceiptModal(currentModalId)">View Reservation Receipt</button>
+                    </div>
+
                     <div id="modalReservationActions"
-                        style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 40px; border-top: 1px solid var(--bill-border); padding-top: 32px;">
+                        style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; border-top: 1px solid var(--bill-border); padding-top: 24px;">
                         <button type="button" class="btn btn-primary" onclick="convertReservation()">Convert to Downpayment</button>
                         <button type="button" class="btn btn-outline" style="border-color: #3b82f6; color: #2563eb; font-weight: 700;"
                             onclick="openEditReservation()">Edit Reservation</button>
                         <button type="button" id="btnSendReservationSms" class="btn btn-outline" style="border-color: #0284c7; color: #0284c7; font-weight: 700;"
-                            onclick="sendReservationSmsReminder()">📱 Send SMS Reminder</button>
+                            onclick="sendReservationSmsReminder()">Send SMS Reminder</button>
                         <button type="button" class="btn btn-outline" style="color: var(--bill-danger); border-color: #fee2e2;"
                             onclick="cancelReservation()">Cancel Reservation</button>
                     </div>
@@ -680,7 +692,6 @@
 
         function reservationStatusLabel(status) {
             if (status === 'Reserved' || status === 'Pending') return 'Active';
-            if (status === 'Converted') return 'Converted';
             if (status === 'Cancelled') return 'Cancelled';
             return status || '—';
         }
@@ -733,7 +744,7 @@
                         const autoDate = new Date(deadlineObj);
                         autoDate.setDate(autoDate.getDate() - 5);
                         const autoDateStr = autoDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                        autoSmsNoteEl.textContent = `📱 Automated SMS reminder scheduled for ${autoDateStr} (5 days before expiration).`;
+                        autoSmsNoteEl.textContent = `Automated SMS reminder scheduled for ${autoDateStr} (5 days before expiration).`;
                     }
                 }
             } else {
@@ -757,25 +768,30 @@
 
             const actionsEl = document.getElementById('modalReservationActions');
             const alertEl = document.getElementById('modalStatusAlert');
-            const terminal = bill.status === 'Cancelled' || bill.status === 'Converted';
+            const convertBtn = actionsEl ? actionsEl.querySelector('button[onclick="convertReservation()"]') : null;
+            const terminal = bill.status === 'Cancelled';
             if (terminal) {
                 actionsEl.style.display = 'none';
                 alertEl.style.display = 'block';
-                if (bill.status === 'Cancelled') {
-                    alertEl.style.background = '#fef2f2';
-                    alertEl.style.borderColor = '#fecaca';
-                    alertEl.style.color = '#991b1b';
-                    alertEl.textContent = 'This reservation is cancelled. It stays on record for reference; no further actions apply here.';
-                } else {
-                    alertEl.style.background = '#ecfdf5';
-                    alertEl.style.borderColor = '#a7f3d0';
-                    alertEl.style.color = '#065f46';
-                    alertEl.innerHTML = 'This reservation was converted to downpayment. Manage the contract on the <a href="/admin/downpayment-fee" style="color:#047857;font-weight:800;">Downpayment Fee</a> page.';
-                }
+                alertEl.style.background = '#fef2f2';
+                alertEl.style.borderColor = '#fecaca';
+                alertEl.style.color = '#991b1b';
+                alertEl.textContent = 'This reservation is cancelled. It stays on record for reference; no further actions apply here.';
             } else {
                 actionsEl.style.display = 'flex';
-                alertEl.style.display = 'none';
-                alertEl.textContent = '';
+                if (convertBtn) {
+                    convertBtn.style.display = bill.has_downpayment ? 'none' : '';
+                }
+                if (bill.has_downpayment) {
+                    alertEl.style.display = 'block';
+                    alertEl.style.background = '#eff6ff';
+                    alertEl.style.borderColor = '#bfdbfe';
+                    alertEl.style.color = '#1e40af';
+                    alertEl.innerHTML = 'Downpayment schedule created. Manage installments on the <a href="/admin/downpayment-fee" style="color:#1d4ed8;font-weight:800;">Downpayment Fee</a> page.';
+                } else {
+                    alertEl.style.display = 'none';
+                    alertEl.textContent = '';
+                }
             }
 
             document.getElementById('modalViewSection').style.display = 'block';
@@ -811,7 +827,7 @@
         function openEditReservation() {
             if (!currentModalId) return;
             const bill = allBillsRaw.find(b => String(b.id) === String(currentModalId));
-            if (!bill || bill.status === 'Cancelled' || bill.status === 'Converted') return;
+            if (!bill || bill.status === 'Cancelled') return;
 
             const buyerSelect = document.getElementById('editResBuyer');
             if (buyerSelect) {
@@ -956,7 +972,7 @@
         async function sendReservationSmsReminder() {
             if (!currentModalId) return;
             const btn = document.getElementById('btnSendReservationSms');
-            const originalText = btn ? btn.textContent : '📱 Send SMS Reminder';
+            const originalText = btn ? btn.textContent : 'Send SMS Reminder';
             if (btn) {
                 btn.disabled = true;
                 btn.textContent = 'Sending SMS...';
@@ -1052,6 +1068,33 @@
                             x: {
                                 ticks: { font: { weight: '600', size: 11 }, color: '#64748b' },
                                 grid: { display: false }
+                            }
+                        }
+                    }
+                });
+            }
+
+            const statusCtx = document.getElementById('reservationStatusChart')?.getContext('2d');
+            if (statusCtx) {
+                new Chart(statusCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Active', 'Cancelled'],
+                        datasets: [{
+                            data: [{{ $resActiveCount }}, {{ $resCancelledCount }}],
+                            backgroundColor: ['#f59e0b', '#ef4444'],
+                            borderWidth: 0,
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '72%',
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { usePointStyle: true, boxWidth: 8, font: { size: 11, weight: '600' } }
                             }
                         }
                     }
@@ -1161,7 +1204,6 @@
                         <select id="reportResStatusFilter" class="filter-select" onchange="reloadReservationReportPdf()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
                             <option value="all">All Statuses</option>
                             <option value="active">Active</option>
-                            <option value="converted">Converted</option>
                             <option value="cancelled">Cancelled</option>
                         </select>
                     </div>
@@ -1214,5 +1256,427 @@
 
         </div>
     </div>
+
+    <!-- Official Reservation Application Receipt Modal (Viewable First + Editable GIS/Buyer/Reservation Data) -->
+    <div id="reservationReceiptModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 2200; background: rgba(15,23,42,0.75); backdrop-filter: blur(8px); padding: 16px;">
+        <div class="bill-modal-content" style="max-width: 1280px; width: 97%; max-height: 95vh; overflow: hidden; padding: 18px 22px; border-radius: 20px; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.4); display: flex; flex-direction: column;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <h2 style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 0;">Reservation Application &amp; Official Receipt</h2>
+                    <p id="receiptModalSubtitle" style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">Linked with GIS Property Specification, Buyer Information &amp; Reservation Details</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <button type="button" id="toggleReceiptEditorBtn" class="btn btn-outline" onclick="toggleReceiptEditorPanel()" style="background: #fffbeb; border: 1px solid #f59e0b; color: #b45309; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; cursor: pointer;">
+                        ✏️ Edit Receipt Details
+                    </button>
+                    <a id="reservationReceiptDownloadBtn" href="#" class="btn btn-primary" style="background: #0284c7; border: none; padding: 8px 16px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: #fff;">
+                        Download PDF
+                    </a>
+                    <button type="button" class="btn btn-outline" onclick="printReservationReceiptPdfFrame()" style="background: #fff; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; cursor: pointer; color: #334155;">
+                        Print
+                    </button>
+                    <button type="button" class="btn btn-outline" onclick="closeReservationReceiptModal()" style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 600; border-radius: 8px; cursor: pointer;">
+                        ✕ Close
+                    </button>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 16px; flex: 1; min-height: 0; overflow: hidden;">
+                <!-- Collapsible Editable Data Panel -->
+                <div id="receiptEditorPanel" style="display: none; width: 430px; min-width: 360px; max-width: 100%; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; background: #f8fafc;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="font-size: 13px; font-weight: 800; color: #0f172a;">Editable Receipt Data</span>
+                        <button type="button" id="saveReceiptDataBtn" onclick="saveReservationReceiptData()" class="btn btn-primary" style="padding: 7px 14px; font-size: 12px; font-weight: 700; border-radius: 8px;">
+                            Save &amp; Refresh Receipt
+                        </button>
+                    </div>
+
+                    <!-- Section 1: Reservation Details -->
+                    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 12px;">
+                        <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #0284c7; margin-bottom: 8px;">1. Reservation Details</div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Application Date</label>
+                                <input type="date" id="rcpt_reservation_date" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">OR #</label>
+                                <input type="text" id="rcpt_or_number" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Reservation Fee (₱)</label>
+                                <input type="number" step="0.01" id="rcpt_amount" oninput="recalcReceiptFinancials()" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Net Equity OR #</label>
+                                <input type="text" id="rcpt_net_equity_or_number" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div style="grid-column: 1 / -1;">
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Amount in Words</label>
+                                <input type="text" id="rcpt_amount_in_words" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">90-Day Loan Req. Deadline</label>
+                                <input type="date" id="rcpt_loan_req_deadline" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">3-Month PDC Deadline</label>
+                                <input type="date" id="rcpt_pdc_deadline" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Tel. Nos.</label>
+                                <input type="text" id="rcpt_tel_nos" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Witness (Staff)</label>
+                                <input type="text" id="rcpt_witness_name" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section 2: Buyer Information -->
+                    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 12px;">
+                        <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #0284c7; margin-bottom: 8px;">2. Buyer Information</div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Family Name</label>
+                                <input type="text" id="rcpt_buyer_last_name" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Given Name</label>
+                                <input type="text" id="rcpt_buyer_first_name" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Middle Name</label>
+                                <input type="text" id="rcpt_buyer_middle_name" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Civil Status</label>
+                                <select id="rcpt_civil_status" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                                    <option value="Single">Single</option>
+                                    <option value="Married">Married</option>
+                                </select>
+                            </div>
+                            <div style="grid-column: 1 / -1;">
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Spouse Marital Consent Name</label>
+                                <input type="text" id="rcpt_spouse_name" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div style="grid-column: 1 / -1;">
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Postal Address</label>
+                                <input type="text" id="rcpt_postal_address" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div style="grid-column: 1 / -1;">
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Billing Address (Par. 8)</label>
+                                <input type="text" id="rcpt_billing_address" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section 3: GIS Lot Specification & Installment Plan -->
+                    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 8px;">
+                        <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #0284c7; margin-bottom: 8px;">3. GIS Lot Specification &amp; Installment Plan</div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Project</label>
+                                <input type="text" id="rcpt_project_name" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">House Model (GIS Desc)</label>
+                                <input type="text" id="rcpt_house_model" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Lot Area (sqm)</label>
+                                <input type="number" step="0.01" id="rcpt_lot_area" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Floor Area (sqm)</label>
+                                <input type="number" step="0.01" id="rcpt_floor_area" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">TCT No.</label>
+                                <input type="text" id="rcpt_tct_no" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">GIS PID</label>
+                                <input type="text" id="rcpt_pid" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Tax Dec No.</label>
+                                <input type="text" id="rcpt_tax_dec_no" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Total Contract Price (₱)</label>
+                                <input type="number" step="0.01" id="rcpt_total_contract_price" oninput="recalcReceiptFinancials()" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Discount (%)</label>
+                                <input type="number" step="0.01" id="rcpt_discount_percent" oninput="recalcReceiptFinancials()" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Discount Amount (₱)</label>
+                                <input type="number" step="0.01" id="rcpt_discount_amount" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Equity (%)</label>
+                                <input type="number" step="0.01" id="rcpt_equity_percent" oninput="recalcReceiptFinancials()" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Required Equity (₱)</label>
+                                <input type="number" step="0.01" id="rcpt_required_equity" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Net Equity Downpayment (₱)</label>
+                                <input type="number" step="0.01" id="rcpt_net_equity_downpayment" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Equity Months</label>
+                                <input type="number" id="rcpt_equity_period_count" oninput="recalcReceiptFinancials()" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Monthly Equity Amort. (₱)</label>
+                                <input type="number" step="0.01" id="rcpt_monthly_amortization_equity" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Equity Start Date</label>
+                                <input type="text" id="rcpt_equity_start_date" placeholder="e.g. Dec 01, 2026" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Financing Type</label>
+                                <select id="rcpt_financing_type" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                                    <option value="PAG-IBIG FUND">PAG-IBIG FUND</option>
+                                    <option value="DIRECT FINANCING">DIRECT FINANCING</option>
+                                    <option value="END BUYER'S BANK FINANCING">END BUYER'S BANK FINANCING</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Building Label</label>
+                                <input type="text" id="rcpt_building_model_label" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Embedded Real PDF Viewer (Viewable first, not download) -->
+                <div style="flex: 1; min-width: 0;">
+                    <iframe id="reservationReceiptPdfFrame" src="about:blank" style="width: 100%; height: 76vh; border: 1px solid #e2e8f0; border-radius: 10px; background: #525659;"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentReceiptReservationId = null;
+
+        async function openReservationReceiptModal(id) {
+            if (!id) return;
+            currentReceiptReservationId = id;
+
+            const modal = document.getElementById('reservationReceiptModal');
+            const frame = document.getElementById('reservationReceiptPdfFrame');
+            const dlBtn = document.getElementById('reservationReceiptDownloadBtn');
+            const editor = document.getElementById('receiptEditorPanel');
+
+            if (editor) editor.style.display = 'none';
+            if (frame) frame.src = `/admin/reservation-fee/${id}/receipt?t=${Date.now()}`;
+            if (dlBtn) dlBtn.href = `/admin/reservation-fee/${id}/receipt?download=1`;
+
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+
+            try {
+                const res = await fetch(`/admin/reservation-fee/${id}/receipt-data`, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                const json = await res.json();
+                if (res.ok && json.data) {
+                    populateReceiptEditor(json.data);
+                }
+            } catch (err) {
+                console.error('Failed to load receipt data:', err);
+            }
+        }
+
+        function closeReservationReceiptModal() {
+            const modal = document.getElementById('reservationReceiptModal');
+            if (modal) modal.style.display = 'none';
+            if (document.getElementById('billModal')?.style.display !== 'flex') {
+                document.body.style.overflow = 'auto';
+            }
+        }
+
+        function toggleReceiptEditorPanel() {
+            const panel = document.getElementById('receiptEditorPanel');
+            if (!panel) return;
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function printReservationReceiptPdfFrame() {
+            const frame = document.getElementById('reservationReceiptPdfFrame');
+            if (frame && frame.contentWindow) {
+                frame.contentWindow.focus();
+                frame.contentWindow.print();
+            }
+        }
+
+        function populateReceiptEditor(d) {
+            const setVal = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.value = val ?? '';
+            };
+
+            setVal('rcpt_reservation_date', d.reservation_date);
+            setVal('rcpt_or_number', d.or_number);
+            setVal('rcpt_amount', d.amount);
+            setVal('rcpt_net_equity_or_number', d.net_equity_or_number);
+            setVal('rcpt_amount_in_words', d.amount_in_words);
+            setVal('rcpt_loan_req_deadline', d.loan_req_deadline);
+            setVal('rcpt_pdc_deadline', d.pdc_deadline);
+            setVal('rcpt_tel_nos', d.tel_nos);
+            setVal('rcpt_witness_name', d.witness_name);
+
+            setVal('rcpt_buyer_last_name', d.buyer_last_name);
+            setVal('rcpt_buyer_first_name', d.buyer_first_name);
+            setVal('rcpt_buyer_middle_name', d.buyer_middle_name);
+            setVal('rcpt_civil_status', (d.civil_status || 'Single').toLowerCase() === 'married' ? 'Married' : 'Single');
+            setVal('rcpt_spouse_name', d.spouse_name);
+            setVal('rcpt_postal_address', d.postal_address);
+            setVal('rcpt_billing_address', d.billing_address);
+
+            setVal('rcpt_project_name', d.project_name);
+            setVal('rcpt_house_model', d.house_model);
+            setVal('rcpt_lot_area', d.lot_area);
+            setVal('rcpt_floor_area', d.floor_area);
+            setVal('rcpt_tct_no', d.tct_no);
+            setVal('rcpt_pid', d.pid);
+            setVal('rcpt_tax_dec_no', d.tax_dec_no);
+            setVal('rcpt_total_contract_price', d.total_contract_price);
+            setVal('rcpt_discount_percent', d.discount_percent);
+            setVal('rcpt_discount_amount', d.discount_amount);
+            setVal('rcpt_equity_percent', d.equity_percent);
+            setVal('rcpt_required_equity', d.required_equity);
+            setVal('rcpt_net_equity_downpayment', d.net_equity_downpayment);
+            setVal('rcpt_equity_period_count', d.equity_period_count);
+            setVal('rcpt_monthly_amortization_equity', d.monthly_amortization_equity);
+            setVal('rcpt_equity_start_date', d.equity_start_date);
+            setVal('rcpt_financing_type', d.financing_type || 'PAG-IBIG FUND');
+            setVal('rcpt_loan_balance_amount', d.loan_balance_amount);
+            setVal('rcpt_loan_term', d.loan_term);
+            setVal('rcpt_loan_interest_rate', d.loan_interest_rate);
+            setVal('rcpt_loan_monthly_amortization', d.loan_monthly_amortization);
+            setVal('rcpt_building_model_label', d.building_model_label);
+
+            const sub = document.getElementById('receiptModalSubtitle');
+            if (sub) {
+                sub.textContent = `Block ${d.block || '—'}, Lot ${d.lot_number || '—'} • ${d.buyer_full_name || 'Buyer'} • OR # ${d.or_number}`;
+            }
+        }
+
+        function recalcReceiptFinancials() {
+            const tcp = parseFloat(document.getElementById('rcpt_total_contract_price')?.value || 0) || 0;
+            const discPct = parseFloat(document.getElementById('rcpt_discount_percent')?.value || 0) || 0;
+            const resFee = parseFloat(document.getElementById('rcpt_amount')?.value || 0) || 0;
+            const eqPct = parseFloat(document.getElementById('rcpt_equity_percent')?.value || 20) || 0;
+            const eqMonths = parseInt(document.getElementById('rcpt_equity_period_count')?.value || 24, 10) || 24;
+
+            const discAmt = Math.round(tcp * (discPct / 100) * 100) / 100;
+            const ntp = Math.max(0, Math.round((tcp - discAmt) * 100) / 100);
+            const reqEq = Math.round(ntp * (eqPct / 100) * 100) / 100;
+            const netEq = Math.max(0, Math.round((reqEq - resFee) * 100) / 100);
+            const monthlyEq = eqMonths > 0 ? Math.round((netEq / eqMonths) * 100) / 100 : 0;
+            const loanBal = Math.max(0, Math.round((ntp - reqEq) * 100) / 100);
+
+            document.getElementById('rcpt_discount_amount').value = discAmt.toFixed(2);
+            document.getElementById('rcpt_required_equity').value = reqEq.toFixed(2);
+            document.getElementById('rcpt_net_equity_downpayment').value = netEq.toFixed(2);
+            document.getElementById('rcpt_monthly_amortization_equity').value = monthlyEq.toFixed(2);
+        }
+
+        async function saveReservationReceiptData() {
+            if (!currentReceiptReservationId) return;
+            const btn = document.getElementById('saveReceiptDataBtn');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Saving...';
+            }
+
+            const getVal = (id) => document.getElementById(id)?.value ?? null;
+            const eqPct = parseFloat(getVal('rcpt_equity_percent') || 20) || 0;
+
+            const payload = {
+                reservation_date: getVal('rcpt_reservation_date'),
+                or_number: getVal('rcpt_or_number'),
+                amount: getVal('rcpt_amount'),
+                net_equity_or_number: getVal('rcpt_net_equity_or_number'),
+                amount_in_words: getVal('rcpt_amount_in_words'),
+                loan_req_deadline: getVal('rcpt_loan_req_deadline'),
+                pdc_deadline: getVal('rcpt_pdc_deadline'),
+                tel_nos: getVal('rcpt_tel_nos'),
+                witness_name: getVal('rcpt_witness_name'),
+
+                buyer_last_name: getVal('rcpt_buyer_last_name'),
+                buyer_first_name: getVal('rcpt_buyer_first_name'),
+                buyer_middle_name: getVal('rcpt_buyer_middle_name'),
+                civil_status: getVal('rcpt_civil_status'),
+                spouse_name: getVal('rcpt_spouse_name'),
+                postal_address: getVal('rcpt_postal_address'),
+                billing_address: getVal('rcpt_billing_address'),
+
+                project_name: getVal('rcpt_project_name'),
+                house_model: getVal('rcpt_house_model'),
+                lot_area: getVal('rcpt_lot_area') || null,
+                floor_area: getVal('rcpt_floor_area') || null,
+                tct_no: getVal('rcpt_tct_no'),
+                pid: getVal('rcpt_pid'),
+                tax_dec_no: getVal('rcpt_tax_dec_no'),
+                total_contract_price: getVal('rcpt_total_contract_price') || 0,
+                discount_percent: getVal('rcpt_discount_percent') || 0,
+                discount_amount: getVal('rcpt_discount_amount') || 0,
+                equity_percent: eqPct,
+                loan_balance_percent: Math.max(0, 100 - eqPct),
+                required_equity: getVal('rcpt_required_equity') || 0,
+                net_equity_downpayment: getVal('rcpt_net_equity_downpayment') || 0,
+                equity_period_count: getVal('rcpt_equity_period_count') || 24,
+                term_of_equity: (getVal('rcpt_equity_period_count') || 24) + ' Months',
+                monthly_amortization_equity: getVal('rcpt_monthly_amortization_equity') || 0,
+                equity_start_date: getVal('rcpt_equity_start_date'),
+                financing_type: getVal('rcpt_financing_type'),
+                loan_balance_amount: getVal('rcpt_loan_balance_amount') || 0,
+                loan_term: getVal('rcpt_loan_term'),
+                loan_interest_rate: getVal('rcpt_loan_interest_rate') || null,
+                loan_monthly_amortization: getVal('rcpt_loan_monthly_amortization') || 0,
+                building_model_label: getVal('rcpt_building_model_label'),
+            };
+
+            try {
+                const res = await fetch(`/admin/reservation-fee/${currentReceiptReservationId}/receipt-data`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const json = await res.json();
+                if (res.ok && json.success) {
+                    if (json.data) populateReceiptEditor(json.data);
+                    const frame = document.getElementById('reservationReceiptPdfFrame');
+                    if (frame) frame.src = `/admin/reservation-fee/${currentReceiptReservationId}/receipt?t=${Date.now()}`;
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({ icon: 'success', title: 'Receipt Updated', text: json.message, timer: 1800, showConfirmButton: false });
+                    }
+                } else {
+                    Swal.fire({ icon: 'error', title: 'Update Failed', text: json.message || 'Could not save receipt details.' });
+                }
+            } catch (err) {
+                console.error(err);
+                Swal.fire({ icon: 'error', title: 'Server Error', text: 'Unable to save receipt details.' });
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Save & Refresh Receipt';
+                }
+            }
+        }
     </script>
 @endsection

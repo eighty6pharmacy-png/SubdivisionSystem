@@ -612,6 +612,7 @@ if (!function_exists('getReservationFees')) {
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('reservations') && \App\Models\Reservation::count() > 0) {
                 return \App\Models\Reservation::with(['lot', 'buyerMasterList'])
+                    ->withExists('downpayments')
                     ->where('amount', '>', 0)
                     ->get()
                     ->map(function ($res) {
@@ -627,7 +628,8 @@ if (!function_exists('getReservationFees')) {
                         'deadline' => $res->deadline_date ? \Carbon\Carbon::parse($res->deadline_date)->format('Y-m-d') : null,
                         'expiry_reminder_5d_sent_at' => $res->expiry_reminder_5d_sent_at?->format('M d, Y h:i A'),
                         'expired_reminder_sent_at' => $res->expired_reminder_sent_at?->format('M d, Y h:i A'),
-                        'status' => $res->status,
+                        'status' => $res->status === 'Converted' ? \App\Enums\ReservationStatus::Reserved->value : $res->status,
+                        'has_downpayment' => (bool) ($res->downpayments_exists ?? false),
                         'agent' => 'Admin',
                         'notes' => 'Database record',
                     ];
@@ -780,7 +782,7 @@ if (!function_exists('getDownpaymentFees')) {
                                 $dueAtForBehavior = $currentDueDate
                                     ? $currentDueDate->copy()->subMonths($N - $i)
                                     : $dueAt;
-                                $paidAmount = $h ? (float) $h->amount : $amortization;
+                                $paidAmount = $h ? (float) ($h->amount_paid ?? $amortization) : $amortization;
                                 $principalPaid = $paidAmount > ($amortization + 0.009)
                                     ? round($amortization, 2)
                                     : round($paidAmount, 2);
@@ -796,7 +798,7 @@ if (!function_exists('getDownpaymentFees')) {
                                     'behavior' => $h ? $classify($h->payment_date, $dueAtForBehavior) : 'Not available yet',
                                     'history_id' => $h->id ?? null,
                                     'trn' => $h->trn ?? null,
-                                    'payment_method' => $h->payment_method ?? 'Office Payment',
+                                    'payment_method' => $h->method ?? 'Office Payment',
                                     'paid_at' => $h ? \Carbon\Carbon::parse($h->payment_date)->format('M d, Y h:i A') : null,
                                     'is_next' => false,
                                 ];

@@ -6,7 +6,6 @@ enum ReservationStatus: string
 {
     case Pending = 'Pending';
     case Reserved = 'Reserved';
-    case Converted = 'Converted';
     case Cancelled = 'Cancelled';
 
     public static function values(): array
@@ -19,6 +18,6 @@ enum ReservationStatus: string
      */
     public static function activeValues(): array
     {
-        return [self::Pending->value, self::Reserved->value, self::Converted->value];
+        return [self::Pending->value, self::Reserved->value];
     }
 }
