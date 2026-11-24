@@ -24,7 +24,7 @@ class Announcement extends Model
 
     public function adminAccount(): BelongsTo
     {
-        return $this->belongsTo(AdminAccount::class, 'admin_id', 'user_id');
+        return $this->belongsTo(User::class, 'admin_id');
     }
 
     public function recipients(): HasMany

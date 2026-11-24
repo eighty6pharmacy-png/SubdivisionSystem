@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -10,7 +11,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Spatie\Permission\Traits\HasRoles;
 
 /**
  * @property int $id
@@ -30,10 +30,7 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, SoftDeletes, HasRoles {
-        assignRole as spatieAssignRole;
-        syncRoles as spatieSyncRoles;
-    }
+    use HasFactory, Notifiable, SoftDeletes;
 
     /**
      * @var list<string>
@@ -46,8 +43,9 @@ class User extends Authenticatable
         'email',
         'contact_number',
         'password',
-        'plain_password',
         'status',
+        'role',
+        'payment_behavior',
         'joined_at',
     ];
 
@@ -56,7 +54,6 @@ class User extends Authenticatable
      */
     protected $hidden = [
         'password',
-        'plain_password',
         'remember_token',
     ];
 
@@ -75,14 +72,8 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
-            'plain_password' => 'encrypted',
             'joined_at' => 'date',
         ];
-    }
-
-    public function getDisplayPasswordAttribute(): string
-    {
-        return $this->plain_password ?: 'password123';
     }
 
     public function getNameAttribute(): string
@@ -106,38 +97,43 @@ class User extends Authenticatable
         $this->attributes['last_name'] = $last !== '' ? $last : null;
     }
 
-    public function getPaymentBehaviorAttribute(): string
+    public function hasRole(string|array $roles): bool
     {
-        return $this->resident?->payment_behavior ?? 'Not available yet';
+        $roleList = is_array($roles) ? $roles : explode('|', $roles);
+        $current = $this->role ?: 'Resident';
+
+        return in_array($current, array_map('trim', $roleList), true);
     }
 
-    public function setPaymentBehaviorAttribute(?string $value): void
+    public function hasAnyRole(string|array $roles): bool
     {
-        $resident = $this->resident;
-        if (! $resident) {
-            return;
-        }
+        return $this->hasRole($roles);
+    }
 
-        $resident->payment_behavior = $value ?: 'Not available yet';
-        $resident->save();
+    public function scopeRole(Builder $query, string|array $roles): Builder
+    {
+        $roleList = is_array($roles) ? $roles : explode('|', $roles);
+
+        return $query->whereIn('role', array_map('trim', $roleList));
     }
 
     public function assignRole(...$roles)
     {
-        $this->refuseRoleChange($this->roleNamesFrom($roles));
-        $result = $this->spatieAssignRole(...$roles);
+        $names = $this->roleNamesFrom($roles);
+        $this->refuseRoleChange($names);
+        $newRole = $names[0] ?? null;
+        if ($newRole !== null && $newRole !== '') {
+            $this->role = $newRole;
+            $this->save();
+        }
         $this->syncRoleProfile();
 
-        return $result;
+        return $this;
     }
 
     public function syncRoles(...$roles)
     {
-        $this->refuseRoleChange($this->roleNamesFrom($roles));
-        $result = $this->spatieSyncRoles(...$roles);
-        $this->syncRoleProfile();
-
-        return $result;
+        return $this->assignRole(...$roles);
     }
 
     /**
@@ -145,16 +141,16 @@ class User extends Authenticatable
      */
     public function refusalForRoleChange(string $newRole): ?string
     {
-        $current = $this->roles()->pluck('name');
-        if ($current->isEmpty() || $current->contains($newRole)) {
+        $current = $this->role;
+        if (! $current || $current === $newRole) {
             return null;
         }
 
-        if ($current->contains('Buyer') && $newRole !== 'Resident' && $this->buyerProfileHasDependents()) {
+        if ($current === 'Buyer' && $newRole !== 'Resident' && $this->buyerProfileHasDependents()) {
             return 'This person is a buyer with a reservation or financing record. Keep the buyer role or convert them to a resident. Do not change them into a guard, admin, or finance officer.';
         }
 
-        if ($current->contains('Resident') && $this->residentProfileHasDependents()) {
+        if ($current === 'Resident' && $this->residentProfileHasDependents()) {
             return 'This person is a resident with a lot, a bill, or an incident. Keep the resident role. Do not change them into a guard, admin, buyer, or finance officer.';
         }
 
@@ -162,24 +158,20 @@ class User extends Authenticatable
     }
 
     /**
-     * Keep the role table in step with Spatie. Staff rows can be removed.
-     * Buyer and resident rows stay when reservations, financing, lots, bills, or incidents still point at them.
+     * Keep role-specific profile tables (guards, buyers) in sync with users.role.
+     * Buyer rows stay when converted to Resident or when reservations/financing still point at them.
      */
     public function syncRoleProfile(): void
     {
-        $this->unsetRelation('roles');
-        $roleNames = $this->roles()->pluck('name');
+        $roleName = $this->role;
 
         $map = [
-            'Admin' => AdminAccount::class,
-            'Finance Officer' => FinanceOfficer::class,
             'Security Guard' => GuardAccount::class,
-            'Resident' => Resident::class,
             'Buyer' => BuyerMasterList::class,
         ];
 
         foreach ($map as $name => $class) {
-            if ($roleNames->contains($name)) {
+            if ($roleName === $name) {
                 if ($class === BuyerMasterList::class) {
                     $row = $class::withTrashed()->firstOrCreate(['user_id' => $this->id]);
                     if ($row->trashed()) {
@@ -191,10 +183,7 @@ class User extends Authenticatable
                 continue;
             }
 
-            if ($name === 'Buyer' && ($roleNames->contains('Resident') || $this->buyerProfileHasDependents())) {
-                continue;
-            }
-            if ($name === 'Resident' && $this->residentProfileHasDependents()) {
+            if ($name === 'Buyer' && ($roleName === 'Resident' || $this->buyerProfileHasDependents())) {
                 continue;
             }
 
@@ -212,24 +201,9 @@ class User extends Authenticatable
         return $this->hasMany(UtilityBill::class, 'resident_id');
     }
 
-    public function adminAccount(): HasOne
-    {
-        return $this->hasOne(AdminAccount::class, 'user_id');
-    }
-
-    public function financeOfficer(): HasOne
-    {
-        return $this->hasOne(FinanceOfficer::class, 'user_id');
-    }
-
     public function guardAccount(): HasOne
     {
         return $this->hasOne(GuardAccount::class, 'user_id');
-    }
-
-    public function resident(): HasOne
-    {
-        return $this->hasOne(Resident::class, 'user_id');
     }
 
     public function buyerMasterList(): HasOne
@@ -265,11 +239,6 @@ class User extends Authenticatable
                 foreach ($item as $child) {
                     $walk($child);
                 }
-
-                return;
-            }
-            if ($item instanceof \Spatie\Permission\Models\Role) {
-                $names[] = $item->name;
 
                 return;
             }

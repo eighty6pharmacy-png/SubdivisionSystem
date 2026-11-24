@@ -139,8 +139,7 @@
                         data-shift-start="{{ $user['shift_start'] ?? '06:00' }}"
                         data-shift-end="{{ $user['shift_end'] ?? '18:00' }}"
                         data-is-on-duty="{{ !empty($user['is_on_duty']) ? '1' : '0' }}"
-                        data-active-shift-label="{{ $user['active_shift_label'] ?? '' }}"
-                        data-password="{{ $user['password'] ?? '' }}">
+                        data-active-shift-label="{{ $user['active_shift_label'] ?? '' }}">
                         <td style="font-family: monospace; font-weight: 700; color: #64748b;">{{ $user['id'] }}</td>
                         <td>
                             <div style="display: flex; align-items: center; gap: 12px;">
@@ -464,16 +463,6 @@
                 </div>
             </div>
 
-            <div id="viewUserPasswordSection">
-                <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Password</label>
-                <div style="position: relative; display: flex; align-items: center; margin-top: 6px;">
-                    <input type="password" id="viewUserPasswordDisplay" class="filter-select" readonly style="width: 100%; padding: 12px 44px 12px 12px; border-radius: 12px; background: #f8fafc; font-family: monospace; font-size: 13px; color: #334155; border: 1px solid #cbd5e1; cursor: default;" value="" placeholder="••••••••••••">
-                    <button type="button" id="toggleViewPasswordBtn" onclick="togglePasswordVisibility('viewUserPasswordDisplay', this)" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: #64748b; padding: 6px; display: flex; align-items: center; justify-content: center;" title="View Password">
-                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    </button>
-                </div>
-            </div>
-
             <div id="editResidentFields" style="display: flex; flex-direction: column; gap: 14px; background: #f8fafc; padding: 16px; border-radius: 14px; border: 1px solid #e2e8f0;">
                 <div>
                     <label style="font-size: 11px; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px;">Assigned Lots / Houses</label>
@@ -656,27 +645,6 @@
             if (first) return first;
         }
         return fallback;
-    }
-
-    const EYE_OPEN_SVG = '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
-    const EYE_CLOSED_SVG = '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
-
-    function togglePasswordVisibility(inputId, btn) {
-        const input = document.getElementById(inputId);
-        if (!input) return;
-        if (input.type === 'password') {
-            input.type = 'text';
-            if (btn) {
-                btn.innerHTML = EYE_CLOSED_SVG;
-                btn.title = 'Hide Password';
-            }
-        } else {
-            input.type = 'password';
-            if (btn) {
-                btn.innerHTML = EYE_OPEN_SVG;
-                btn.title = 'View Password';
-            }
-        }
     }
 
     const GUARD_DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -903,7 +871,6 @@
         const lot = d.lot || '';
         const joined = d.joined || '';
         const status = d.status || 'Active';
-        const password = d.password || '';
 
         if (status !== 'Active') {
             mode = 'view';
@@ -925,17 +892,6 @@
         document.getElementById('editUserLastName').value = lastName;
         document.getElementById('editUserEmail').value = email;
         document.getElementById('editUserContact').value = contact;
-
-        const viewPwInput = document.getElementById('viewUserPasswordDisplay');
-        if (viewPwInput) {
-            viewPwInput.type = 'password';
-            viewPwInput.value = password;
-        }
-        const viewPwBtn = document.getElementById('toggleViewPasswordBtn');
-        if (viewPwBtn) {
-            viewPwBtn.innerHTML = EYE_OPEN_SVG;
-            viewPwBtn.title = 'View Password';
-        }
 
         const resFields = document.getElementById('editResidentFields');
         if (role === 'Resident') {
@@ -1020,11 +976,6 @@
             el.style.backgroundColor = isView ? '#f8fafc' : '#ffffff';
             el.style.cursor = isView ? 'default' : '';
         });
-
-        const pwSection = document.getElementById('viewUserPasswordSection');
-        if (pwSection) {
-            pwSection.style.display = isView ? 'block' : 'none';
-        }
 
         const attachSection = document.getElementById('editResidentAttachSection');
         if (attachSection) {

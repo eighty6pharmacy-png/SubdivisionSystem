@@ -74,6 +74,6 @@ class FinancingRecord extends Model
 
     public function payments(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
-        return $this->hasMany(FinancingPaymentHistory::class, 'financing_record_id');
+        return $this->hasMany(Payment::class, 'financing_record_id');
     }
 }

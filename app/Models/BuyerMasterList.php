@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
-use Spatie\Permission\Models\Role;
 
 class BuyerMasterList extends Model
 {
@@ -137,7 +136,6 @@ class BuyerMasterList extends Model
             $userAttributes['status'] = $userAttributes['status'] ?? 'Active';
 
             $user = User::create($userAttributes);
-            Role::findOrCreate('Buyer', 'web');
             $user->assignRole('Buyer');
 
             $buyer = static::query()->where('user_id', $user->id)->first() ?? new static(['user_id' => $user->id]);

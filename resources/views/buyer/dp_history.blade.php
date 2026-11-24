@@ -55,10 +55,10 @@
                                 <div style="font-weight: 700; color: #0f172a; font-family: monospace;">{{ $hist->trn ?? 'Manual' }}</div>
                             </td>
                             <td style="padding: 16px 24px;">
-                                <div style="font-weight: 600; color: #0f172a;">{{ $hist->payment_method ?? 'Office Payment' }}</div>
+                                <div style="font-weight: 600; color: #0f172a;">{{ $hist->method ?? 'Office Payment' }}</div>
                             </td>
                             <td style="padding: 16px 24px;">
-                                <div style="font-weight: 800; color: #10b981;">₱{{ number_format($hist->amount, 2) }}</div>
+                                <div style="font-weight: 800; color: #10b981;">₱{{ number_format($hist->amount_paid, 2) }}</div>
                             </td>
                             <td style="padding: 16px 24px; text-align: right;">
                                 <a href="{{ route('buyer.payments.dp.receipt', $hist->id) }}" target="_blank" class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-color: #3b82f6; color: #3b82f6; display: inline-flex; align-items: center; justify-content: center;">

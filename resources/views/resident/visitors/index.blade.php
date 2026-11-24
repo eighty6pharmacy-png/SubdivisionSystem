@@ -141,10 +141,13 @@
                     const plateInfo = pin.plate_number ? `<div style="font-size: 11px; color: #64748b; font-family: monospace; margin-top: 2px;">Plate: ${pin.plate_number}</div>` : '';
                     const contactInfo = pin.contact_number ? `<div style="font-size: 11px; color: #0284c7; font-weight: 600; margin-top: 2px;">📞 ${pin.contact_number}</div>` : '';
                     const passFullUrl = pin.access_token ? `${window.location.origin}/v/${pin.access_token}` : '';
+                    const safeUrl = window.escapeVisitorHtml ? window.escapeVisitorHtml(passFullUrl) : passFullUrl;
+                    const safePin = window.escapeVisitorHtml ? window.escapeVisitorHtml(pin.pin || '') : (pin.pin || '');
+                    const safeVisitor = window.escapeVisitorHtml ? window.escapeVisitorHtml(pin.visitor || pin.visitor_name || 'Guest') : (pin.visitor || pin.visitor_name || 'Guest');
                     const directPassLink = (pin.status === 'Approved' || pin.status === 'Entered') && pin.access_token ? `
                         <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
-                            <button type="button" onclick="copyPassLink('${passFullUrl}', '${pin.pin || ''}', '${(pin.visitor || pin.visitor_name || 'Guest').replace(/'/g, "\\'")}')" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="Copy pass link or invite message">
-                                📋 Share Pass Link
+                            <button type="button" data-url="${safeUrl}" data-pin="${safePin}" data-visitor="${safeVisitor}" onclick="openSharePassFromBtn(this)" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="Share pass via Messenger, WhatsApp, Viber, or copy link">
+                                📤 Share Pass
                             </button>
                             <a href="/v/${pin.access_token}" target="_blank" style="font-size: 11px; color: #0284c7; text-decoration: none; font-weight: 700; padding: 4px 6px;">Open Pass ↗</a>
                         </div>
@@ -170,51 +173,13 @@
             }).catch(err => console.error(err));
     }
 
-    function copyPassLink(url, pinCode, visitorName) {
-        if (!url) return;
-        
-        const inviteMessage = `Althesa Subd (Zone 1, Tagbong, Pili): Hello ${visitorName || 'Guest'}, your visitor pass is Approved! Gate PIN: ${pinCode || ''}. View your digital pass & interactive route map: ${url}`;
-
-        if (typeof Swal !== 'undefined') {
-            Swal.fire({
-                title: 'Share Visitor Pass',
-                html: `
-                    <div style="text-align: left; font-size: 13px; color: #334155;">
-                        <p style="margin-bottom: 8px;">Copy the direct link or copy the complete invite text to forward via <strong>Messenger, Viber, WhatsApp, or SMS</strong>:</p>
-                        <div style="margin-bottom: 12px;">
-                            <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Direct Pass URL:</label>
-                            <input type="text" value="${url}" readonly style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc; font-family: monospace; margin-top: 4px;">
-                        </div>
-                    </div>
-                `,
-                icon: 'info',
-                showCancelButton: true,
-                confirmButtonText: '📋 Copy Link',
-                cancelButtonText: '💬 Copy Full Invite',
-                confirmButtonColor: '#0284c7',
-                cancelButtonColor: '#059669',
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    navigator.clipboard.writeText(url).then(() => {
-                        Swal.fire({ icon: 'success', title: 'Pass Link Copied!', text: 'Direct pass link copied to clipboard.', timer: 1800, showConfirmButton: false });
-                    });
-                } else if (result.dismiss === Swal.DismissReason.cancel) {
-                    navigator.clipboard.writeText(inviteMessage).then(() => {
-                        Swal.fire({ icon: 'success', title: 'Full Invite Copied!', text: 'Complete invite message copied! Paste it into Messenger, Viber, or SMS.', timer: 2000, showConfirmButton: false });
-                    });
-                }
-            });
-        } else {
-            navigator.clipboard.writeText(url).then(() => {
-                alert('Pass link copied to clipboard!');
-            }).catch(() => {
-                prompt('Copy this visitor pass link:', url);
-            });
-        }
-    }
-
     function copyToClipboard(text) {
-        navigator.clipboard.writeText(text).then(() => {
+        const doCopy = window.copyVisitorText
+            ? window.copyVisitorText(text)
+            : navigator.clipboard.writeText(text).then(() => true).catch(() => false);
+
+        doCopy.then((ok) => {
+            if (!ok) return;
             if (window.pushSystemNotification) {
                 window.pushSystemNotification("PIN Copied", "PIN code " + text + " copied to clipboard.", "Just now", false);
             } else {
@@ -308,4 +273,5 @@
 </script>
 
 <link rel="stylesheet" href="{{ asset('css/views/resident-visitors.css') }}">
+@include('partials.visitor-share-sheet')
 @endsection

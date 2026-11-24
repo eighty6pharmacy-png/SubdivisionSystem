@@ -6,10 +6,10 @@ if (!function_exists('getIncidents')) {
         try {
             $incidentCount = \Illuminate\Support\Facades\Schema::hasTable('incidents') ? \App\Models\Incident::count() : 0;
             if (\Illuminate\Support\Facades\Schema::hasTable('incidents') && $incidentCount > 0) {
-                return \App\Models\Incident::with(['user.roles', 'user.lots'])->orderBy('created_at', 'desc')->get()->map(function ($inc) {
+                return \App\Models\Incident::with(['user', 'user.lots'])->orderBy('created_at', 'desc')->get()->map(function ($inc) {
                     $resName = $inc->reporter_name ?: 'Anonymous';
                     if ($inc->user) {
-                        $role = $inc->user->roles->first()->name ?? 'Resident';
+                        $role = $inc->user->role ?: 'Resident';
                         if ($role === 'Resident' && $inc->user->lots->count() > 0) {
                             $lot = $inc->user->lots->first();
                             $resName = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
@@ -645,7 +645,7 @@ if (!function_exists('getDownpaymentFees')) {
                 return \App\Models\Downpayment::with(['reservation.lot', 'reservation.buyerMasterList.financingRecord'])->get()->map(function (\App\Models\Downpayment $dp) {
                     $res = $dp->reservation;
                     $bml = $res?->buyerMasterList;
-                    $histories = \Illuminate\Support\Facades\DB::table('downpayment_histories')->where('downpayment_id', $dp->id)->orderBy('created_at', 'asc')->get();
+                    $histories = \Illuminate\Support\Facades\DB::table('payments')->where('downpayment_id', $dp->id)->whereNull('deleted_at')->orderBy('created_at', 'asc')->get();
                     $N = $histories->count();
                     $currentDueDate = $dp->due_date ? \Carbon\Carbon::parse($dp->due_date)->startOfDay() : null;
                     $today = now()->startOfDay();
@@ -677,9 +677,9 @@ if (!function_exists('getDownpaymentFees')) {
                         return [
                             'id' => $h->id,
                             'trn' => $h->trn,
-                            'payment_method' => $h->payment_method ?? 'Office Payment',
+                            'payment_method' => $h->method ?? 'Office Payment',
                             'month' => $dueDateStr,
-                            'amount' => (float) $h->amount,
+                            'amount' => (float) $h->amount_paid,
                             'status' => $h->status,
                             'behavior' => $classify($h->payment_date, $dueAt),
                             'date' => \Carbon\Carbon::parse($h->payment_date)->format('M d, Y h:i A'),
@@ -912,8 +912,8 @@ if (!function_exists('getUsers')) {
     function getUsers() {
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('users') && \App\Models\User::count() > 0) {
-                return \App\Models\User::with(['lots', 'roles'])->get()->map(function ($u) {
-                    $role = $u->roles->first()->name ?? 'Resident';
+                return \App\Models\User::with(['lots'])->get()->map(function ($u) {
+                    $role = $u->role ?: 'Resident';
                     $meta = 'N/A';
                     if ($role === 'Resident' && $u->lots->count() > 0) {
                         $meta = $u->lots->map(fn($l) => 'Block ' . $l->block . ', Lot ' . $l->lot_number)->implode(' | ');

@@ -276,7 +276,19 @@
                     <td>${statusBadge}</td>
                     <td>
                         ${codeDisplay}
-                        ${v.access_token && (v.status === 'Approved' || v.status === 'Entered') ? `<div style="margin-top: 4px;"><a href="/v/${v.access_token}" target="_blank" style="font-size: 10px; color: #0284c7; text-decoration: none; font-weight: 700;">Direct Pass ↗</a></div>` : ''}
+                        ${v.access_token && (v.status === 'Approved' || v.status === 'Entered') ? `
+                            <div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+                                <a href="/v/${v.access_token}" target="_blank" style="font-size: 10px; color: #0284c7; text-decoration: none; font-weight: 700;">Direct Pass ↗</a>
+                                <button type="button"
+                                    data-url="${window.escapeVisitorHtml ? window.escapeVisitorHtml(`${window.location.origin}/v/${v.access_token}`) : `${window.location.origin}/v/${v.access_token}`}"
+                                    data-pin="${window.escapeVisitorHtml ? window.escapeVisitorHtml(v.pin || '') : (v.pin || '')}"
+                                    data-visitor="${window.escapeVisitorHtml ? window.escapeVisitorHtml(v.visitor || 'Guest') : (v.visitor || 'Guest')}"
+                                    onclick="openSharePassFromBtn(this)"
+                                    style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 5px; padding: 2px 7px; font-size: 10px; font-weight: 700; cursor: pointer;">
+                                    📤 Share
+                                </button>
+                            </div>
+                        ` : ''}
                     </td>
                     <td>${actionHtml}</td>
                 `;
@@ -317,18 +329,20 @@
                     </div>
                 ` : '';
 
+                const shareUrl = data.pass_url || (data.access_token ? `${window.location.origin}/v/${data.access_token}` : '');
+
                 Swal.fire({
                     icon: 'success',
                     title: 'Visitor Approved!',
                     html: `
                         <div style="font-size: 14px; color: #334155; line-height: 1.5;">
                             ${pinSection}
-                            <p style="margin: 6px 0 2px; font-weight: 600; color: #0f172a;">${visitorName}</p>
-                            <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Host: ${hostName || 'Resident'}</p>
+                            <p style="margin: 6px 0 2px; font-weight: 600; color: #0f172a;">${window.escapeVisitorHtml ? window.escapeVisitorHtml(visitorName) : visitorName}</p>
+                            <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Host: ${window.escapeVisitorHtml ? window.escapeVisitorHtml(hostName || 'Resident') : (hostName || 'Resident')}</p>
                             <div style="background: #f8fafc; border-radius: 8px; padding: 10px 14px; text-align: left; font-size: 13px; color: #475569; border: 1px solid #e2e8f0;">
                                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
                                     <span>📱</span>
-                                    <span><strong>SMS Dispatched:</strong> Gate Clearance PIN and location sent to resident and visitor.</span>
+                                    <span><strong>SMS Dispatched:</strong> Gate Clearance PIN &amp; pass link sent to resident/visitor.</span>
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <span>🛡️</span>
@@ -337,8 +351,15 @@
                             </div>
                         </div>
                     `,
+                    showCancelButton: Boolean(shareUrl),
+                    cancelButtonText: '📤 Share Pass',
+                    cancelButtonColor: '#0284c7',
                     confirmButtonText: 'Done',
                     confirmButtonColor: '#059669'
+                }).then((result) => {
+                    if (result.dismiss === Swal.DismissReason.cancel && shareUrl && window.openVisitorShareSheet) {
+                        window.openVisitorShareSheet(shareUrl, data.pin || '', visitorName);
+                    }
                 });
             } else {
                 Swal.fire('Error approving visitor: ' + data.message);
@@ -531,4 +552,5 @@
         </div>
     </div>
 </div>
+@include('partials.visitor-share-sheet')
 @endsection

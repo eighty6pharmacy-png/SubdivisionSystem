@@ -45,8 +45,9 @@ class BuyerPortalController extends Controller
 
         $finHistories = collect();
         if ($financing) {
-            $finHistories = \Illuminate\Support\Facades\DB::table('financing_payment_histories')
+            $finHistories = \Illuminate\Support\Facades\DB::table('payments')
                 ->where('financing_record_id', $financing->id)
+                ->whereNull('deleted_at')
                 ->orderByDesc('payment_date')
                 ->get();
         }
@@ -65,8 +66,9 @@ class BuyerPortalController extends Controller
 
         $downpayments = $this->downpaymentsForBuyer($buyer, 'history');
 
-        $dpHistories = \Illuminate\Support\Facades\DB::table('downpayment_histories')
+        $dpHistories = \Illuminate\Support\Facades\DB::table('payments')
             ->whereIn('downpayment_id', $downpayments->pluck('id'))
+            ->whereNull('deleted_at')
             ->orderBy('created_at', 'asc')
             ->get();
             
@@ -213,7 +215,11 @@ class BuyerPortalController extends Controller
             abort(403, 'No buyer record found for your account.');
         }
 
-        $hist = \Illuminate\Support\Facades\DB::table('downpayment_histories')->where('id', $id)->first();
+        $hist = \Illuminate\Support\Facades\DB::table('payments')
+            ->where('id', $id)
+            ->whereNotNull('downpayment_id')
+            ->whereNull('deleted_at')
+            ->first();
         if (!$hist) {
             abort(404, 'Payment history not found.');
         }

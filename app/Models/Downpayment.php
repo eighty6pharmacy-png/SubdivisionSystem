@@ -40,7 +40,7 @@ class Downpayment extends Model
 
     public function histories(): HasMany
     {
-        return $this->hasMany(DownpaymentHistory::class);
+        return $this->hasMany(Payment::class, 'downpayment_id');
     }
 
     public function latePenaltyAmount(float $principal, $dueDate = null): float

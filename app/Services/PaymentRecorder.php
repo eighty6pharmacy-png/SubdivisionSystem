@@ -8,8 +8,6 @@ use App\Enums\FinancingStatus;
 use App\Enums\PaymentHistoryStatus;
 use App\Exceptions\PaymentRejectedException;
 use App\Models\Downpayment;
-use App\Models\DownpaymentHistory;
-use App\Models\FinancingPaymentHistory;
 use App\Models\FinancingRecord;
 use App\Models\Payment;
 use App\Models\UtilityBill;
@@ -100,11 +98,11 @@ class PaymentRecorder
         ?string $paymongoPaymentId = null,
         ?string $trn = null,
         $paidAt = null
-    ): DownpaymentHistory {
-        $history = $this->idempotent(DownpaymentHistory::class, $paymongoPaymentId, function () use ($downpayment, $amount, $method, $paymongoPaymentId, $trn, $paidAt) {
+    ): Payment {
+        $history = $this->idempotent(Payment::class, $paymongoPaymentId, function () use ($downpayment, $amount, $method, $paymongoPaymentId, $trn, $paidAt) {
             $dp = Downpayment::whereKey($downpayment->getKey())->lockForUpdate()->firstOrFail();
 
-            if ($existing = $this->findByPaymongoId(DownpaymentHistory::class, $paymongoPaymentId)) {
+            if ($existing = $this->findByPaymongoId(Payment::class, $paymongoPaymentId)) {
                 return $existing;
             }
 
@@ -127,12 +125,12 @@ class PaymentRecorder
             }
             $dp->save();
 
-            return DownpaymentHistory::create([
+            return Payment::create([
                 'downpayment_id' => $dp->id,
-                'amount' => $amount,
+                'amount_paid' => $amount,
                 'payment_date' => $paidAt ?? now(),
-                'trn' => $this->uniqueTrn(DownpaymentHistory::class, $trn ?? strtoupper(Str::random(10))),
-                'payment_method' => $method,
+                'trn' => $this->uniqueTrn(Payment::class, $trn ?? strtoupper(Str::random(10))),
+                'method' => $method,
                 'status' => PaymentHistoryStatus::Paid->value,
                 'paymongo_payment_id' => $paymongoPaymentId,
             ]);
@@ -150,11 +148,11 @@ class PaymentRecorder
         ?string $paymongoPaymentId = null,
         ?string $trn = null,
         $paidAt = null
-    ): FinancingPaymentHistory {
-        $history = $this->idempotent(FinancingPaymentHistory::class, $paymongoPaymentId, function () use ($record, $amount, $method, $paymongoPaymentId, $trn, $paidAt) {
+    ): Payment {
+        $history = $this->idempotent(Payment::class, $paymongoPaymentId, function () use ($record, $amount, $method, $paymongoPaymentId, $trn, $paidAt) {
             $fin = FinancingRecord::whereKey($record->getKey())->lockForUpdate()->firstOrFail();
 
-            if ($existing = $this->findByPaymongoId(FinancingPaymentHistory::class, $paymongoPaymentId)) {
+            if ($existing = $this->findByPaymongoId(Payment::class, $paymongoPaymentId)) {
                 return $existing;
             }
 
@@ -168,13 +166,13 @@ class PaymentRecorder
             }
             $fin->save();
 
-            return FinancingPaymentHistory::create([
+            return Payment::create([
                 'financing_record_id' => $fin->id,
                 'amount_paid' => $amount,
                 'payment_date' => $paidAt ?? now(),
-                'trn' => $this->uniqueTrn(FinancingPaymentHistory::class, $trn ?? strtoupper(Str::random(10))),
+                'trn' => $this->uniqueTrn(Payment::class, $trn ?? strtoupper(Str::random(10))),
                 'status' => PaymentHistoryStatus::Paid->value,
-                'payment_method' => $method,
+                'method' => $method,
                 'paymongo_payment_id' => $paymongoPaymentId,
             ]);
         });

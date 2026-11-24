@@ -13,8 +13,11 @@ class Payment extends Model
 
     protected $fillable = [
         'utility_bill_id',
+        'downpayment_id',
+        'financing_record_id',
         'amount_paid',
         'method',
+        'status',
         'trn',
         'payment_date',
         'paymongo_payment_id',
@@ -30,5 +33,15 @@ class Payment extends Model
     public function utilityBill(): BelongsTo
     {
         return $this->belongsTo(UtilityBill::class);
+    }
+
+    public function downpayment(): BelongsTo
+    {
+        return $this->belongsTo(Downpayment::class);
+    }
+
+    public function financingRecord(): BelongsTo
+    {
+        return $this->belongsTo(FinancingRecord::class);
     }
 }

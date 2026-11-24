@@ -35,7 +35,7 @@ class GisController extends Controller
             $userId = $user ? $user->id : null;
             $userEmail = $user ? $user->email : '';
             $userContact = $user ? $user->contact_number : '';
-            $userRole = $user ? ($user->roles->first()->name ?? 'Resident') : '';
+            $userRole = $user ? ($user->role ?: 'Resident') : '';
             $userJoined = $user ? $user->created_at->format('M d, Y') : '';
             $electricityBill = $lot->utilityBills->where('type', 'electricity')->sortByDesc('created_at')->first();
             $waterBill = $lot->utilityBills->where('type', 'water')->sortByDesc('created_at')->first();

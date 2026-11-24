@@ -140,24 +140,24 @@
     </div>
 
     @php
-        $paymentType = $hist->payment_method ?? 'Office Payment';
+        $paymentType = $hist->method ?? 'Office Payment';
         $trn = empty($hist->trn) ? 'Manual' : $hist->trn;
         $paymentDateRaw = isset($hist->payment_date) && $hist->payment_date ? $hist->payment_date : $hist->created_at;
         $paymentDate = \Carbon\Carbon::parse($paymentDateRaw)->timezone(config('app.timezone', 'Asia/Manila'))->format('F d, Y h:i A');
         $monthly = (float) ($dp->monthly_amortization ?? 0);
-        $paid = (float) $hist->amount;
+        $paid = (float) $hist->amount_paid;
         $principal = $paid > ($monthly + 0.009) ? round($monthly, 2) : round($paid, 2);
         $penalty = round($paid - $principal, 2);
         $penaltyRate = (float) ($dp->penalty_percentage ?? 0);
         $totalDp = (float) $dp->amount + (float) $dp->balance;
-        $all = \App\Models\DownpaymentHistory::where('downpayment_id', $dp->id)
+        $all = \App\Models\Payment::where('downpayment_id', $dp->id)
             ->orderBy('payment_date')
             ->orderBy('created_at')
             ->get();
         $installmentNo = 0;
         $applied = 0;
         foreach ($all as $idx => $h) {
-            $p = ((float) $h->amount > $monthly + 0.009) ? $monthly : (float) $h->amount;
+            $p = ((float) $h->amount_paid > $monthly + 0.009) ? $monthly : (float) $h->amount_paid;
             $applied += $p;
             if ((string) $h->id === (string) $hist->id) {
                 $installmentNo = $idx + 1;

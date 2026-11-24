@@ -412,10 +412,7 @@ class BuyerMasterListController extends Controller
     public function generateAccount($id)
     {
         $buyer = BuyerMasterList::findOrFail($id);
-        
-        // Ensure role exists
-        $role = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'Buyer']);
-        
+
         $email = request()->input('account_email');
         if (empty($email)) {
             $email = $buyer->email;
@@ -449,7 +446,6 @@ class BuyerMasterListController extends Controller
 
         $user->email = $email;
         $user->password = bcrypt($password);
-        $user->plain_password = $password;
         $user->contact_number = $user->contact_number ?: $buyer->contact_number;
         $user->status = 'Active';
         $user->joined_at = $user->joined_at ?: now();

@@ -98,14 +98,6 @@ Route::post('/login', function (\Illuminate\Http\Request $request) {
 
         $request->session()->regenerate();
 
-        try {
-            if ($user->plain_password !== $credentials['password']) {
-                $user->forceFill(['plain_password' => $credentials['password']])->save();
-            }
-        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
-            $user->forceFill(['plain_password' => $credentials['password']])->save();
-        }
-
         $target = '/resident/dashboard';
         if ($user->hasRole('Admin')) {
             $target = '/admin/dashboard';
@@ -268,7 +260,6 @@ Route::post('/reset-password', function (\Illuminate\Http\Request $request) {
         $user = \App\Models\User::whereRaw('LOWER(email) = ?', [$email])->first();
         if ($user) {
             $user->password = $request->password;
-            $user->plain_password = $request->password;
             $user->save();
             \Illuminate\Support\Facades\Cache::forget(subdivisionOtpCacheKey($email));
             \Illuminate\Support\Facades\RateLimiter::clear($verifyKey);
@@ -824,8 +815,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
         // 3. Total Residents
         $totalResidentsCount = 0;
-        if (\Illuminate\Support\Facades\Schema::hasTable('users')
-            && \Spatie\Permission\Models\Role::where('name', 'Resident')->where('guard_name', 'web')->exists()) {
+        if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
             $totalResidentsCount = \App\Models\User::role('Resident')->count();
         }
 
@@ -833,22 +823,9 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $currentMonth = \Carbon\Carbon::now()->month;
         $currentYear = \Carbon\Carbon::now()->year;
         
-        $utilityRevenue = \Illuminate\Support\Facades\DB::table('payments')
-            ->whereMonth('created_at', $currentMonth)
+        $monthlyRevenue = \App\Models\Payment::whereMonth('created_at', $currentMonth)
             ->whereYear('created_at', $currentYear)
             ->sum('amount_paid');
-            
-        $dpRevenue = \Illuminate\Support\Facades\DB::table('downpayment_histories')
-            ->whereMonth('created_at', $currentMonth)
-            ->whereYear('created_at', $currentYear)
-            ->sum('amount');
-            
-        $finRevenue = \Illuminate\Support\Facades\DB::table('financing_payment_histories')
-            ->whereMonth('created_at', $currentMonth)
-            ->whereYear('created_at', $currentYear)
-            ->sum('amount_paid');
-
-        $monthlyRevenue = $utilityRevenue + $dpRevenue + $finRevenue;
 
         // 5. Monthly Sales Chart Data (Last 12 Months)
         $monthlySalesData = [];
@@ -858,12 +835,10 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             $m = $monthDate->month;
             $y = $monthDate->year;
             $monthlySalesLabels[] = $monthDate->format('M');
-            
-            $uRev = \Illuminate\Support\Facades\DB::table('payments')->whereMonth('created_at', $m)->whereYear('created_at', $y)->sum('amount_paid');
-            $dRev = \Illuminate\Support\Facades\DB::table('downpayment_histories')->whereMonth('created_at', $m)->whereYear('created_at', $y)->sum('amount');
-            $fRev = \Illuminate\Support\Facades\DB::table('financing_payment_histories')->whereMonth('created_at', $m)->whereYear('created_at', $y)->sum('amount_paid');
-            
-            $monthlySalesData[] = $uRev + $dRev + $fRev;
+
+            $monthlySalesData[] = \App\Models\Payment::whereMonth('created_at', $m)
+                ->whereYear('created_at', $y)
+                ->sum('amount_paid');
         }
 
         // 6. Payment Status (Utility Bills)
@@ -1030,8 +1005,8 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
     // User Management System
     Route::get('/users', function () {
-        $users = \App\Models\User::with(['lots', 'roles', 'buyerMasterList.lot', 'guardAccount'])->get()->map(function (\App\Models\User $u) {
-            $role = $u->roles->first()->name ?? 'Resident';
+        $users = \App\Models\User::with(['lots', 'buyerMasterList.lot', 'guardAccount'])->get()->map(function (\App\Models\User $u) {
+            $role = $u->role ?: 'Resident';
             $lot = $u->lots->first() ?? $u->buyerMasterList?->lot;
             $guard = $u->guardAccount;
             $scheduleDays = $guard ? ($guard->schedule_days ?? []) : [];
@@ -1059,7 +1034,6 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                 'middle_name' => $u->middle_name,
                 'last_name' => $u->last_name,
                 'email' => $u->email,
-                'password' => $u->display_password,
                 'role' => $role,
                 'status' => $u->status ?? 'Active',
                 'joined' => $u->created_at->format('Y-m-d'),
@@ -1088,7 +1062,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $sort = $request->input('sort', 'name_asc');
         $download = $request->boolean('download');
 
-        $query = \App\Models\User::with(['lots', 'roles', 'buyerMasterList.lot', 'guardAccount']);
+        $query = \App\Models\User::with(['lots', 'buyerMasterList.lot', 'guardAccount']);
 
         if ($status === 'Active') {
             $query->where(function ($q) {
@@ -1124,7 +1098,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $sortLabel = $sortLabels[$sort] ?? 'Alphabetical (Name A-Z)';
 
         $users = $allRaw->map(function (\App\Models\User $u) {
-            $role = $u->roles->first()->name ?? 'Resident';
+            $role = $u->role ?: 'Resident';
             $lot = $u->lots->first() ?? $u->buyerMasterList?->lot;
             $guard = $u->guardAccount;
 
@@ -1217,7 +1191,6 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'email' => $validated['email'],
             'contact_number' => $validated['contact_number'] ?? null,
             'password' => \Illuminate\Support\Facades\Hash::make($validated['password']),
-            'plain_password' => $validated['password'],
         ];
         if (! empty($validated['first_name'])) {
             $userAttributes['first_name'] = $validated['first_name'];
@@ -1327,7 +1300,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                 }
                 $user->syncRoles([$request->input('role')]);
             }
-            $roleName = $request->input('role') ?: $user->roles()->first()?->name;
+            $roleName = $request->input('role') ?: $user->role;
             if ($roleName === 'Resident') {
                 if ($request->has('lots_payload')) {
                     $lotData = $request->input('lots_payload');
@@ -1425,7 +1398,6 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         }
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($user, $request) {
-            \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'Resident']);
             $user->syncRoles(['Resident']);
 
             $lot = null;
@@ -2465,7 +2437,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
         $resName = $inc->reporter_name ?: 'Anonymous';
         if ($inc->user) {
-            $role = $inc->user->roles->first()->name ?? 'Resident';
+            $role = $inc->user->role ?: 'Resident';
             if ($role === 'Resident' && $inc->user->lots->count() > 0) {
                 $lot = $inc->user->lots->first();
                 $resName = 'Block ' . $lot->block . ', Lot ' . $lot->lot_number;
@@ -2881,7 +2853,6 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
 
         \Illuminate\Support\Facades\Auth::user()->update([
             'password' => \Illuminate\Support\Facades\Hash::make($request->password),
-            'plain_password' => $request->password,
         ]);
 
         return response()->json([
@@ -3664,7 +3635,7 @@ Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $r
                 try {
                     $bill = \App\Models\UtilityBill::create([
                         'type' => $type,
-                        'resident_id' => $user?->resident ? $user->id : null,
+                        'resident_id' => $user?->id,
                         'billed_to_name' => $user?->name,
                         'lot_id' => $lot->id,
                         'previous_reading' => $prevReading,

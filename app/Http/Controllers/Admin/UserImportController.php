@@ -11,7 +11,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Spatie\Permission\Models\Role;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -195,11 +194,10 @@ class UserImportController extends Controller
 
         $accountUser = User::query()->whereRaw('LOWER(email) = ?', [$email])->first();
         if ($accountUser) {
-            $currentRoles = $accountUser->roles()->pluck('name');
-            if ($currentRoles->contains('Buyer')) {
+            if ($accountUser->hasRole('Buyer')) {
                 return ['error' => "Row {$rowNumber}: {$email} belongs to a buyer account. Add buyers from the buyer master list.", 'created' => false, 'updated' => false];
             }
-            if ($currentRoles->contains('Admin')) {
+            if ($accountUser->hasRole('Admin')) {
                 return ['error' => "Row {$rowNumber}: {$email} belongs to an admin account.", 'created' => false, 'updated' => false];
             }
             if ($accountUser->status === 'Archived') {
@@ -273,11 +271,9 @@ class UserImportController extends Controller
                 'email' => $email,
                 'contact_number' => $contact,
                 'password' => Hash::make($password),
-                'plain_password' => $password,
                 'status' => 'Active',
             ]);
 
-            Role::findOrCreate($role, 'web');
             $user->syncRoles([$role]);
             $this->syncUserLot($user, $role, $block, $lot);
 
@@ -365,11 +361,9 @@ class UserImportController extends Controller
         if ($setPassword) {
             $plainPassword = 'Alth'.strtoupper(Str::random(6)).'!';
             $user->password = Hash::make($plainPassword);
-            $user->plain_password = $plainPassword;
         }
         $user->save();
 
-        Role::findOrCreate($role, 'web');
         $user->syncRoles([$role]);
         $this->syncUserLot($user, $role, $block, $lot);
 

@@ -177,23 +177,24 @@ class VisitorController extends Controller
 
         // SMS Dispatch Logic: Send exactly ONE SMS to prevent duplicates and multiple prompts.
         // If the resident provided the visitor's mobile number, send directly to the visitor.
-        // Otherwise, send to the resident host so they have the PIN.
+        // Otherwise, send to the resident host so they have the PIN and pass link.
+        $smsSent = false;
         if (!empty($visitor->contact_number)) {
             $visName = $visitor->visitor_name;
             $hostName = $visitor->host ? $visitor->host->name : ($visitor->host_name ?: 'Resident Host');
-            $visitorMessage = "Althesa Subd (Zone 1, Tagbong, Pili): Hello {$visName}, your visitor pass from {$hostName} is Approved! Gate PIN: {$pin}. Show this PIN to the guard upon arrival.";
+            $visitorMessage = "Althesa Subd (Zone 1, Tagbong, Pili): Hello {$visName}, your visitor pass from {$hostName} is Approved! Gate PIN: {$pin}. View pass & map: {$passUrl}";
 
             try {
-                \App\Helpers\SmsHelper::sendSms($visitor->contact_number, $visitorMessage);
+                $smsSent = (bool) \App\Helpers\SmsHelper::sendSms($visitor->contact_number, $visitorMessage);
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning('Failed sending visitor SMS: ' . $e->getMessage());
             }
         } elseif ($visitor->host && !empty($visitor->host->contact_number)) {
             $visName = $visitor->visitor_name;
-            $message = "Althesa Subd (Zone 1, Tagbong, Pili): Visitor request for {$visName} is Approved. Gate PIN: {$pin}. Please share this PIN with your visitor.";
+            $message = "Althesa Subd (Zone 1, Tagbong, Pili): Visitor request for {$visName} is Approved. Gate PIN: {$pin}. Share pass & map: {$passUrl}";
 
             try {
-                \App\Helpers\SmsHelper::sendSms($visitor->host->contact_number, $message);
+                $smsSent = (bool) \App\Helpers\SmsHelper::sendSms($visitor->host->contact_number, $message);
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning('Failed sending host SMS: ' . $e->getMessage());
             }
@@ -204,6 +205,7 @@ class VisitorController extends Controller
             'pin' => $pin,
             'pass_url' => $passUrl,
             'access_token' => $token,
+            'sms_sent' => $smsSent,
         ]);
     }
 
