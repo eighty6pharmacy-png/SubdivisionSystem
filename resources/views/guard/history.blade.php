@@ -3,7 +3,7 @@
 @section('title', 'Visitor History Logs')
 
 @section('content')
-<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
+<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}?v={{ filemtime(public_path('css/admin-finance.css')) }}">
 <style>
     @media print {
         body { background: #fff !important; }

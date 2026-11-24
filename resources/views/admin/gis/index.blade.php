@@ -4,7 +4,7 @@
 
 @section('content')
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}?v={{ filemtime(public_path('css/admin-finance.css')) }}">
     <link rel="stylesheet" href="{{ asset('css/views/admin-gis.css') }}">
     <style>
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }

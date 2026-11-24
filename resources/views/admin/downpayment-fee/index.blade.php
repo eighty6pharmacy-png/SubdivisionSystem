@@ -3,7 +3,7 @@
 @section('title', 'Downpayment Fee')
 
 @section('content')
-    <link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}?v={{ filemtime(public_path('css/admin-finance.css')) }}">
     <style>
         .dp-contract-modal .modal-header { padding: 24px 32px; }
         .dp-contract-modal .modal-body {

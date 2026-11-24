@@ -2,7 +2,7 @@
 @section('title', 'Financing Records')
 
 @section('content')
-<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
+<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}?v={{ filemtime(public_path('css/admin-finance.css')) }}">
 <style>
     .action-btn {
         display: inline-flex;

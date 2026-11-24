@@ -3,7 +3,7 @@
 @section('title', 'Visitor Management')
 
 @section('content')
-<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
+<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}?v={{ filemtime(public_path('css/admin-finance.css')) }}">
 
 <div class="fade-in">
     <div style="margin-bottom: 32px;">

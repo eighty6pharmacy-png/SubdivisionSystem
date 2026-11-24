@@ -3,7 +3,7 @@
 @section('title', 'My Dashboard')
 
 @section('content')
-<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
+<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}?v={{ filemtime(public_path('css/admin-finance.css')) }}">
 
 <div class="fade-in">
     <div style="margin-bottom: 32px; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px;">

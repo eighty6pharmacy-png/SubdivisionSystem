@@ -2,7 +2,7 @@
 @section('title', 'Monthly Payments')
 
 @section('content')
-<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
+<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}?v={{ filemtime(public_path('css/admin-finance.css')) }}">
 <style>
     .status-badge {
         padding: 4px 10px;

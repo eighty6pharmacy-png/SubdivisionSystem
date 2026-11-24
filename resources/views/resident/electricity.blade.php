@@ -3,7 +3,7 @@
 @section('title', 'My Electricity Bill')
 
 @section('content')
-<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
+<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}?v={{ filemtime(public_path('css/admin-finance.css')) }}">
 
 <div class="fade-in">
     @if($elecBill['provider_managed'] ?? false)

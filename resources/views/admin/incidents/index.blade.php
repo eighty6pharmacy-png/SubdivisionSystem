@@ -3,7 +3,7 @@
 @section('title', 'Incident Management')
 
 @section('content')
-<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}">
+<link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}?v={{ filemtime(public_path('css/admin-finance.css')) }}">
 <link rel="stylesheet" href="{{ asset('css/admin-incidents.css') }}">
 
 @php
