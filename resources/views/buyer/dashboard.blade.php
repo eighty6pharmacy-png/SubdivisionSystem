@@ -110,5 +110,7 @@
         </div>
     </div>
 
+    @include('buyer.partials.payment-calendar')
+
 </div>
 @endsection

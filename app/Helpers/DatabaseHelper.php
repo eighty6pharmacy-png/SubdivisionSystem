@@ -114,6 +114,131 @@ if (!function_exists('getMonthlyChartData')) {
     }
 }
 
+if (!function_exists('getRecentPayers')) {
+    function getRecentPayers($type, $limit = 8) {
+        $items = [];
+        try {
+            if ($type === 'electricity' || $type === 'water') {
+                if (\Illuminate\Support\Facades\Schema::hasTable('payments')) {
+                    $payments = \App\Models\Payment::with(['utilityBill.user', 'utilityBill.lot'])
+                        ->whereHas('utilityBill', function ($q) use ($type) {
+                            $q->where('type', $type);
+                        })
+                        ->where('amount_paid', '>', 0)
+                        ->orderByDesc('payment_date')
+                        ->orderByDesc('id')
+                        ->limit($limit)
+                        ->get();
+
+                    foreach ($payments as $p) {
+                        $ub = $p->utilityBill;
+                        if (!$ub) continue;
+                        $lotLabel = $ub->lot
+                            ? "Blk {$ub->lot->block} Lot {$ub->lot->lot_number}"
+                            : ($ub->lot_number ? "Lot {$ub->lot_number}" : 'N/A');
+                        $payerName = trim((string) ($ub->billed_to_name ?: ($ub->user?->name ?: 'Resident')));
+                        $dt = $p->payment_date ?: $p->created_at;
+                        $items[] = [
+                            'name' => $payerName !== '' ? $payerName : 'Resident',
+                            'lot' => $lotLabel,
+                            'amount' => round((float) $p->amount_paid, 2),
+                            'date' => $dt ? \Carbon\Carbon::parse($dt)->format('M d, Y') : 'N/A',
+                            'method' => $p->method ?: 'Cash',
+                        ];
+                    }
+                }
+
+                // Fallback to utility_bills if no Payment records exist yet
+                if (empty($items) && \Illuminate\Support\Facades\Schema::hasTable('utility_bills')) {
+                    $bills = \App\Models\UtilityBill::with(['user', 'lot'])
+                        ->where('type', $type)
+                        ->where('total_paid', '>', 0)
+                        ->orderByDesc('updated_at')
+                        ->limit($limit)
+                        ->get();
+
+                    foreach ($bills as $ub) {
+                        $lotLabel = $ub->lot
+                            ? "Blk {$ub->lot->block} Lot {$ub->lot->lot_number}"
+                            : ($ub->lot_number ? "Lot {$ub->lot_number}" : 'N/A');
+                        $payerName = trim((string) ($ub->billed_to_name ?: ($ub->user?->name ?: 'Resident')));
+                        $items[] = [
+                            'name' => $payerName !== '' ? $payerName : 'Resident',
+                            'lot' => $lotLabel,
+                            'amount' => round((float) $ub->total_paid, 2),
+                            'date' => $ub->updated_at ? $ub->updated_at->format('M d, Y') : 'N/A',
+                            'method' => 'Recorded',
+                        ];
+                    }
+                }
+            } elseif ($type === 'downpayment') {
+                if (\Illuminate\Support\Facades\Schema::hasTable('payments')) {
+                    $payments = \App\Models\Payment::with(['downpayment.reservation.buyerMasterList', 'downpayment.reservation.lot'])
+                        ->whereNotNull('downpayment_id')
+                        ->where('amount_paid', '>', 0)
+                        ->orderByDesc('payment_date')
+                        ->orderByDesc('id')
+                        ->limit($limit)
+                        ->get();
+
+                    foreach ($payments as $p) {
+                        $dp = $p->downpayment;
+                        $res = $dp?->reservation;
+                        $bml = $res?->buyerMasterList;
+                        $lot = $res?->lot;
+                        $payerName = $bml
+                            ? trim(($bml->first_name ?? '') . ' ' . ($bml->last_name ?? ''))
+                            : ($res?->client_name ?? 'Buyer');
+                        $lotLabel = $lot
+                            ? "Blk {$lot->block} Lot {$lot->lot_number}"
+                            : 'N/A';
+                        $dt = $p->payment_date ?: $p->created_at;
+                        $items[] = [
+                            'name' => $payerName !== '' ? $payerName : 'Buyer',
+                            'lot' => $lotLabel,
+                            'amount' => round((float) $p->amount_paid, 2),
+                            'date' => $dt ? \Carbon\Carbon::parse($dt)->format('M d, Y') : 'N/A',
+                            'method' => $p->method ?: 'Cash',
+                        ];
+                    }
+                }
+
+                // Fallback to downpayments table if no Payment records exist yet
+                if (empty($items) && \Illuminate\Support\Facades\Schema::hasTable('downpayments')) {
+                    $dps = \App\Models\Downpayment::with(['reservation.buyerMasterList', 'reservation.lot'])
+                        ->where('amount', '>', 0)
+                        ->orderByDesc('updated_at')
+                        ->limit($limit)
+                        ->get();
+
+                    foreach ($dps as $dp) {
+                        $res = $dp->reservation;
+                        $bml = $res?->buyerMasterList;
+                        $lot = $res?->lot;
+                        $payerName = $bml
+                            ? trim(($bml->first_name ?? '') . ' ' . ($bml->last_name ?? ''))
+                            : ($res?->client_name ?? 'Buyer');
+                        $lotLabel = $lot
+                            ? "Blk {$lot->block} Lot {$lot->lot_number}"
+                            : 'N/A';
+                        $items[] = [
+                            'name' => $payerName !== '' ? $payerName : 'Buyer',
+                            'lot' => $lotLabel,
+                            'amount' => round((float) $dp->amount, 2),
+                            'date' => $dp->updated_at ? $dp->updated_at->format('M d, Y') : 'N/A',
+                            'method' => 'Recorded',
+                        ];
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            return [];
+        }
+
+        return $items;
+    }
+}
+
 if (!function_exists('getLotMonthlyChartData')) {
     function getLotMonthlyChartData($lotId, $type, $bills = null) {
         if ($bills === null) {

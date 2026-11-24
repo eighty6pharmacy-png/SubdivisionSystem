@@ -43,55 +43,95 @@
 
     <div>
         @if($downpayments->isNotEmpty())
-            <h3 style="font-size: 18px; font-weight: 800; margin-bottom: 16px; color: #0f172a;">Downpayment Schedule</h3>
-            
+            @php
+                $aggTotalDp = $downpayments->sum(fn($d) => (float) $d->balance + (float) $d->amount);
+                $aggPaidDp = $downpayments->sum(fn($d) => (float) $d->amount);
+                $aggBalDp = $downpayments->sum(fn($d) => (float) $d->balance);
+                $nextActiveDp = $downpayments->first(fn($d) => (float) $d->balance > 0);
+                $nextDueLabel = $nextActiveDp && $nextActiveDp->due_date
+                    ? \Carbon\Carbon::parse($nextActiveDp->due_date)->format('M d, Y')
+                    : 'All Settled';
+                $nextAmtLabel = $nextActiveDp
+                    ? min((float) $nextActiveDp->monthly_amortization, (float) $nextActiveDp->balance) + $nextActiveDp->latePenaltyAmount(min((float) $nextActiveDp->monthly_amortization, (float) $nextActiveDp->balance))
+                    : 0;
+            @endphp
+
+            <!-- Top Monthly Installment Summary Strip -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 24px;">
+                <div style="background: #fff; border: 1px solid #e2e8f0; border-left: 4px solid #4f46e5; border-radius: 14px; padding: 16px 18px; box-shadow: 0 2px 6px rgba(15,23,42,0.03);">
+                    <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;">Total Equity</div>
+                    <div style="font-size: 22px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format($aggTotalDp, 2) }}</div>
+                </div>
+                <div style="background: #fff; border: 1px solid #e2e8f0; border-left: 4px solid #10b981; border-radius: 14px; padding: 16px 18px; box-shadow: 0 2px 6px rgba(15,23,42,0.03);">
+                    <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;">Total Paid</div>
+                    <div style="font-size: 22px; font-weight: 800; color: #059669; margin-top: 4px;">₱{{ number_format($aggPaidDp, 2) }}</div>
+                </div>
+                <div style="background: #fff; border: 1px solid #e2e8f0; border-left: 4px solid #ef4444; border-radius: 14px; padding: 16px 18px; box-shadow: 0 2px 6px rgba(15,23,42,0.03);">
+                    <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;">Remaining Balance</div>
+                    <div style="font-size: 22px; font-weight: 800; color: {{ $aggBalDp > 0 ? '#dc2626' : '#059669' }}; margin-top: 4px;">₱{{ number_format($aggBalDp, 2) }}</div>
+                </div>
+                <div style="background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); border-radius: 14px; padding: 16px 18px; color: #fff; box-shadow: 0 6px 14px -4px rgba(79,70,229,0.35);">
+                    <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.85;">Next Installment Due</div>
+                    <div style="font-size: 22px; font-weight: 800; margin-top: 4px;">{{ $nextAmtLabel > 0 ? '₱' . number_format($nextAmtLabel, 2) : 'Paid Off' }}</div>
+                    <div style="font-size: 11px; font-weight: 600; opacity: 0.9; margin-top: 2px;">{{ $nextDueLabel }}</div>
+                </div>
+            </div>
+
+            <h3 style="font-size: 18px; font-weight: 800; margin-bottom: 16px; color: #0f172a;">Monthly Installment Schedule</h3>
+
             @foreach($downpayments as $dp)
             @php
                 $totalDp = $dp->balance + $dp->amount;
-                $progressPercent = $totalDp > 0 ? ($dp->amount / $totalDp) * 100 : 0;
+                $progressPercent = $totalDp > 0 ? min(100, max(0, ($dp->amount / $totalDp) * 100)) : 0;
                 $circumference = 2 * 3.14159 * 52;
                 $cerStroke = ($progressPercent / 100) * $circumference;
                 $principalDue = min((float) $dp->monthly_amortization, (float) $dp->balance);
                 $penaltyDue = $dp->latePenaltyAmount($principalDue);
                 $payNow = $principalDue + $penaltyDue;
+                $monthsLeft = ($dp->monthly_amortization > 0 && $dp->balance > 0)
+                    ? (int) ceil($dp->balance / $dp->monthly_amortization)
+                    : 0;
             @endphp
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin-bottom: 24px;">
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 20px;">
                 <!-- Info Box -->
-                <div class="analytic-card" style="padding: 28px; border-top: 4px solid #3b82f6; display: flex; flex-direction: column;">
-                    <h4 style="font-size: 14px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 16px 0; letter-spacing: 0.5px;">Equity Details</h4>
-                    
-                    <div style="margin-bottom: 24px;">
-                        <div style="font-size: 13px; color: #64748b; margin-bottom: 4px;">Total Equity Required</div>
-                        <div style="font-size: 36px; font-weight: 800; color: #0f172a; line-height: 1;">₱{{ number_format($totalDp, 2) }}</div>
+                <div class="analytic-card" style="padding: 24px; border-top: 4px solid #4f46e5; display: flex; flex-direction: column;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h4 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0; letter-spacing: 0.05em;">Equity & Installment Details</h4>
+                        @if($dp->status !== 'Good Standing')
+                            <span class="status-badge status-{{ strtolower(str_replace(' ', '-', $dp->status)) }}">{{ $dp->status }}</span>
+                        @else
+                            <span class="status-badge status-good-standing">{{ $dp->status }}</span>
+                        @endif
                     </div>
 
-                    <div style="display: flex; flex-direction: column; gap: 16px; border-top: 1px solid #e2e8f0; padding-top: 20px; flex: 1;">
+                    <div style="margin-bottom: 20px;">
+                        <div style="font-size: 12px; color: #64748b; margin-bottom: 4px; font-weight: 600;">Total Equity Required</div>
+                        <div style="font-size: 32px; font-weight: 800; color: #0f172a; line-height: 1.1;">₱{{ number_format($totalDp, 2) }}</div>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 12px; border-top: 1px solid #e2e8f0; padding-top: 16px; flex: 1;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="color: #64748b; font-size: 14px; font-weight: 500;">Monthly Amortization:</span>
-                            <strong style="color: #0f172a; font-size: 15px;">₱{{ number_format($dp->monthly_amortization, 2) }}</strong>
+                            <span style="color: #64748b; font-size: 13px; font-weight: 500;">Monthly Amortization</span>
+                            <strong style="color: #0f172a; font-size: 14px;">₱{{ number_format($dp->monthly_amortization, 2) }}</strong>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="color: #64748b; font-size: 14px; font-weight: 500;">Next Due Date:</span>
-                            <strong style="color: #dc2626; font-size: 15px;">{{ \Carbon\Carbon::parse($dp->due_date)->format('F d, Y') }}</strong>
+                            <span style="color: #64748b; font-size: 13px; font-weight: 500;">Next Due Date</span>
+                            <strong style="color: #dc2626; font-size: 14px;">{{ $dp->due_date ? \Carbon\Carbon::parse($dp->due_date)->format('F d, Y') : 'N/A' }}</strong>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="color: #64748b; font-size: 14px; font-weight: 500;">Penalty Rate:</span>
-                            <strong style="color: #dc2626; font-size: 15px;">{{ number_format($dp->penalty_percentage ?? 0, 2) }}%</strong>
+                            <span style="color: #64748b; font-size: 13px; font-weight: 500;">Late Penalty ({{ number_format($dp->penalty_percentage ?? 0, 2) }}%)</span>
+                            <strong style="color: {{ $penaltyDue > 0 ? '#dc2626' : '#64748b' }}; font-size: 14px;">₱{{ number_format($penaltyDue, 2) }}</strong>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="color: #64748b; font-size: 14px; font-weight: 500;">Status:</span>
-                            @if($dp->status !== 'Good Standing')
-                                <span class="status-badge status-{{ strtolower(str_replace(' ', '-', $dp->status)) }}">{{ $dp->status }}</span>
-                            @else
-                                <span style="color: #10b981; font-weight: 700; font-size: 14px;">{{ $dp->status }}</span>
-                            @endif
+                            <span style="color: #64748b; font-size: 13px; font-weight: 500;">Est. Months Remaining</span>
+                            <strong style="color: #0f172a; font-size: 14px;">{{ $monthsLeft }} {{ $monthsLeft === 1 ? 'month' : 'months' }}</strong>
                         </div>
                     </div>
 
                     @if($dp->balance > 0)
-                    <div style="margin-top: 24px;">
-                        <button id="payDpBtn_{{ $dp->id }}" class="btn btn-primary" style="width: 100%; padding: 14px; font-weight: 700; background: #0057B8; cursor: pointer; border: none; border-radius: 8px; color: #fff; text-transform: uppercase; font-size: 14px; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'" onclick="payDownpayment('{{ $dp->id }}')">
+                    <div style="margin-top: 20px;">
+                        <button id="payDpBtn_{{ $dp->id }}" class="btn btn-primary" style="width: 100%; padding: 14px; font-weight: 700; background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%); cursor: pointer; border: none; border-radius: 12px; color: #fff; font-size: 14px; box-shadow: 0 4px 12px rgba(37,99,235,0.25); transition: transform 0.15s, opacity 0.15s;" onmouseover="this.style.opacity='0.94'" onmouseout="this.style.opacity='1'" onclick="payDownpayment('{{ $dp->id }}')">
                             Pay ₱{{ number_format($payNow, 2) }} Online
                         </button>
                     </div>
@@ -99,37 +139,75 @@
                 </div>
 
                 <!-- Graph Box -->
-                <div class="analytic-card" style="padding: 28px; display: flex; flex-direction: column;">
-                    <h4 style="font-size: 14px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 24px 0; letter-spacing: 0.5px;">Payment Progress</h4>
-                    
-                    <div class="cer-gauge-wrap" style="justify-content: flex-start; margin-bottom: 24px; padding: 0; border: none; background: transparent; flex: 1; align-items: center;">
-                        <div class="cer-gauge-ring" style="width: 130px; height: 130px; flex-shrink: 0;">
-                            <svg width="130" height="130" viewBox="0 0 120 120">
+                <div class="analytic-card" style="padding: 24px; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h4 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0; letter-spacing: 0.05em;">Payment Progress</h4>
+                        <span class="card-badge" style="background: #eef2ff; color: #4338ca;">{{ number_format($progressPercent, 1) }}% Complete</span>
+                    </div>
+
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 28px; flex-wrap: wrap; padding: 10px 0;">
+                        <div class="cer-gauge-ring" style="width: 150px; height: 150px; flex-shrink: 0;">
+                            <svg viewBox="0 0 120 120">
                                 <circle class="gauge-bg" cx="60" cy="60" r="52"></circle>
                                 <circle class="gauge-fill" cx="60" cy="60" r="52"
                                     stroke-dasharray="{{ round($cerStroke, 2) }} {{ round($circumference, 2) }}"
-                                    stroke-dashoffset="0"></circle>
+                                    stroke-dashoffset="0"
+                                    style="stroke: #10b981; {{ $progressPercent <= 0 ? 'stroke-opacity: 0;' : '' }}"></circle>
                             </svg>
-                            <div class="cer-gauge-label" style="font-size: 22px;">
+                            <div class="cer-gauge-label" style="font-size: 24px;">
                                 {{ number_format($progressPercent, 1) }}%
-                                <span style="font-size: 11px;">Paid</span>
+                                <span style="font-size: 10px;">Paid</span>
                             </div>
                         </div>
-                        <div class="cer-meta" style="margin-left: 32px; display: flex; flex-direction: column; gap: 16px;">
-                            <div>
-                                <div style="font-size: 13px; color: #64748b; margin-bottom: 4px;">Amount Paid</div>
-                                <div style="font-size: 20px; font-weight: 800; color: var(--bill-success); line-height: 1;">₱{{ number_format($dp->amount, 2) }}</div>
+
+                        <div style="flex: 1; min-width: 170px; display: flex; flex-direction: column; gap: 10px;">
+                            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 12px 14px;">
+                                <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase;">Amount Paid</div>
+                                <div style="font-size: 19px; font-weight: 800; color: #059669; margin-top: 2px;">₱{{ number_format($dp->amount, 2) }}</div>
                             </div>
-                            <div>
-                                <div style="font-size: 13px; color: #64748b; margin-bottom: 4px;">Outstanding Balance</div>
-                                <div style="font-size: 20px; font-weight: 800; color: var(--bill-danger); line-height: 1;">₱{{ number_format($dp->balance, 2) }}</div>
+                            <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 12px 14px;">
+                                <div style="font-size: 11px; font-weight: 700; color: #991b1b; text-transform: uppercase;">Outstanding Balance</div>
+                                <div style="font-size: 19px; font-weight: 800; color: #dc2626; margin-top: 2px;">₱{{ number_format($dp->balance, 2) }}</div>
                             </div>
                         </div>
                     </div>
+
+                    @if($dp->balance > 0 && $dp->due_date)
+                    <div style="margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 14px;">
+                        <div style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 8px;">Upcoming Monthly Installments</div>
+                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                            @php
+                                $remSim = (float) $dp->balance;
+                                $mAmt = (float) $dp->monthly_amortization > 0 ? (float) $dp->monthly_amortization : $remSim;
+                                $baseDue = \Carbon\Carbon::parse($dp->due_date);
+                            @endphp
+                            @for($idx = 0; $idx < 4 && $remSim > 0.01; $idx++)
+                                @php
+                                    $rowAmt = min($mAmt, $remSim);
+                                    $rowPen = $idx === 0 ? (float) $dp->latePenaltyAmount($rowAmt) : 0;
+                                    $rowTotal = $rowAmt + $rowPen;
+                                    $rowDate = $baseDue->copy()->addMonthsNoOverflow($idx);
+                                    $rowOverdue = $idx === 0 && $rowDate->isPast() && !$rowDate->isToday();
+                                    $remSim -= $rowAmt;
+                                @endphp
+                                <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; padding: 8px 12px; border-radius: 10px; font-size: 12px;">
+                                    <span style="font-weight: 600; color: #334155;">{{ $rowDate->format('M d, Y') }}</span>
+                                    <span style="font-weight: 700; color: #0f172a;">₱{{ number_format($rowTotal, 2) }}</span>
+                                    @if($rowOverdue)
+                                        <span style="background: #fee2e2; color: #991b1b; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">Overdue</span>
+                                    @elseif($idx === 0)
+                                        <span style="background: #fef3c7; color: #92400e; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">Due Next</span>
+                                    @else
+                                        <span style="background: #e0e7ff; color: #3730a3; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">Scheduled</span>
+                                    @endif
+                                </div>
+                            @endfor
+                        </div>
+                    </div>
+                    @endif
                 </div>
             </div>
             @endforeach
-
 
         @endif
 
@@ -191,32 +269,33 @@
                         @php
                             $totalShortfall = $financing->receivables > 0 ? $financing->receivables : ($financing->amount_paid + $financing->balance);
                             $totalShortfall = $totalShortfall > 0 ? $totalShortfall : 1;
-                            $finProgressPercent = ($financing->amount_paid / $totalShortfall) * 100;
+                            $finProgressPercent = min(100, max(0, ($financing->amount_paid / $totalShortfall) * 100));
                             $finCircumference = 2 * 3.14159 * 52;
                             $finStroke = ($finProgressPercent / 100) * $finCircumference;
                         @endphp
                         
-                        <div class="cer-gauge-wrap" style="justify-content: flex-start; margin-bottom: 24px; padding: 0; border: none; background: transparent; flex: 1; align-items: center;">
-                            <div class="cer-gauge-ring" style="width: 130px; height: 130px; flex-shrink: 0;">
-                                <svg width="130" height="130" viewBox="0 0 120 120">
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 28px; flex-wrap: wrap; padding: 10px 0; flex: 1;">
+                            <div class="cer-gauge-ring" style="width: 150px; height: 150px; flex-shrink: 0;">
+                                <svg viewBox="0 0 120 120">
                                     <circle class="gauge-bg" cx="60" cy="60" r="52"></circle>
                                     <circle class="gauge-fill" cx="60" cy="60" r="52"
                                         stroke-dasharray="{{ round($finStroke, 2) }} {{ round($finCircumference, 2) }}"
-                                        stroke-dashoffset="0"></circle>
+                                        stroke-dashoffset="0"
+                                        style="stroke: #10b981; {{ $finProgressPercent <= 0 ? 'stroke-opacity: 0;' : '' }}"></circle>
                                 </svg>
-                                <div class="cer-gauge-label" style="font-size: 22px;">
+                                <div class="cer-gauge-label" style="font-size: 24px;">
                                     {{ number_format($finProgressPercent, 1) }}%
-                                    <span style="font-size: 11px;">Paid</span>
+                                    <span style="font-size: 10px;">Paid</span>
                                 </div>
                             </div>
-                            <div class="cer-meta" style="margin-left: 32px; display: flex; flex-direction: column; gap: 16px;">
-                                <div>
-                                    <div style="font-size: 13px; color: #64748b; margin-bottom: 4px;">Amount Paid</div>
-                                    <div style="font-size: 20px; font-weight: 800; color: var(--bill-success); line-height: 1;">₱{{ number_format($financing->amount_paid, 2) }}</div>
+                            <div style="flex: 1; min-width: 170px; display: flex; flex-direction: column; gap: 10px;">
+                                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 12px 14px;">
+                                    <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase;">Amount Paid</div>
+                                    <div style="font-size: 19px; font-weight: 800; color: #059669; margin-top: 2px;">₱{{ number_format($financing->amount_paid, 2) }}</div>
                                 </div>
-                                <div>
-                                    <div style="font-size: 13px; color: #64748b; margin-bottom: 4px;">Remaining Shortfall</div>
-                                    <div style="font-size: 20px; font-weight: 800; color: var(--bill-danger); line-height: 1;">₱{{ number_format($financing->balance, 2) }}</div>
+                                <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 12px 14px;">
+                                    <div style="font-size: 11px; font-weight: 700; color: #991b1b; text-transform: uppercase;">Remaining Shortfall</div>
+                                    <div style="font-size: 19px; font-weight: 800; color: #dc2626; margin-top: 2px;">₱{{ number_format($financing->balance, 2) }}</div>
                                 </div>
                             </div>
                         </div>
@@ -256,6 +335,8 @@
             </div>
             @endif
         @endif
+
+        @include('buyer.partials.payment-calendar')
     </div>
 </div>
 

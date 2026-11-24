@@ -813,6 +813,13 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                 ->count();
         }
 
+        // 2b. Visitors Today
+        $visitorsTodayCount = 0;
+        if (\Illuminate\Support\Facades\Schema::hasTable('visitors')) {
+            $today = \Carbon\Carbon::today();
+            $visitorsTodayCount = \App\Models\Visitor::whereDate('created_at', $today)->count();
+        }
+
         // 3. Total Residents
         $totalResidentsCount = 0;
         if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
@@ -827,19 +834,148 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             ->whereYear('created_at', $currentYear)
             ->sum('amount_paid');
 
-        // 5. Monthly Sales Chart Data (Last 12 Months)
+        // 5. Monthly Sales Chart Data (Last 12 Months) with Source Breakdown
         $monthlySalesData = [];
         $monthlySalesLabels = [];
+        $monthlySalesBySource = [
+            'downpayment' => [],
+            'financing' => [],
+            'utility' => [],
+            'counts' => [],
+        ];
+        $peakAmount = -1;
+        $peakMonthLabel = '—';
+
         for ($i = 11; $i >= 0; $i--) {
             $monthDate = \Carbon\Carbon::now()->subMonths($i);
             $m = $monthDate->month;
             $y = $monthDate->year;
-            $monthlySalesLabels[] = $monthDate->format('M');
+            $label = $monthDate->format('M');
+            $monthlySalesLabels[] = $label;
 
-            $monthlySalesData[] = \App\Models\Payment::whereMonth('created_at', $m)
+            $monthPayments = \App\Models\Payment::whereMonth('created_at', $m)
                 ->whereYear('created_at', $y)
-                ->sum('amount_paid');
+                ->get(['amount_paid', 'utility_bill_id', 'downpayment_id', 'financing_record_id']);
+
+            $dpSum = (float) $monthPayments->whereNotNull('downpayment_id')->sum('amount_paid');
+            $finSum = (float) $monthPayments->whereNotNull('financing_record_id')->sum('amount_paid');
+            $utilSum = (float) $monthPayments->whereNotNull('utility_bill_id')->sum('amount_paid');
+            $totalSum = (float) $monthPayments->sum('amount_paid');
+
+            $monthlySalesData[] = round($totalSum, 2);
+            $monthlySalesBySource['downpayment'][] = round($dpSum, 2);
+            $monthlySalesBySource['financing'][] = round($finSum, 2);
+            $monthlySalesBySource['utility'][] = round($utilSum, 2);
+            $monthlySalesBySource['counts'][] = $monthPayments->count();
+
+            if ($totalSum > $peakAmount) {
+                $peakAmount = $totalSum;
+                $peakMonthLabel = $monthDate->format('M Y');
+            }
         }
+
+        $annualSalesTotal = array_sum($monthlySalesData);
+        $lastMonthRevenue = count($monthlySalesData) >= 2 ? (float) $monthlySalesData[count($monthlySalesData) - 2] : 0.0;
+        $momChange = $lastMonthRevenue > 0
+            ? round((($monthlyRevenue - $lastMonthRevenue) / $lastMonthRevenue) * 100, 1)
+            : null;
+        $salesSummary = [
+            'annual_total' => round($annualSalesTotal, 2),
+            'monthly_avg' => round($annualSalesTotal / 12, 2),
+            'this_month' => round((float) $monthlyRevenue, 2),
+            'last_month' => round($lastMonthRevenue, 2),
+            'mom_change' => $momChange,
+            'peak_month' => $peakAmount > 0 ? $peakMonthLabel : '—',
+            'peak_amount' => $peakAmount > 0 ? round($peakAmount, 2) : 0.0,
+        ];
+
+        // 5b. Recent Payers & Payment History (locates exact payment paid)
+        $recentPayments = \App\Models\Payment::with([
+            'utilityBill.user',
+            'utilityBill.lot',
+            'downpayment.reservation.buyerMasterList',
+            'downpayment.reservation.lot',
+            'financingRecord.buyerMasterList',
+            'financingRecord.lot',
+        ])
+            ->orderByRaw('COALESCE(payment_date, created_at) DESC')
+            ->take(15)
+            ->get()
+            ->map(function (\App\Models\Payment $p) {
+                $payer = 'Walk-in / Resident';
+                $category = 'other';
+                $categoryLabel = 'Payment';
+                $specificPayment = 'General Payment';
+                $lotLabel = null;
+                $targetUrl = '/admin/dashboard';
+
+                if ($p->utilityBill) {
+                    $ub = $p->utilityBill;
+                    $payer = $ub->billed_to_name ?: ($ub->user?->name ?: 'Resident');
+                    $isWater = strtolower((string) $ub->type) === 'water';
+                    $category = $isWater ? 'water' : 'electricity';
+                    $categoryLabel = $isWater ? 'Water' : 'Electricity';
+                    $period = $ub->billing_period
+                        ? \Carbon\Carbon::parse($ub->billing_period)->format('M Y')
+                        : ($ub->created_at ? $ub->created_at->format('M Y') : '');
+                    $specificPayment = ($isWater ? 'Water Bill' : 'Electricity Bill') . ($period ? " ({$period})" : '');
+                    if ($ub->lot) {
+                        $lotLabel = "Blk {$ub->lot->block} Lot {$ub->lot->lot_number}";
+                    }
+                    $targetUrl = $isWater ? '/admin/water' : '/admin/billing';
+                } elseif ($p->downpayment) {
+                    $dp = $p->downpayment;
+                    $res = $dp->reservation;
+                    $bml = $res?->buyerMasterList;
+                    if ($bml) {
+                        $payer = trim(implode(' ', array_filter([$bml->first_name, $bml->middle_name, $bml->last_name])));
+                    } elseif ($res && ($res->first_name || $res->last_name)) {
+                        $payer = trim(($res->first_name ?? '') . ' ' . ($res->last_name ?? ''));
+                    } elseif ($res?->notes) {
+                        $payer = $res->notes;
+                    }
+                    $category = 'downpayment';
+                    $categoryLabel = 'Downpayment';
+                    $specificPayment = 'Downpayment Installment';
+                    if ($res?->lot) {
+                        $lotLabel = "Blk {$res->lot->block} Lot {$res->lot->lot_number}";
+                    }
+                    $targetUrl = '/admin/downpayment-fee';
+                } elseif ($p->financingRecord) {
+                    $fin = $p->financingRecord;
+                    $bml = $fin->buyerMasterList;
+                    if ($bml) {
+                        $payer = trim(implode(' ', array_filter([$bml->first_name, $bml->middle_name, $bml->last_name])));
+                    }
+                    $category = 'financing';
+                    $categoryLabel = 'Financing';
+                    $methodLabel = $fin->financing_method ? " ({$fin->financing_method})" : '';
+                    $specificPayment = "Financing Amortization{$methodLabel}";
+                    if ($fin->lot) {
+                        $lotLabel = "Blk {$fin->lot->block} Lot {$fin->lot->lot_number}";
+                    }
+                    $targetUrl = '/admin/financing';
+                }
+
+                $paidDate = $p->payment_date ?: $p->created_at;
+
+                return [
+                    'id' => $p->id,
+                    'payer' => $payer,
+                    'category' => $category,
+                    'category_label' => $categoryLabel,
+                    'specific_payment' => $specificPayment,
+                    'lot_label' => $lotLabel,
+                    'target_url' => $targetUrl,
+                    'amount' => (float) $p->amount_paid,
+                    'method' => $p->method ?: 'Office Payment',
+                    'trn' => $p->trn,
+                    'paid_at' => $paidDate ? \Carbon\Carbon::parse($paidDate)->format('M d, Y · h:i A') : '—',
+                    'paid_ago' => $paidDate ? \Carbon\Carbon::parse($paidDate)->diffForHumans() : '',
+                ];
+            })
+            ->values()
+            ->all();
 
         // 6. Payment Status (Utility Bills)
         $billsPaid = \Illuminate\Support\Facades\DB::table('utility_bills')->where('status', 'paid')->count();
@@ -969,34 +1105,64 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
         \App\Models\Reservation::cancelExpiredUnpaid();
         $reservationItems = collect(getReservationFees());
+        $resActiveItems = $reservationItems->whereIn('status', ['Reserved', 'Pending']);
+        $resCancelledItems = $reservationItems->where('status', 'Cancelled');
+        $resConvertedCount = $resActiveItems->where('has_downpayment', true)->count();
+        $resCollected = (float) $reservationItems->where('status', '!=', 'Cancelled')->sum('amount');
         $reservationStatusSummary = [
-            'active' => $reservationItems->whereIn('status', ['Reserved', 'Pending'])->count(),
-            'cancelled' => $reservationItems->where('status', 'Cancelled')->count(),
+            'active' => $resActiveItems->count(),
+            'cancelled' => $resCancelledItems->count(),
+            'total_count' => $reservationItems->count(),
+            'converted_count' => $resConvertedCount,
+            'total_collected' => round($resCollected, 2),
         ];
 
         $downpaymentItems = collect(getDownpaymentFees());
+        $dpTotalAmount = (float) $downpaymentItems->sum('total_dp');
+        $dpTotalCollected = (float) $downpaymentItems->sum('paid_amount');
+        $dpTotalBalance = max(0, $dpTotalAmount - $dpTotalCollected);
+        $dpCollectionRate = $dpTotalAmount > 0 ? round(($dpTotalCollected / $dpTotalAmount) * 100, 1) : 0;
         $downpaymentStatusSummary = [
-            'early' => $downpaymentItems->where('payment_behavior', 'Early')->count(),
-            'on_time' => $downpaymentItems->where('payment_behavior', 'On-Time')->count(),
-            'late' => $downpaymentItems->where('payment_behavior', 'Late')->count(),
-            'pending' => $downpaymentItems->where('payment_behavior', 'Not available yet')->count(),
+            'fully_paid' => $downpaymentItems->where('status', 'Fully Paid')->count(),
+            'on_schedule' => $downpaymentItems->filter(fn($dp) => ($dp['status'] ?? '') !== 'Fully Paid' && (int) ($dp['missed_months'] ?? 0) === 0)->count(),
+            'overdue' => $downpaymentItems->filter(fn($dp) => ($dp['status'] ?? '') !== 'Fully Paid' && (int) ($dp['missed_months'] ?? 0) > 0)->count(),
+            'total_count' => $downpaymentItems->count(),
+            'fully_paid_count' => $downpaymentItems->where('status', 'Fully Paid')->count(),
+            'total_amount' => round($dpTotalAmount, 2),
+            'total_collected' => round($dpTotalCollected, 2),
+            'total_balance' => round($dpTotalBalance, 2),
+            'collection_rate' => $dpCollectionRate,
         ];
 
         $financeLinked = \App\Models\FinancingRecord::whereHas('buyerMasterList.reservations.downpayments');
+        $financeRecordsAll = (clone $financeLinked)->get(['status', 'total_amt_due', 'amount_paid', 'balance', 'financing_method']);
+        $finTotalDue = (float) $financeRecordsAll->sum('total_amt_due');
+        $finTotalPaid = (float) $financeRecordsAll->sum('amount_paid');
+        $finTotalBalance = (float) $financeRecordsAll->sum('balance');
+        $finCollectionRate = $finTotalDue > 0 ? round(($finTotalPaid / $finTotalDue) * 100, 1) : 0;
         $financeStatusSummary = [
-            'pending' => (clone $financeLinked)->where('status', 'Pending')->count(),
-            'processing' => (clone $financeLinked)->where('status', 'Processing')->count(),
-            'released' => (clone $financeLinked)->where('status', 'Released')->count(),
-            'cleared' => (clone $financeLinked)->where('status', 'Cleared')->count(),
+            'pending' => $financeRecordsAll->where('status', 'Pending')->count(),
+            'processing' => $financeRecordsAll->where('status', 'Processing')->count(),
+            'released' => $financeRecordsAll->where('status', 'Released')->count(),
+            'cleared' => $financeRecordsAll->where('status', 'Cleared')->count(),
+            'total_count' => $financeRecordsAll->count(),
+            'total_due' => round($finTotalDue, 2),
+            'total_paid' => round($finTotalPaid, 2),
+            'total_balance' => round($finTotalBalance, 2),
+            'collection_rate' => $finCollectionRate,
         ];
 
         return view('admin.dashboard', compact(
             'openIncidentsCount', 
             'appointmentsTodayCount', 
+            'visitorsTodayCount',
             'totalResidentsCount', 
             'monthlyRevenue',
             'monthlySalesLabels',
             'monthlySalesData',
+            'monthlySalesBySource',
+            'salesSummary',
+            'recentPayments',
             'billsPaid',
             'billsPending',
             'billsOverdue',
@@ -2876,6 +3042,42 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
 
         $announcements = \App\Models\Announcement::orderBy('created_at', 'desc')->take(10)->get();
 
+        $now = \Carbon\Carbon::now();
+        $calendarBillsQuery = \App\Models\UtilityBill::where('resident_id', $user->id)
+            ->whereNotNull('due_date')
+            ->whereYear('due_date', $now->year)
+            ->whereMonth('due_date', $now->month);
+        if ($selectedLotId) {
+            $calendarBillsQuery->where(function ($q) use ($selectedLotId) {
+                $q->where('lot_id', $selectedLotId)->orWhereNull('lot_id');
+            });
+        }
+        $calendarEvents = $calendarBillsQuery->orderBy('due_date')->get()->map(function ($b) {
+            $isPaid = strtolower((string) $b->status) === 'paid';
+            $due = \Carbon\Carbon::parse($b->due_date);
+            $isOverdue = !$isPaid && $due->isPast() && !$due->isToday();
+            $totalAmount = (float) $b->amount + (float) ($b->previous_balance ?? 0);
+            $remaining = max(0, $totalAmount - (float) ($b->total_paid ?? 0));
+            $displayAmt = $isPaid ? (float) ($b->total_paid ?: $totalAmount) : ($remaining > 0 ? $remaining : $totalAmount);
+            $isWater = strtolower((string) $b->type) === 'water';
+
+            return [
+                'id' => 'bill-' . $b->id,
+                'title' => ($isWater ? '💧 Water' : '⚡ Elec') . ($isPaid ? ' Paid' : ' Due') . ' • ₱' . number_format($displayAmt, 2),
+                'start' => $due->format('Y-m-d'),
+                'url' => $isWater ? '/resident/water' : '/resident/electricity',
+                'backgroundColor' => $isPaid ? '#dcfce7' : ($isOverdue ? '#fee2e2' : ($isWater ? '#e0f2fe' : '#fef3c7')),
+                'borderColor' => $isPaid ? '#10b981' : ($isOverdue ? '#ef4444' : ($isWater ? '#0284c7' : '#f59e0b')),
+                'textColor' => $isPaid ? '#065f46' : ($isOverdue ? '#991b1b' : ($isWater ? '#075985' : '#92400e')),
+                'extendedProps' => [
+                    'type' => $isWater ? 'Water' : 'Electricity',
+                    'status' => $isPaid ? 'Paid' : ($isOverdue ? 'Overdue' : 'Due'),
+                    'amount' => $displayAmt,
+                    'period' => $b->billing_period ? \Carbon\Carbon::parse($b->billing_period)->format('M Y') : $due->format('M Y'),
+                ],
+            ];
+        })->values();
+
         return view('resident.dashboard', [
             'elecBill' => $elecBill,
             'waterBill' => $waterBill,
@@ -2884,6 +3086,7 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             'lots' => $lots,
             'selectedLot' => $selectedLot,
             'selectedLotId' => $selectedLotId,
+            'calendarEvents' => $calendarEvents,
         ]);
     });
     Route::get('/profile', function () {

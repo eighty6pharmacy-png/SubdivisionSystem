@@ -24,26 +24,35 @@
     </div>
 
     <!-- Collection Summary Dashboard style translated to Appointments -->
-    <div style="background: #fff; border: 1px solid var(--bill-border); border-radius: 20px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-        <h2 style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 24px;">Pipeline Metrics</h2>
-        <div class="responsive-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
-            <div style="background: #f8fafc; padding: 12px 16px; border-radius: 12px; border-left: 4px solid var(--bill-primary); cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onclick="filterByMetric('all')">
-                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Active Inquiries</div>
-                <div id="metricTotalActive" style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ count($appointments) }}</div>
+    <div style="background: #fff; border: 1px solid var(--bill-border); border-radius: 16px; padding: 16px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);">
+        <h2 style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 12px;">Pipeline Metrics</h2>
+        <div class="responsive-grid" style="grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px;">
+            <div style="background: #f8fafc; padding: 12px 14px; border-radius: 10px; border-left: 4px solid var(--bill-primary); cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onclick="filterByMetric('all')">
+                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Total Active Inquiries</div>
+                <div id="metricTotalActive" style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 2px;">{{ count($appointments) }}</div>
             </div>
-            <div style="background: #f8fafc; padding: 12px 16px; border-radius: 12px; border-left: 4px solid #f59e0b; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onclick="filterByMetric('Pending')">
-                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Awaiting Approval</div>
-                <div id="metricAwaiting" style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ collect($appointments)->where('status', 'Pending')->count() }}</div>
+            <div style="background: #f8fafc; padding: 12px 14px; border-radius: 10px; border-left: 4px solid #f59e0b; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onclick="filterByMetric('Pending')">
+                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Awaiting Approval</div>
+                <div id="metricAwaiting" style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 2px;">{{ collect($appointments)->where('status', 'Pending')->count() }}</div>
             </div>
-            <div style="background: #f8fafc; padding: 12px 16px; border-radius: 12px; border-left: 4px solid #10b981; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onclick="filterByMetric('Scheduled')">
-                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Scheduled Upcoming</div>
-                <div id="metricScheduled" style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ collect($appointments)->where('status', 'Scheduled')->count() }}</div>
+            <div style="background: #f8fafc; padding: 12px 14px; border-radius: 10px; border-left: 4px solid #10b981; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onclick="filterByMetric('Scheduled')">
+                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Scheduled Upcoming</div>
+                <div id="metricScheduled" style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 2px;">{{ collect($appointments)->where('status', 'Scheduled')->count() }}</div>
             </div>
-            <div style="background: #f8fafc; padding: 12px 16px; border-radius: 12px; border-left: 4px solid #64748b; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onclick="filterByMetric('Completed')">
-                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Successfully Completed</div>
-                <div id="metricCompleted" style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 4px;">{{ collect($appointments)->where('status', 'Completed')->count() }}</div>
+            <div style="background: #f8fafc; padding: 12px 14px; border-radius: 10px; border-left: 4px solid #64748b; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onclick="filterByMetric('Completed')">
+                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Successfully Completed</div>
+                <div id="metricCompleted" style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 2px;">{{ collect($appointments)->where('status', 'Completed')->count() }}</div>
             </div>
         </div>
+    </div>
+
+    <!-- Calendar View (Top of Inquiry Pipeline) -->
+    <div class="analytic-card">
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span>Appointments Calendar</span>
+            <span style="font-size: 11px; font-weight: normal; color: #64748b; background: #f1f5f9; padding: 4px 10px; border-radius: 12px;">Tip: Click any empty space on a day to block/unblock it.</span>
+        </div>
+        <div id="calendar"></div>
     </div>
 
     <!-- Filter Bar -->
@@ -120,15 +129,6 @@
             </table>
         </div>
         @include('partials.admin-client-pagination', ['prefix' => 'aptTable', 'defaultPerPage' => 15])
-    </div>
-
-    <!-- Calendar View -->
-    <div class="analytic-card" style="margin-top: 24px;">
-        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
-            <span>Appointments Calendar</span>
-            <span style="font-size: 11px; font-weight: normal; color: #64748b; background: #f1f5f9; padding: 4px 10px; border-radius: 12px;">Tip: Click any empty space on a day to block/unblock it.</span>
-        </div>
-        <div id="calendar" style="margin-top: 16px;"></div>
     </div>
 </div>
 

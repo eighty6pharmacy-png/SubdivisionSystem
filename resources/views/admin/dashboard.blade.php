@@ -4,7 +4,7 @@
 
 @section('content')
     <!-- Stats Row -->
-    <div class="stats-grid fade-up">
+    <div class="stats-grid fade-up" style="grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px;">
         <div class="stat-card green">
             <div class="stat-value">₱ {{ number_format($monthlyRevenue, 2) }}</div>
             <div class="stat-label">Revenue This Month</div>
@@ -17,94 +17,263 @@
             <div class="stat-value" style="margin-top: 10px;">{{ $appointmentsTodayCount ?? 0 }}</div>
             <div class="stat-label">Appointments Today</div>
         </div>
+        <div class="stat-card blue">
+            <div class="stat-value" style="margin-top: 10px;">{{ $visitorsTodayCount ?? 0 }}</div>
+            <div class="stat-label">Visitors Today</div>
+        </div>
         <div class="stat-card red">
             <div class="stat-value">{{ $openIncidentsCount ?? 0 }}</div>
             <div class="stat-label">Open Incidents</div>
         </div>
     </div>
 
-    <!-- Charts Row -->
-    <div class="responsive-grid grid-2-1 fade-up-2" style="margin-bottom:24px;">
-        <div class="card">
-            <div class="card-header">
-                <div>
-                    <span class="card-title">Monthly Sales Performance</span>
-                    <div style="font-size: 12px; color: #64748b; font-weight: 600; margin-top: 2px;">Total Annual Revenue & Monthly Trends</div>
+    <!-- Charts & Recent Payers Row (50% / 50%) -->
+    <div class="responsive-grid grid-2 fade-up-2" style="margin-bottom: 14px; gap: 14px; align-items: stretch;">
+        <!-- Monthly Sales Performance (Half Width) -->
+        <div class="card" style="padding: 16px; border-radius: 16px; background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.04); display: flex; flex-direction: column;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="card-title" style="margin: 0;">Monthly Sales Performance</span>
+                    @php
+                        $mom = $salesSummary['mom_change'] ?? null;
+                    @endphp
+                    @if($mom !== null)
+                        <span style="font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: {{ $mom >= 0 ? '#ecfdf5' : '#fef2f2' }}; color: {{ $mom >= 0 ? '#059669' : '#dc2626' }}; border: 1px solid {{ $mom >= 0 ? '#a7f3d0' : '#fecaca' }};">
+                            {{ $mom >= 0 ? '▲' : '▼' }} {{ abs($mom) }}% vs last mo
+                        </span>
+                    @endif
+                </div>
+                <div style="display: inline-flex; background: #f1f5f9; padding: 2px; border-radius: 8px; gap: 2px;">
+                    <button type="button" id="btnSalesBreakdown" onclick="switchSalesChartMode('breakdown')" style="padding: 4px 10px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: #fff; color: #0f172a; box-shadow: 0 1px 2px rgba(0,0,0,0.06);">By Source</button>
+                    <button type="button" id="btnSalesTotal" onclick="switchSalesChartMode('total')" style="padding: 4px 10px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: transparent; color: #64748b;">Total</button>
                 </div>
             </div>
-            <div style="height: 220px; position: relative; margin-top: 12px;">
+
+            <!-- Structured KPI Strip -->
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
+                <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 10px 12px;">
+                    <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px;">12-Month Total</div>
+                    <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 2px;">₱{{ number_format($salesSummary['annual_total'] ?? 0, 2) }}</div>
+                </div>
+                <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 10px 12px;">
+                    <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px;">Monthly Avg</div>
+                    <div style="font-size: 15px; font-weight: 800; color: #059669; margin-top: 2px;">₱{{ number_format($salesSummary['monthly_avg'] ?? 0, 2) }}</div>
+                </div>
+                <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 10px 12px;">
+                    <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px;">Peak ({{ $salesSummary['peak_month'] ?? '—' }})</div>
+                    <div style="font-size: 15px; font-weight: 800; color: #2563eb; margin-top: 2px;">₱{{ number_format($salesSummary['peak_amount'] ?? 0, 2) }}</div>
+                </div>
+            </div>
+
+            <div style="height: 225px; position: relative; margin-top: auto;">
                 <canvas id="dashboardSalesChart"></canvas>
             </div>
         </div>
 
-        <div class="card">
-            <div class="card-header"><span class="card-title">Utility Payment Status</span></div>
-            <div class="donut-wrap" style="margin-top:6px;">
-                <svg width="90" height="90" viewBox="0 0 36 36">
-                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e2e8f0" stroke-width="3.8"/>
-                    @php
-                        $paidStroke = ($collectionPercent / 100) * 100;
-                        $pendingStroke = $totalBills > 0 ? ($billsPending / $totalBills) * 100 : 0;
-                        $overdueStroke = $totalBills > 0 ? ($billsOverdue / $totalBills) * 100 : 0;
-                        
-                        $pendingOffset = 100 - $paidStroke + 25;
-                        $overdueOffset = $pendingOffset - $pendingStroke;
-                    @endphp
-                    
-                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#4caf7d" stroke-width="3.8" stroke-dasharray="{{ $paidStroke }} {{ 100 - $paidStroke }}" stroke-dashoffset="25"/>
-                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#f5a623" stroke-width="3.8" stroke-dasharray="{{ $pendingStroke }} {{ 100 - $pendingStroke }}" stroke-dashoffset="{{ $pendingOffset }}"/>
-                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e05c5c" stroke-width="3.8" stroke-dasharray="{{ $overdueStroke }} {{ 100 - $overdueStroke }}" stroke-dashoffset="{{ $overdueOffset }}"/>
-                    <text x="18" y="20.5" text-anchor="middle" font-size="6" fill="#1a1a1a" font-weight="700">{{ $collectionPercent }}%</text>
-                </svg>
-                <div class="donut-legend">
-                    <div class="donut-legend-item"><span class="donut-dot" style="background:#4caf7d"></span>Paid — {{ $billsPaid }}</div>
-                    <div class="donut-legend-item"><span class="donut-dot" style="background:#f5a623"></span>Pending — {{ $billsPending }}</div>
-                    <div class="donut-legend-item"><span class="donut-dot" style="background:#e05c5c"></span>Overdue — {{ $billsOverdue }}</div>
+        <!-- Recent Payers & Payment History (Half Width) -->
+        <div class="card" style="padding: 16px; border-radius: 16px; background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.04); display: flex; flex-direction: column;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+                <div>
+                    <span class="card-title" style="margin: 0;">Recent Payers</span>
+                    <div style="font-size: 11.5px; color: #64748b; font-weight: 600; margin-top: 2px;">Latest payments &amp; exact billing source</div>
+                </div>
+                <div style="display: inline-flex; background: #f1f5f9; padding: 2px; border-radius: 8px; gap: 2px; flex-wrap: wrap;">
+                    <button type="button" onclick="filterRecentPayers('all', this)" class="rp-filter-btn" style="padding: 4px 9px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: #fff; color: #0f172a; box-shadow: 0 1px 2px rgba(0,0,0,0.06);">All</button>
+                    <button type="button" onclick="filterRecentPayers('downpayment', this)" class="rp-filter-btn" style="padding: 4px 9px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: transparent; color: #64748b;">Downpayment</button>
+                    <button type="button" onclick="filterRecentPayers('financing', this)" class="rp-filter-btn" style="padding: 4px 9px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: transparent; color: #64748b;">Financing</button>
+                    <button type="button" onclick="filterRecentPayers('utility', this)" class="rp-filter-btn" style="padding: 4px 9px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: transparent; color: #64748b;">Utilities</button>
                 </div>
             </div>
-            <div class="progress-wrap">
-                <div class="progress-label"><span>Collection Progress</span><span>{{ $collectionPercent }}%</span></div>
-                <div class="progress-bar"><div class="progress-fill" style="width:{{ $collectionPercent }}%" id="dash-progress"></div></div>
+
+            <div id="recentPayersList" style="display: flex; flex-direction: column; gap: 8px; max-height: 292px; overflow-y: auto; padding-right: 4px;">
+                @forelse($recentPayments ?? [] as $rp)
+                    @php
+                        $catGroup = in_array($rp['category'], ['electricity', 'water']) ? 'utility' : $rp['category'];
+                        $badgeColors = match($rp['category']) {
+                            'electricity' => ['bg' => '#fef3c7', 'fg' => '#b45309', 'icon' => '⚡'],
+                            'water'       => ['bg' => '#e0f2fe', 'fg' => '#0369a1', 'icon' => '💧'],
+                            'downpayment' => ['bg' => '#ecfdf5', 'fg' => '#047857', 'icon' => '🏠'],
+                            'financing'   => ['bg' => '#eff6ff', 'fg' => '#1d4ed8', 'icon' => '🏦'],
+                            default       => ['bg' => '#f1f5f9', 'fg' => '#475569', 'icon' => '💳'],
+                        };
+                    @endphp
+                    <a href="{{ $rp['target_url'] }}" class="recent-payer-row" data-category="{{ $catGroup }}"
+                       style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; border: 1px solid #f1f5f9; background: #f8fafc; text-decoration: none; transition: background 0.15s ease, border-color 0.15s ease;"
+                       onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#cbd5e1';"
+                       onmouseout="this.style.background='#f8fafc'; this.style.borderColor='#f1f5f9';">
+                        <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                            <div style="width: 34px; height: 34px; border-radius: 10px; background: {{ $badgeColors['bg'] }}; color: {{ $badgeColors['fg'] }}; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;">
+                                {{ $badgeColors['icon'] }}
+                            </div>
+                            <div style="min-width: 0;">
+                                <div style="font-size: 13px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    {{ $rp['payer'] }}
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px;">
+                                    <span style="font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 6px; background: {{ $badgeColors['bg'] }}; color: {{ $badgeColors['fg'] }};">
+                                        {{ $rp['specific_payment'] }}
+                                    </span>
+                                    @if(!empty($rp['lot_label']))
+                                        <span style="font-size: 11px; font-weight: 600; color: #64748b;">{{ $rp['lot_label'] }}</span>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                        <div style="text-align: right; flex-shrink: 0;">
+                            <div style="font-size: 13.5px; font-weight: 800; color: #059669;">₱{{ number_format($rp['amount'], 2) }}</div>
+                            <div style="font-size: 10.5px; font-weight: 600; color: #64748b; margin-top: 2px;">{{ $rp['method'] }} · {{ $rp['paid_ago'] ?: $rp['paid_at'] }}</div>
+                        </div>
+                    </a>
+                @empty
+                    <div style="padding: 36px 16px; text-align: center; color: #94a3b8; font-size: 13px; font-weight: 600;">
+                        No recent payments recorded yet.
+                    </div>
+                @endforelse
             </div>
         </div>
     </div>
 
     <!-- Reservation, Downpayment & Finance Status Summary -->
-    <div class="responsive-grid fade-up-2" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; margin-bottom: 24px;">
-        <div class="card" style="padding: 18px 20px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <span class="card-title">Reservation</span>
+    <div class="responsive-grid fade-up-2" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-bottom: 14px;">
+        <!-- Reservation Card -->
+        @php
+            $resTotal = $reservationStatusSummary['total_count'] ?? 0;
+            $resActive = $reservationStatusSummary['active'] ?? 0;
+            $resCancelled = $reservationStatusSummary['cancelled'] ?? 0;
+            $resCollected = $reservationStatusSummary['total_collected'] ?? 0;
+        @endphp
+        <div class="card" style="padding: 20px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 10px; height: 10px; border-radius: 50%; background: #f59e0b;"></span>
+                    <span class="card-title" style="margin: 0;">Reservation</span>
+                    <span style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #fffbeb; color: #b45309;">{{ $resTotal }} total</span>
+                </div>
                 <a href="/admin/reservation-fee" style="font-size: 12px; font-weight: 700; color: #2563eb; text-decoration: none;">View &rarr;</a>
             </div>
-            <div style="height: 170px; position: relative; display: flex; justify-content: center;">
-                <canvas id="dashReservationStatusChart"></canvas>
+
+            <div style="display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: center;">
+                <div style="height: 120px; width: 120px; position: relative; margin: 0 auto;">
+                    <canvas id="dashReservationStatusChart"></canvas>
+                    <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none;">
+                        <span style="font-size: 18px; font-weight: 800; color: #0f172a; line-height: 1;">{{ $resActive }}</span>
+                        <span style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase;">Active</span>
+                    </div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 8px 12px;">
+                        <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase;">Fees Collected</div>
+                        <div style="font-size: 15px; font-weight: 800; color: #059669;">₱{{ number_format($resCollected, 2) }}</div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #334155;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;margin-right:6px;"></span>Active</span>
+                            <span style="font-weight: 800;">{{ $resActive }}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;margin-right:6px;"></span>Cancelled</span>
+                            <span style="font-weight: 800;">{{ $resCancelled }}</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="card" style="padding: 18px 20px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <span class="card-title">Downpayment</span>
+        <!-- Downpayment Card -->
+        @php
+            $dpTotal = $downpaymentStatusSummary['total_count'] ?? 0;
+            $dpCollected = $downpaymentStatusSummary['total_collected'] ?? 0;
+            $dpBalance = $downpaymentStatusSummary['total_balance'] ?? 0;
+            $dpRate = $downpaymentStatusSummary['collection_rate'] ?? 0;
+        @endphp
+        <div class="card" style="padding: 20px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 10px; height: 10px; border-radius: 50%; background: #10b981;"></span>
+                    <span class="card-title" style="margin: 0;">Downpayment</span>
+                    <span style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #ecfdf5; color: #047857;">{{ $dpTotal }} accounts</span>
+                </div>
                 <a href="/admin/downpayment-fee" style="font-size: 12px; font-weight: 700; color: #2563eb; text-decoration: none;">View &rarr;</a>
             </div>
-            <div style="height: 170px; position: relative; display: flex; justify-content: center;">
-                <canvas id="dashDownpaymentStatusChart"></canvas>
+
+            <div style="display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: center;">
+                <div style="height: 120px; width: 120px; position: relative; margin: 0 auto;">
+                    <canvas id="dashDownpaymentStatusChart"></canvas>
+                    <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none;">
+                        <span style="font-size: 16px; font-weight: 800; color: #0f172a; line-height: 1;">{{ $dpRate }}%</span>
+                        <span style="font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">Collected</span>
+                    </div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                        <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; padding: 7px 9px;">
+                            <div style="font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">Collected</div>
+                            <div style="font-size: 13px; font-weight: 800; color: #059669;">₱{{ number_format($dpCollected, 0) }}</div>
+                        </div>
+                        <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; padding: 7px 9px;">
+                            <div style="font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">Balance</div>
+                            <div style="font-size: 13px; font-weight: 800; color: #d97706;">₱{{ number_format($dpBalance, 0) }}</div>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 11.5px; font-weight: 600; color: #334155;">
+                        <div><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;margin-right:5px;"></span>Fully Paid: <strong>{{ $downpaymentStatusSummary['fully_paid'] ?? 0 }}</strong></div>
+                        <div><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#3b82f6;margin-right:5px;"></span>On Schedule: <strong>{{ $downpaymentStatusSummary['on_schedule'] ?? 0 }}</strong></div>
+                        <div><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#ef4444;margin-right:5px;"></span>Overdue: <strong>{{ $downpaymentStatusSummary['overdue'] ?? 0 }}</strong></div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="card" style="padding: 18px 20px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <span class="card-title">Finance</span>
+        <!-- Finance Card -->
+        @php
+            $finTotal = $financeStatusSummary['total_count'] ?? 0;
+            $finPaid = $financeStatusSummary['total_paid'] ?? 0;
+            $finBalance = $financeStatusSummary['total_balance'] ?? 0;
+            $finRate = $financeStatusSummary['collection_rate'] ?? 0;
+        @endphp
+        <div class="card" style="padding: 20px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 10px; height: 10px; border-radius: 50%; background: #3b82f6;"></span>
+                    <span class="card-title" style="margin: 0;">Finance</span>
+                    <span style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #eff6ff; color: #1d4ed8;">{{ $finTotal }} records</span>
+                </div>
                 <a href="/admin/financing" style="font-size: 12px; font-weight: 700; color: #2563eb; text-decoration: none;">View &rarr;</a>
             </div>
-            <div style="height: 170px; position: relative; display: flex; justify-content: center;">
-                <canvas id="dashFinanceStatusChart"></canvas>
+
+            <div style="display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: center;">
+                <div style="height: 120px; width: 120px; position: relative; margin: 0 auto;">
+                    <canvas id="dashFinanceStatusChart"></canvas>
+                    <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none;">
+                        <span style="font-size: 16px; font-weight: 800; color: #0f172a; line-height: 1;">{{ $finRate }}%</span>
+                        <span style="font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">Paid</span>
+                    </div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                        <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; padding: 7px 9px;">
+                            <div style="font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">Paid</div>
+                            <div style="font-size: 13px; font-weight: 800; color: #059669;">₱{{ number_format($finPaid, 0) }}</div>
+                        </div>
+                        <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; padding: 7px 9px;">
+                            <div style="font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">Receivable</div>
+                            <div style="font-size: 13px; font-weight: 800; color: #2563eb;">₱{{ number_format($finBalance, 0) }}</div>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 11.5px; font-weight: 600; color: #334155;">
+                        <div><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#94a3b8;margin-right:5px;"></span>Pending: <strong>{{ $financeStatusSummary['pending'] ?? 0 }}</strong></div>
+                        <div><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f59e0b;margin-right:5px;"></span>Processing: <strong>{{ $financeStatusSummary['processing'] ?? 0 }}</strong></div>
+                        <div><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#3b82f6;margin-right:5px;"></span>Released: <strong>{{ $financeStatusSummary['released'] ?? 0 }}</strong></div>
+                        <div><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;margin-right:5px;"></span>Cleared: <strong>{{ $financeStatusSummary['cleared'] ?? 0 }}</strong></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Community Utilities & Consumption Analytics Section (Electricity & Water) -->
-    <div class="fade-up-2" style="margin-bottom: 24px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+    <div class="fade-up-2" style="margin-bottom: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
             <div>
                 <div style="font-size: 18px; font-weight: 800; color: var(--text-dark, #0f172a);">
                     <span>Utility Consumption &amp; Billing Analytics</span>
@@ -121,7 +290,7 @@
             </div>
         </div>
 
-        <div class="responsive-grid grid-2" style="gap: 20px;">
+        <div class="responsive-grid grid-2" style="gap: 14px;">
             <!-- Electricity Analytics Card -->
             <div class="card" style="padding: 20px; border-radius: 16px; background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); display: flex; flex-direction: column;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
@@ -413,29 +582,65 @@
 @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            const salesLabels = {!! json_encode($monthlySalesLabels) !!};
+            const salesTotalData = {!! json_encode($monthlySalesData) !!};
+            const salesBySource = {!! json_encode($monthlySalesBySource ?? ['downpayment' => [], 'financing' => [], 'utility' => [], 'counts' => []]) !!};
+
             const ctx = document.getElementById('dashboardSalesChart')?.getContext('2d');
             if (ctx) {
-                new Chart(ctx, {
+                window.salesChartMode = 'breakdown';
+                window.dashboardSalesChartInstance = new Chart(ctx, {
                     type: 'bar',
                     data: {
-                        labels: {!! json_encode($monthlySalesLabels) !!},
-                        datasets: [{
-                            label: 'Monthly Sales',
-                            data: {!! json_encode($monthlySalesData) !!},
-                            backgroundColor: '#10b981',
-                            borderRadius: 6,
-                            borderSkipped: false
-                        }]
+                        labels: salesLabels,
+                        datasets: [
+                            {
+                                label: 'Downpayment',
+                                data: salesBySource.downpayment || [],
+                                backgroundColor: '#10b981',
+                                borderRadius: 4,
+                                stack: 'sales'
+                            },
+                            {
+                                label: 'Financing',
+                                data: salesBySource.financing || [],
+                                backgroundColor: '#3b82f6',
+                                borderRadius: 4,
+                                stack: 'sales'
+                            },
+                            {
+                                label: 'Utilities',
+                                data: salesBySource.utility || [],
+                                backgroundColor: '#f59e0b',
+                                borderRadius: 4,
+                                stack: 'sales'
+                            }
+                        ]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
                         plugins: {
-                            legend: { display: false },
+                            legend: {
+                                display: true,
+                                position: 'bottom',
+                                labels: { usePointStyle: true, boxWidth: 8, padding: 14, font: { size: 11, weight: '600' }, color: '#475569' }
+                            },
                             tooltip: {
+                                backgroundColor: '#0f172a',
+                                padding: 10,
+                                cornerRadius: 8,
                                 callbacks: {
                                     label: function(context) {
-                                        return 'Sales: ₱' + context.raw.toLocaleString();
+                                        return context.dataset.label + ': ₱' + Number(context.raw || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                    },
+                                    footer: function(items) {
+                                        if (!items.length) return '';
+                                        const idx = items[0].dataIndex;
+                                        const total = Number(salesTotalData[idx] || 0);
+                                        const cnt = Number((salesBySource.counts || [])[idx] || 0);
+                                        return 'Total: ₱' + total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + cnt + (cnt === 1 ? ' txn)' : ' txns)');
                                     }
                                 }
                             }
@@ -443,10 +648,12 @@
                         scales: {
                             y: {
                                 beginAtZero: true,
-                                max: 500000,
+                                stacked: true,
                                 ticks: {
                                     callback: function(value) {
-                                        return '₱' + (value / 1000) + 'k';
+                                        if (value >= 1000000) return '₱' + (value / 1000000).toFixed(1) + 'M';
+                                        if (value >= 1000) return '₱' + Math.round(value / 1000) + 'k';
+                                        return '₱' + value;
                                     },
                                     font: { weight: '600', size: 11 },
                                     color: '#64748b'
@@ -454,12 +661,47 @@
                                 grid: { color: '#f1f5f9' }
                             },
                             x: {
+                                stacked: true,
                                 ticks: { font: { weight: '600', size: 11 }, color: '#64748b' },
                                 grid: { display: false }
                             }
                         }
                     }
                 });
+
+                window.switchSalesChartMode = function(mode) {
+                    const chart = window.dashboardSalesChartInstance;
+                    if (!chart) return;
+                    const btnB = document.getElementById('btnSalesBreakdown');
+                    const btnT = document.getElementById('btnSalesTotal');
+                    const activeStyle = 'padding: 4px 10px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: #fff; color: #0f172a; box-shadow: 0 1px 2px rgba(0,0,0,0.06);';
+                    const inactiveStyle = 'padding: 4px 10px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: transparent; color: #64748b;';
+                    if (btnB) btnB.style = mode === 'breakdown' ? activeStyle : inactiveStyle;
+                    if (btnT) btnT.style = mode === 'total' ? activeStyle : inactiveStyle;
+
+                    if (mode === 'total') {
+                        chart.data.datasets = [{
+                            label: 'Total Monthly Sales',
+                            data: salesTotalData,
+                            backgroundColor: '#10b981',
+                            borderRadius: 6,
+                            borderSkipped: false
+                        }];
+                        chart.options.plugins.legend.display = false;
+                        chart.options.scales.x.stacked = false;
+                        chart.options.scales.y.stacked = false;
+                    } else {
+                        chart.data.datasets = [
+                            { label: 'Downpayment', data: salesBySource.downpayment || [], backgroundColor: '#10b981', borderRadius: 4, stack: 'sales' },
+                            { label: 'Financing', data: salesBySource.financing || [], backgroundColor: '#3b82f6', borderRadius: 4, stack: 'sales' },
+                            { label: 'Utilities', data: salesBySource.utility || [], backgroundColor: '#f59e0b', borderRadius: 4, stack: 'sales' }
+                        ];
+                        chart.options.plugins.legend.display = true;
+                        chart.options.scales.x.stacked = true;
+                        chart.options.scales.y.stacked = true;
+                    }
+                    chart.update();
+                };
             }
 
             // Initialize Dual Dashboard Calendars
@@ -666,18 +908,24 @@
             const initSummaryDonut = (id, labels, data, colors) => {
                 const c = document.getElementById(id)?.getContext('2d');
                 if (!c) return;
+                const total = data.reduce((sum, v) => sum + Number(v || 0), 0);
+                const chartLabels = total > 0 ? labels : ['No Data'];
+                const chartData = total > 0 ? data : [1];
+                const chartColors = total > 0 ? colors : ['#e2e8f0'];
+
                 new Chart(c, {
                     type: 'doughnut',
                     data: {
-                        labels,
-                        datasets: [{ data, backgroundColor: colors, borderWidth: 0, hoverOffset: 4 }]
+                        labels: chartLabels,
+                        datasets: [{ data: chartData, backgroundColor: chartColors, borderWidth: 0, hoverOffset: total > 0 ? 4 : 0 }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        cutout: '70%',
+                        cutout: '72%',
                         plugins: {
-                            legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11, weight: '600' } } }
+                            legend: { display: false },
+                            tooltip: { enabled: total > 0 }
                         }
                     }
                 });
@@ -691,9 +939,9 @@
             );
             initSummaryDonut(
                 'dashDownpaymentStatusChart',
-                ['Early', 'On-Time', 'Late', 'Pending'],
-                [{{ $downpaymentStatusSummary['early'] ?? 0 }}, {{ $downpaymentStatusSummary['on_time'] ?? 0 }}, {{ $downpaymentStatusSummary['late'] ?? 0 }}, {{ $downpaymentStatusSummary['pending'] ?? 0 }}],
-                ['#3b82f6', '#10b981', '#ef4444', '#94a3b8']
+                ['Fully Paid', 'On Schedule', 'Overdue'],
+                [{{ $downpaymentStatusSummary['fully_paid'] ?? 0 }}, {{ $downpaymentStatusSummary['on_schedule'] ?? 0 }}, {{ $downpaymentStatusSummary['overdue'] ?? 0 }}],
+                ['#10b981', '#3b82f6', '#ef4444']
             );
             initSummaryDonut(
                 'dashFinanceStatusChart',
@@ -702,6 +950,23 @@
                 ['#94a3b8', '#f59e0b', '#3b82f6', '#10b981']
             );
         });
+
+        function filterRecentPayers(category, btn) {
+            document.querySelectorAll('.rp-filter-btn').forEach(b => {
+                b.style.background = 'transparent';
+                b.style.color = '#64748b';
+                b.style.boxShadow = 'none';
+            });
+            if (btn) {
+                btn.style.background = '#fff';
+                btn.style.color = '#0f172a';
+                btn.style.boxShadow = '0 1px 2px rgba(0,0,0,0.06)';
+            }
+            document.querySelectorAll('.recent-payer-row').forEach(row => {
+                const rowCat = row.getAttribute('data-category');
+                row.style.display = (category === 'all' || rowCat === category) ? 'flex' : 'none';
+            });
+        }
 
         // Utility Chart Metric Toggle Switchers
         function switchElecChartMetric(mode) {

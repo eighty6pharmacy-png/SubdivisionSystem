@@ -516,13 +516,11 @@
                 const roads = (calib && typeof transformGeoJSON === 'function' && internalRawRoads) ? transformGeoJSON(internalRawRoads, calib) : internalRawRoads;
                 const houses = (calib && typeof transformGeoJSON === 'function' && rawHouses) ? transformGeoJSON(rawHouses, calib) : rawHouses;
 
-                if (calib) {
-                    if (calib.baseLayer === 'satellite') {
-                        L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 22, maxNativeZoom: 20 }).addTo(map);
-                    } else if (calib.baseLayer === 'street') {
-                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22, maxNativeZoom: 19 }).addTo(map);
-                    }
-                }
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 22,
+                    maxNativeZoom: 19,
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(map);
 
                 if (lotsData && Array.isArray(lotsData)) {
                     lotsData.forEach(lot => {

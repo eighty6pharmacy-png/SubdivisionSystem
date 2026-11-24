@@ -44,19 +44,33 @@
 .analytics-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 24px;
+    gap: 20px;
+}
+
+.analytics-grid.cols-3 {
+    grid-template-columns: repeat(3, 1fr);
 }
 
 @media (max-width: 1200px) {
     .analytics-grid {
         grid-template-columns: repeat(2, 1fr);
     }
+    .analytics-grid.cols-3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 @media (max-width: 768px) {
-    .analytics-grid {
+    .analytics-grid,
+    .analytics-grid.cols-3 {
         grid-template-columns: 1fr;
     }
+}
+
+.recent-payers-chart-wrap {
+    position: relative;
+    height: 270px;
+    width: 100%;
 }
 
 /* CER Gauge */

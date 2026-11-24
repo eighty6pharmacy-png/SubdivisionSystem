@@ -25,7 +25,9 @@ class BuyerPortalController extends Controller
             ? FinancingRecord::where('buyer_id', $buyer->id)->first()
             : null;
 
-        return view('buyer.dashboard', compact('buyer', 'downpayments', 'financing'));
+        $calendarEvents = $this->buildPaymentCalendarEvents($downpayments, $financing);
+
+        return view('buyer.dashboard', compact('buyer', 'downpayments', 'financing', 'calendarEvents'));
     }
 
     public function payments()
@@ -52,7 +54,9 @@ class BuyerPortalController extends Controller
                 ->get();
         }
 
-        return view('buyer.payments', compact('buyer', 'downpayments', 'financing', 'finHistories'));
+        $calendarEvents = $this->buildPaymentCalendarEvents($downpayments, $financing);
+
+        return view('buyer.payments', compact('buyer', 'downpayments', 'financing', 'finHistories', 'calendarEvents'));
     }
 
     public function dpHistory()
@@ -234,5 +238,80 @@ class BuyerPortalController extends Controller
         $pdf->setPaper('a4', 'portrait');
         $pdf->loadView('buyer.receipt_pdf', compact('hist', 'buyer', 'dp'));
         return $pdf->stream('Receipt_DP_' . $hist->id . '.pdf');
+    }
+
+    private function buildPaymentCalendarEvents($downpayments, $financing): array
+    {
+        $events = [];
+
+        if ($downpayments->isNotEmpty()) {
+            $paidRows = \Illuminate\Support\Facades\DB::table('payments')
+                ->whereIn('downpayment_id', $downpayments->pluck('id'))
+                ->whereNull('deleted_at')
+                ->orderBy('payment_date')
+                ->get();
+
+            foreach ($paidRows as $p) {
+                $dt = $p->payment_date ?: $p->created_at;
+                if (!$dt) continue;
+                $events[] = [
+                    'id' => 'dp-paid-' . $p->id,
+                    'title' => '✓ Paid • ₱' . number_format((float) $p->amount_paid, 2),
+                    'start' => \Carbon\Carbon::parse($dt)->format('Y-m-d'),
+                    'url' => route('buyer.payments.dp.history'),
+                    'backgroundColor' => '#dcfce7',
+                    'borderColor' => '#10b981',
+                    'textColor' => '#065f46',
+                ];
+            }
+
+            foreach ($downpayments as $dp) {
+                if ((float) $dp->balance <= 0 || !$dp->due_date) {
+                    continue;
+                }
+                $monthly = (float) $dp->monthly_amortization > 0 ? (float) $dp->monthly_amortization : (float) $dp->balance;
+                $remaining = (float) $dp->balance;
+                $due = \Carbon\Carbon::parse($dp->due_date);
+
+                for ($m = 0; $m < 12 && $remaining > 0.01; $m++) {
+                    $instAmt = min($monthly, $remaining);
+                    $instDate = $due->copy()->addMonthsNoOverflow($m);
+                    $isCurrent = ($m === 0);
+                    $isOverdue = $isCurrent && $instDate->isPast() && !$instDate->isToday();
+
+                    if ($isCurrent) {
+                        $instAmt += (float) $dp->latePenaltyAmount($instAmt);
+                    }
+
+                    $events[] = [
+                        'id' => 'dp-due-' . $dp->id . '-' . $m,
+                        'title' => ($isOverdue ? '⚠ Overdue' : ($isCurrent ? '📅 Due Now' : '🗓 Installment')) . ' • ₱' . number_format($instAmt, 2),
+                        'start' => $instDate->format('Y-m-d'),
+                        'url' => route('buyer.payments'),
+                        'backgroundColor' => $isOverdue ? '#fee2e2' : ($isCurrent ? '#fef3c7' : '#e0e7ff'),
+                        'borderColor' => $isOverdue ? '#ef4444' : ($isCurrent ? '#f59e0b' : '#4f46e5'),
+                        'textColor' => $isOverdue ? '#991b1b' : ($isCurrent ? '#92400e' : '#3730a3'),
+                    ];
+
+                    $remaining -= min($monthly, $remaining);
+                }
+            }
+        }
+
+        if ($financing && (float) $financing->balance > 0 && !empty($financing->due_date)) {
+            $finDue = \Carbon\Carbon::parse($financing->due_date);
+            $isOverdue = $finDue->isPast() && !$finDue->isToday();
+            $events[] = [
+                'id' => 'fin-due-' . $financing->id,
+                'title' => '🏦 Shortfall Due • ₱' . number_format((float) $financing->balance, 2),
+                'start' => $finDue->format('Y-m-d'),
+                'url' => route('buyer.payments'),
+                'backgroundColor' => $isOverdue ? '#fee2e2' : '#fef3c7',
+                'borderColor' => $isOverdue ? '#ef4444' : '#f59e0b',
+                'textColor' => $isOverdue ? '#991b1b' : '#92400e',
+            ];
+        }
+
+        return $events;
     }
 }

@@ -249,29 +249,119 @@
         </div>
 
         @php
-            $dpEarlyCount = collect($bills)->where('payment_behavior', 'Early')->count();
-            $dpOnTimeCount = collect($bills)->where('payment_behavior', 'On-Time')->count();
-            $dpLateCount = collect($bills)->where('payment_behavior', 'Late')->count();
-            $dpPendingCount = collect($bills)->where('payment_behavior', 'Not available yet')->count();
+            $dpChartData = getMonthlyChartData('downpayment');
+            $dpTwelveMonthTotal = array_sum($dpChartData['data'] ?? []);
+            $recentDpPayers = getRecentPayers('downpayment', 8);
+
+            $dpTotalExpected = collect($bills)->sum('total_dp');
+            $dpTotalCollected = collect($bills)->sum('paid_amount');
+            $dpTotalOutstanding = max(0, $dpTotalExpected - $dpTotalCollected);
+            $dpCerPct = $dpTotalExpected > 0 ? min(100, max(0, round(($dpTotalCollected / $dpTotalExpected) * 100))) : 0;
+            $dpCircumference = 2 * M_PI * 52;
+            $dpCerStroke = ($dpCerPct / 100) * $dpCircumference;
+
+            $dpTotalContracts = count($bills);
+            $dpFullyPaidCount = collect($bills)->filter(fn($b) => ($b['total_dp'] - $b['paid_amount']) <= 0.01 || strtolower((string)($b['status'] ?? '')) === 'fully paid')->count();
+            $dpInProgressCount = collect($bills)->filter(fn($b) => ($b['paid_amount'] > 0) && (($b['total_dp'] - $b['paid_amount']) > 0.01) && strtolower((string)($b['status'] ?? '')) !== 'fully paid')->count();
+            $dpUnstartedCount = max(0, $dpTotalContracts - $dpFullyPaidCount - $dpInProgressCount);
         @endphp
 
-        <!-- Summary Charts Row -->
-        <div class="responsive-grid grid-2-1" style="margin-bottom: 0;">
-            <div style="background: #fff; border: 1px solid var(--bill-border); border-radius: 16px; padding: 16px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);">
-                <div style="margin-bottom: 12px;">
-                    <h3 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0;">Monthly Collections</h3>
+        <!-- 3 Inline Collection Analytics Cards -->
+        <div class="analytics-grid cols-3">
+            <!-- Card 1: Collection Efficiency -->
+            <div class="analytic-card" style="display: flex; flex-direction: column;">
+                <div class="card-title">
+                    <span>Collection Efficiency</span>
+                    <span class="card-badge">Revenue Ratio</span>
                 </div>
-                <div style="height: 190px; position: relative;">
-                    <canvas id="downpaymentSalesChart"></canvas>
+                <div class="donut-chart-container">
+                    <div class="donut-ring-wrap">
+                        <svg viewBox="0 0 42 42" class="donut-svg">
+                            <circle class="donut-segment segment-track" cx="21" cy="21" r="15.915" stroke-dasharray="100 0"></circle>
+                            <circle class="donut-segment segment-paid" cx="21" cy="21" r="15.915"
+                                stroke-dasharray="{{ $dpCerPct }} {{ 100 - $dpCerPct }}"
+                                stroke-dashoffset="0"
+                                style="{{ $dpCerPct <= 0 ? 'stroke-opacity: 0;' : '' }}"></circle>
+                        </svg>
+                        <div class="donut-center-label">
+                            <div class="donut-center-pct">{{ $dpCerPct }}%</div>
+                        </div>
+                    </div>
+                    <div class="cer-meta">
+                        <div class="cer-meta-row">
+                            <span>Total Equity</span>
+                            <strong>₱{{ number_format($dpTotalExpected, 2) }}</strong>
+                        </div>
+                        <div class="cer-meta-row">
+                            <span>Total Collected</span>
+                            <strong style="color: var(--bill-success);">₱{{ number_format($dpTotalCollected, 2) }}</strong>
+                        </div>
+                        <div class="cer-meta-row">
+                            <span>Outstanding</span>
+                            <strong style="color: var(--bill-danger);">₱{{ number_format($dpTotalOutstanding, 2) }}</strong>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div style="background: #fff; border: 1px solid var(--bill-border); border-radius: 16px; padding: 16px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);">
-                <div style="margin-bottom: 12px;">
-                    <h3 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0;">Payment Status</h3>
+
+            <!-- Card 2: Collection Status Breakdown -->
+            <div class="analytic-card" style="display: flex; flex-direction: column;">
+                <div class="card-title">
+                    <span>Collection Breakdown</span>
+                    <span class="card-badge">{{ $dpTotalContracts }} Contracts</span>
                 </div>
-                <div style="height: 190px; position: relative; display: flex; justify-content: center;">
-                    <canvas id="downpaymentStatusChart"></canvas>
+                <div style="flex: 1; min-height: 220px; position: relative; display: flex; justify-content: center; align-items: center;">
+                    <canvas id="downpaymentCollectionChart"></canvas>
                 </div>
+            </div>
+
+            <!-- Card 3: Recent Payers -->
+            <div class="analytic-card" style="display: flex; flex-direction: column;">
+                <div class="card-title" style="margin-bottom: 12px;">
+                    <span>Recent Payers</span>
+                    <span class="card-badge" style="background: #ecfdf5; color: #059669;">Latest Paid</span>
+                </div>
+                @if(empty($recentDpPayers))
+                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; color: #94a3b8; text-align: center;">
+                        <div style="font-size: 13px; font-weight: 700; color: #64748b;">No Recent Payments Yet</div>
+                        <div style="font-size: 11px; margin-top: 2px;">Paid downpayment installments will appear here.</div>
+                    </div>
+                @else
+                    <div style="display: flex; flex-direction: column; gap: 8px; max-height: 235px; overflow-y: auto; padding-right: 2px;">
+                        @foreach($recentDpPayers as $payer)
+                            @php
+                                $initials = collect(explode(' ', trim($payer['name'])))->filter()->map(fn($w) => strtoupper(substr($w, 0, 1)))->take(2)->implode('');
+                            @endphp
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 11px; background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px;">
+                                <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                                    <div style="width: 30px; height: 30px; border-radius: 8px; background: #eef2ff; color: #4f46e5; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        {{ $initials ?: 'B' }}
+                                    </div>
+                                    <div style="min-width: 0;">
+                                        <div style="font-size: 12px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $payer['name'] }}</div>
+                                        <div style="font-size: 10.5px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $payer['lot'] }} &bull; {{ $payer['date'] }}</div>
+                                    </div>
+                                </div>
+                                <div style="text-align: right; flex-shrink: 0;">
+                                    <div style="font-size: 12px; font-weight: 800; color: #059669;">₱{{ number_format($payer['amount'], 2) }}</div>
+                                    <div style="font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">{{ $payer['method'] }}</div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+        </div>
+
+        <!-- Monthly Collections (Full Width) -->
+        <div class="analytic-card" style="display: flex; flex-direction: column;">
+            <div class="card-title" style="margin-bottom: 10px;">
+                <span>Monthly Collections</span>
+                <span class="card-badge" style="background: #eef2ff; color: #4338ca;">₱{{ number_format($dpTwelveMonthTotal, 0) }}</span>
+            </div>
+            <p style="font-size: 11px; color: #64748b; margin: 0 0 12px 0;">12-month collection trend</p>
+            <div style="height: 190px; position: relative;">
+                <canvas id="downpaymentSalesChart"></canvas>
             </div>
         </div>
 
@@ -1598,16 +1688,28 @@
                 @php
                     $chartData = getMonthlyChartData('downpayment');
                 @endphp
+                const dpValues = @json($chartData['data']);
+                const dpCurrentGrad = ctx.createLinearGradient(0, 0, 0, 210);
+                dpCurrentGrad.addColorStop(0, '#4f46e5');
+                dpCurrentGrad.addColorStop(1, '#818cf8');
+
+                const dpPriorGrad = ctx.createLinearGradient(0, 0, 0, 210);
+                dpPriorGrad.addColorStop(0, '#0284c7');
+                dpPriorGrad.addColorStop(1, '#7dd3fc');
+
+                const dpBgColors = dpValues.map((_, idx) => idx === dpValues.length - 1 ? dpCurrentGrad : dpPriorGrad);
+
                 new Chart(ctx, {
                     type: 'bar',
                     data: {
                         labels: @json($chartData['labels']),
                         datasets: [{
                             label: 'Downpayment & Amortization Collection (₱)',
-                            data: @json($chartData['data']),
-                            backgroundColor: @json($chartData['colors']),
-                            borderRadius: 6,
-                            borderSkipped: false
+                            data: dpValues,
+                            backgroundColor: dpBgColors,
+                            borderRadius: 8,
+                            borderSkipped: false,
+                            maxBarThickness: 38
                         }]
                     },
                     options: {
@@ -1616,9 +1718,15 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
+                                backgroundColor: '#0f172a',
+                                titleFont: { size: 12, weight: '700' },
+                                bodyFont: { size: 12, weight: '600' },
+                                padding: 10,
+                                cornerRadius: 8,
+                                displayColors: false,
                                 callbacks: {
-                                     label: function(context) {
-                                        return 'Revenue: ₱' + context.raw.toLocaleString();
+                                    label: function(context) {
+                                        return 'Revenue: ₱' + Number(context.raw || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                     }
                                 }
                             }
@@ -1626,10 +1734,11 @@
                         scales: {
                             y: {
                                 beginAtZero: true,
-                                max: 250000,
+                                grace: '12%',
+                                border: { display: false },
                                 ticks: {
-                                     callback: function(value) {
-                                        return '₱' + (value / 1000) + 'k';
+                                    callback: function(value) {
+                                        return value >= 1000 ? '₱' + (value / 1000).toLocaleString() + 'k' : '₱' + value;
                                     },
                                     font: { weight: '600', size: 11 },
                                     color: '#64748b'
@@ -1637,6 +1746,7 @@
                                 grid: { color: '#f1f5f9' }
                             },
                             x: {
+                                border: { display: false },
                                 ticks: { font: { weight: '600', size: 11 }, color: '#64748b' },
                                 grid: { display: false }
                             }
@@ -1645,27 +1755,33 @@
                 });
             }
 
-            const dpStatusCtx = document.getElementById('downpaymentStatusChart')?.getContext('2d');
-            if (dpStatusCtx) {
-                new Chart(dpStatusCtx, {
+            const dpColCtx = document.getElementById('downpaymentCollectionChart')?.getContext('2d');
+            if (dpColCtx) {
+                new Chart(dpColCtx, {
                     type: 'doughnut',
                     data: {
-                        labels: ['Early', 'On-Time', 'Late', 'Pending'],
+                        labels: ['Fully Paid', 'In Progress', 'Unstarted'],
                         datasets: [{
-                            data: [{{ $dpEarlyCount }}, {{ $dpOnTimeCount }}, {{ $dpLateCount }}, {{ $dpPendingCount }}],
-                            backgroundColor: ['#3b82f6', '#10b981', '#ef4444', '#94a3b8'],
-                            borderWidth: 0,
-                            hoverOffset: 4
+                            data: [{{ $dpFullyPaidCount }}, {{ $dpInProgressCount }}, {{ $dpUnstartedCount }}],
+                            backgroundColor: ['#10b981', '#4f46e5', '#f59e0b'],
+                            borderWidth: 2,
+                            borderColor: '#ffffff',
+                            hoverOffset: 6
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        cutout: '72%',
+                        cutout: '70%',
                         plugins: {
                             legend: {
                                 position: 'bottom',
-                                labels: { usePointStyle: true, boxWidth: 8, font: { size: 11, weight: '600' } }
+                                labels: { usePointStyle: true, pointStyle: 'circle', padding: 14, boxWidth: 8, font: { size: 11, weight: '600' }, color: '#475569' }
+                            },
+                            tooltip: {
+                                backgroundColor: '#0f172a',
+                                padding: 10,
+                                cornerRadius: 8
                             }
                         }
                     }

@@ -145,7 +145,7 @@
                             <th data-sort="text">Contact Info</th>
                             <th data-sort="number">Amount Paid</th>
                             <th data-sort="date">Date Reserved</th>
-                            <th data-sort="date">Deadline</th>
+                            <th data-sort="date">Expiration</th>
                             <th data-sort="text">Status</th>
                             <th>Action</th>
                         </tr>
@@ -184,32 +184,17 @@
                                 </td>
                                 <td>
                                     @php
-                                        $deadlineNote = 'No deadline';
-                                        $deadlineOverdue = false;
+                                        $expirationOverdue = false;
                                         if (!empty($bill['deadline'])) {
-                                            $deadlineDate = \Carbon\Carbon::parse($bill['deadline'])->startOfDay();
-                                            $today = now()->startOfDay();
-                                            if ($deadlineDate->lt($today)) {
-                                                $deadlineOverdue = true;
-                                                $overdueDays = (int) $deadlineDate->diffInDays($today);
-                                                $deadlineNote = 'Overdue '.$overdueDays.' '.($overdueDays === 1 ? 'day' : 'days');
-                                            } elseif ($deadlineDate->equalTo($today)) {
-                                                $deadlineNote = 'Due today';
-                                            } else {
-                                                $daysLeft = (int) $today->diffInDays($deadlineDate);
-                                                $deadlineNote = $daysLeft.' '.($daysLeft === 1 ? 'day' : 'days').' left';
+                                            $expirationDate = \Carbon\Carbon::parse($bill['deadline'])->startOfDay();
+                                            if ($expirationDate->lt(now()->startOfDay()) && empty($bill['has_downpayment'])) {
+                                                $expirationOverdue = true;
                                             }
                                         }
                                     @endphp
-                                    <div style="font-size: 13px; font-weight: 700; color: {{ $deadlineOverdue ? '#dc2626' : '#0f172a' }};">
+                                    <div style="font-size: 13px; font-weight: 700; color: {{ $expirationOverdue ? '#dc2626' : '#0f172a' }};">
                                         {{ !empty($bill['deadline']) ? date('M d, Y', strtotime($bill['deadline'])) : '—' }}
                                     </div>
-                                    <div style="font-size: 11px; margin-top: 4px; font-weight: 700; color: {{ $deadlineOverdue ? '#dc2626' : '#64748b' }};">{{ $deadlineNote }}</div>
-                                    @if(!empty($bill['expiry_reminder_5d_sent_at']))
-                                        <div style="font-size: 10px; margin-top: 3px; font-weight: 700; color: #0369a1;">✓ 5-day Auto-SMS sent</div>
-                                    @elseif($statusKey === 'active' && !empty($bill['deadline']) && isset($daysLeft) && $daysLeft >= 5)
-                                        <div style="font-size: 10px; margin-top: 3px; font-weight: 600; color: #0e7490;">Auto-SMS: {{ \Carbon\Carbon::parse($bill['deadline'])->subDays(5)->format('M d') }}</div>
-                                    @endif
                                 </td>
                                 <td class="status-cell">
                                     @if($statusKey === 'active')
@@ -273,10 +258,8 @@
                             </div>
                         </div>
                         <div id="modalDeadlineCard" style="grid-column: 1 / -1; background: #f8fafc; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0;">
-                            <span style="font-size: 12px; color: #64748b;">Deadline</span>
+                            <span style="font-size: 12px; color: #64748b;">Expiration</span>
                             <div id="modalDeadline" style="font-size: 24px; font-weight: 700; color: #0f172a; margin-top: 4px;"></div>
-                            <div id="modalDeadlineNote" style="font-size: 13px; font-weight: 700; margin-top: 8px;"></div>
-                            <div id="modalAutoSmsNote" style="font-size: 12px; font-weight: 600; margin-top: 6px; color: #0369a1;"></div>
                         </div>
                     </div>
 
@@ -294,8 +277,6 @@
                         <button type="button" class="btn btn-primary" onclick="convertReservation()">Convert to Downpayment</button>
                         <button type="button" class="btn btn-outline" style="border-color: #3b82f6; color: #2563eb; font-weight: 700;"
                             onclick="openEditReservation()">Edit Reservation</button>
-                        <button type="button" id="btnSendReservationSms" class="btn btn-outline" style="border-color: #0284c7; color: #0284c7; font-weight: 700;"
-                            onclick="sendReservationSmsReminder()">Send SMS Reminder</button>
                         <button type="button" class="btn btn-outline" style="color: var(--bill-danger); border-color: #fee2e2;"
                             onclick="cancelReservation()">Cancel Reservation</button>
                     </div>
@@ -577,7 +558,7 @@
             }
 
             const formatted = target.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-            previewEl.textContent = `Deadline: ${formatted}`;
+            previewEl.textContent = `Expiration: ${formatted}`;
             previewEl.style.color = '#64748b';
         }
 
@@ -709,50 +690,14 @@
             const dateObj = new Date(bill.date + 'T00:00:00');
             document.getElementById('modalDate').textContent = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
             const deadlineEl = document.getElementById('modalDeadline');
-            const deadlineNoteEl = document.getElementById('modalDeadlineNote');
-            const autoSmsNoteEl = document.getElementById('modalAutoSmsNote');
             const deadlineCard = document.getElementById('modalDeadlineCard');
-            autoSmsNoteEl.textContent = '';
+            deadlineCard.style.borderColor = '#e2e8f0';
+            deadlineCard.style.background = '#f8fafc';
             if (bill.deadline) {
                 const deadlineObj = new Date(bill.deadline + 'T00:00:00');
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const days = Math.round((deadlineObj - today) / 86400000);
                 deadlineEl.textContent = deadlineObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-                if (days < 0) {
-                    const overdueDays = Math.abs(days);
-                    deadlineNoteEl.textContent = `Overdue ${overdueDays} ${overdueDays === 1 ? 'day' : 'days'}.`;
-                    deadlineNoteEl.style.color = '#dc2626';
-                    deadlineCard.style.borderColor = '#fecaca';
-                    deadlineCard.style.background = '#fef2f2';
-                } else if (days === 0) {
-                    deadlineNoteEl.textContent = 'Due today.';
-                    deadlineNoteEl.style.color = '#d97706';
-                    deadlineCard.style.borderColor = '#fde68a';
-                    deadlineCard.style.background = '#fffbeb';
-                } else {
-                    deadlineNoteEl.textContent = `${days} ${days === 1 ? 'day' : 'days'} left from today.`;
-                    deadlineNoteEl.style.color = '#047857';
-                    deadlineCard.style.borderColor = '#e2e8f0';
-                    deadlineCard.style.background = '#f8fafc';
-                }
-
-                if (bill.expiry_reminder_5d_sent_at) {
-                    autoSmsNoteEl.textContent = `✓ Automated 5-day SMS reminder sent on ${bill.expiry_reminder_5d_sent_at}.`;
-                } else if (bill.status === 'Reserved' || bill.status === 'Pending') {
-                    if (days >= 5) {
-                        const autoDate = new Date(deadlineObj);
-                        autoDate.setDate(autoDate.getDate() - 5);
-                        const autoDateStr = autoDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                        autoSmsNoteEl.textContent = `Automated SMS reminder scheduled for ${autoDateStr} (5 days before expiration).`;
-                    }
-                }
             } else {
                 deadlineEl.textContent = '—';
-                deadlineNoteEl.textContent = 'No deadline was set for this reservation.';
-                deadlineNoteEl.style.color = '#64748b';
-                deadlineCard.style.borderColor = '#e2e8f0';
-                deadlineCard.style.background = '#f8fafc';
             }
 
             const trendEl = document.getElementById('modalTrend');
@@ -782,16 +727,8 @@
                 if (convertBtn) {
                     convertBtn.style.display = bill.has_downpayment ? 'none' : '';
                 }
-                if (bill.has_downpayment) {
-                    alertEl.style.display = 'block';
-                    alertEl.style.background = '#eff6ff';
-                    alertEl.style.borderColor = '#bfdbfe';
-                    alertEl.style.color = '#1e40af';
-                    alertEl.innerHTML = 'Downpayment schedule created. Manage installments on the <a href="/admin/downpayment-fee" style="color:#1d4ed8;font-weight:800;">Downpayment Fee</a> page.';
-                } else {
-                    alertEl.style.display = 'none';
-                    alertEl.textContent = '';
-                }
+                alertEl.style.display = 'none';
+                alertEl.textContent = '';
             }
 
             document.getElementById('modalViewSection').style.display = 'block';
@@ -820,7 +757,7 @@
                 base.setDate(0);
             }
             const formatted = base.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-            previewEl.textContent = `Deadline: ${formatted}`;
+            previewEl.textContent = `Expiration: ${formatted}`;
             previewEl.style.color = '#64748b';
         }
 
@@ -966,49 +903,6 @@
             } catch (e) {
                 console.error('Error cancelling reservation:', e);
                 Swal.fire('An error occurred.');
-            }
-        }
-
-        async function sendReservationSmsReminder() {
-            if (!currentModalId) return;
-            const btn = document.getElementById('btnSendReservationSms');
-            const originalText = btn ? btn.textContent : 'Send SMS Reminder';
-            if (btn) {
-                btn.disabled = true;
-                btn.textContent = 'Sending SMS...';
-            }
-
-            try {
-                const res = await fetch('/admin/reservation-fee/send-reminder-sms', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                    },
-                    body: JSON.stringify({ id: currentModalId })
-                });
-                const data = await res.json().catch(() => ({}));
-                if (res.ok && data.success) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'SMS Reminder Sent',
-                        text: data.message || 'Reservation expiry reminder sent via SMS.'
-                    });
-                } else {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'SMS Failed',
-                        text: data.message || 'Could not send SMS reminder.'
-                    });
-                }
-            } catch (e) {
-                console.error('Error sending reservation SMS:', e);
-                Swal.fire('Error connecting to server.');
-            } finally {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = originalText;
-                }
             }
         }
 

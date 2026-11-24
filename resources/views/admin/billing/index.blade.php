@@ -27,7 +27,7 @@
     $totalBilled   = collect($bills)->sum('amount');
     $totalCollected = collect($bills)->sum(fn($b) => $b['status'] === 'paid' ? max((float)$b['total_paid'], (float)$b['amount']) : (float)$b['total_paid']);
     $totalBalanceRemaining = max(0, $totalBilled - $totalCollected);
-    $cerPct = $totalBilled > 0 ? round(($totalCollected / $totalBilled) * 100) : 0;
+    $cerPct = $totalBilled > 0 ? min(100, max(0, round(($totalCollected / $totalBilled) * 100))) : 0;
     $circumference = 2 * M_PI * 52; // radius 52 on 120px svg
     $cerStroke = ($cerPct / 100) * $circumference;
 
@@ -90,14 +90,14 @@
                 <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">Consumption period</div>
             </div>
 
-            <div style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 10px; padding: 10px 12px;">
-                <div style="font-size: 10px; font-weight: 800; color: #991b1b; text-transform: uppercase; letter-spacing: 0.04em; display: flex; align-items: center; gap: 5px;">
-                    <i class="fas fa-clock" style="color: #ef4444;"></i> Due Date
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px;">
+                <div style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; display: flex; align-items: center; gap: 5px;">
+                    <i class="fas fa-clock" style="color: #64748b;"></i> Due Date
                 </div>
-                <div style="font-size: 14px; font-weight: 800; color: #dc2626; margin-top: 4px;">
+                <div style="font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 4px;">
                     {{ $activeDueDate }}
                 </div>
-                <div style="font-size: 10px; color: #b91c1c; margin-top: 2px;">Before late penalty</div>
+                <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">Before late penalty</div>
             </div>
 
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px;">
@@ -110,14 +110,14 @@
                 <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">Standard consumption rate</div>
             </div>
 
-            <div style="background: #fffbeb; border: 1px solid #fef3c7; border-radius: 10px; padding: 10px 12px;">
-                <div style="font-size: 10px; font-weight: 800; color: #92400e; text-transform: uppercase; letter-spacing: 0.04em; display: flex; align-items: center; gap: 5px;">
-                    <i class="fas fa-exclamation-triangle" style="color: #d97706;"></i> Late Penalty
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px;">
+                <div style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; display: flex; align-items: center; gap: 5px;">
+                    <i class="fas fa-exclamation-triangle" style="color: #64748b;"></i> Late Penalty
                 </div>
-                <div style="font-size: 14px; font-weight: 800; color: #b45309; margin-top: 4px;">
+                <div style="font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 4px;">
                     {{ $elecPenalty }}%
                 </div>
-                <div style="font-size: 10px; color: #d97706; margin-top: 2px;">Past due surcharge</div>
+                <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">Past due surcharge</div>
             </div>
         </div>
     </div>
@@ -146,9 +146,9 @@
                 <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Total Collection</div>
                 <div id="sumCollection" style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 2px;">₱{{ number_format($totalCollected, 2) }}</div>
             </div>
-            <div style="background: #fffbeb; padding: 12px 14px; border-radius: 10px; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b;">
-                <div style="font-size: 11px; color: #92400e; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Total Balance to Collect</div>
-                <div id="sumBalanceToCollect" style="font-size: 24px; font-weight: 800; color: #b45309; margin-top: 2px;">₱{{ number_format($totalBilled, 2) }}</div>
+            <div style="background: #f8fafc; padding: 12px 14px; border-radius: 10px; border-left: 4px solid #f59e0b;">
+                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Total Balance to Collect</div>
+                <div id="sumBalanceToCollect" style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 2px;">₱{{ number_format($totalBilled, 2) }}</div>
             </div>
             <div style="background: #f8fafc; padding: 12px 14px; border-radius: 10px; border-left: 4px solid #10b981;">
                 <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Residents Paid</div>
@@ -194,7 +194,7 @@
     </div>
 
     <!-- Analytics Dashboard -->
-    <div class="analytics-grid">
+    <div class="analytics-grid cols-3">
 
         <!-- Card 1: Paid Status Breakdown -->
         @php
@@ -245,23 +245,23 @@
             </div>
         </div>
 
-        <!-- Card 2: Collection Efficiency Ratio -->
-        <div class="analytic-card">
+        <!-- Card 2: Collection Efficiency -->
+        <div class="analytic-card" style="display: flex; flex-direction: column;">
             <div class="card-title">
                 <span>Collection Efficiency</span>
                 <span class="card-badge">Revenue Ratio</span>
             </div>
-            <div class="cer-gauge-wrap">
-                <div class="cer-gauge-ring">
-                    <svg viewBox="0 0 120 120">
-                        <circle class="gauge-bg" cx="60" cy="60" r="52"></circle>
-                        <circle id="cerGaugeFill" class="gauge-fill" cx="60" cy="60" r="52"
-                            stroke-dasharray="{{ round($cerStroke, 2) }} {{ round($circumference, 2) }}"
-                            stroke-dashoffset="0"></circle>
+            <div class="donut-chart-container">
+                <div class="donut-ring-wrap">
+                    <svg viewBox="0 0 42 42" class="donut-svg">
+                        <circle class="donut-segment segment-track" cx="21" cy="21" r="15.915" stroke-dasharray="100 0"></circle>
+                        <circle id="cerGaugeFill" class="donut-segment segment-paid" cx="21" cy="21" r="15.915"
+                            stroke-dasharray="{{ $cerPct }} {{ 100 - $cerPct }}"
+                            stroke-dashoffset="0"
+                            style="{{ $cerPct <= 0 ? 'stroke-opacity: 0;' : '' }}"></circle>
                     </svg>
-                    <div class="cer-gauge-label">
-                        <span id="cerGaugePct" style="font-size: 30px; font-weight: 800; color: #0f172a; margin-top: 0;">{{ $cerPct }}%</span>
-                        <span>CER</span>
+                    <div class="donut-center-label">
+                        <div class="donut-center-pct" id="cerGaugePct">{{ $cerPct }}%</div>
                     </div>
                 </div>
                 <div class="cer-meta">
@@ -275,7 +275,7 @@
                     </div>
                     <div class="cer-meta-row">
                         <span>Outstanding</span>
-                        <strong id="cerOutstanding" style="color: var(--bill-danger);">₱{{ number_format(max(0, $totalBilled - $totalCollected), 2) }}</strong>
+                        <strong id="cerOutstanding" style="color: var(--bill-danger);">₱{{ number_format($totalBalanceRemaining, 2) }}</strong>
                     </div>
                     <div class="cer-meta-row">
                         <span>Accounts Paid</span>
@@ -283,6 +283,47 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Card 3: Recent Payers (Paid) -->
+        @php
+            $recentElecPayers = getRecentPayers('electricity', 8);
+        @endphp
+        <div class="analytic-card" style="display: flex; flex-direction: column;">
+            <div class="card-title">
+                <span>Recent Payers</span>
+                <span class="card-badge" style="background: #ecfdf5; color: #059669;">Latest Paid</span>
+            </div>
+            @if(empty($recentElecPayers))
+                <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 16px; color: #94a3b8; text-align: center;">
+                    <svg width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin-bottom: 8px; opacity: 0.7;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    <div style="font-size: 13px; font-weight: 700; color: #64748b;">No Recent Payments Yet</div>
+                    <div style="font-size: 11px; margin-top: 2px;">Paid accounts will appear here automatically.</div>
+                </div>
+            @else
+                <div style="display: flex; flex-direction: column; gap: 8px; max-height: 290px; overflow-y: auto; padding-right: 4px;">
+                    @foreach($recentElecPayers as $payer)
+                        @php
+                            $initials = collect(explode(' ', trim($payer['name'])))->filter()->map(fn($w) => strtoupper(substr($w, 0, 1)))->take(2)->implode('');
+                        @endphp
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 11px; background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px;">
+                            <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                                <div style="width: 32px; height: 32px; border-radius: 9px; background: #dcfce7; color: #059669; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                    {{ $initials ?: 'R' }}
+                                </div>
+                                <div style="min-width: 0;">
+                                    <div style="font-size: 12.5px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $payer['name'] }}</div>
+                                    <div style="font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $payer['lot'] }} &bull; {{ $payer['date'] }}</div>
+                                </div>
+                            </div>
+                            <div style="text-align: right; flex-shrink: 0;">
+                                <div style="font-size: 12.5px; font-weight: 800; color: #059669;">₱{{ number_format($payer['amount'], 2) }}</div>
+                                <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase;">{{ $payer['method'] }}</div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
         </div>
 
     </div>
@@ -890,29 +931,29 @@
             }
         }
         
-        // Real-time graph update
-        if (window.salesChart && window.salesChart.data && window.salesChart.data.datasets.length > 0) {
+        // Real-time graph update (only when a valid YYYY-MM cycle is selected)
+        if (monthSel && /^\d{4}-\d{2}$/.test(monthSel) && window.salesChart && window.salesChart.data && window.salesChart.data.datasets.length > 0) {
             const ds = window.salesChart.data.datasets[0];
             if (ds && ds.data) {
-                // Find the matching month in labels if possible, or just update the last one
-                const currentMonthLabel = new Date(monthSel + '-01').toLocaleString('default', { month: 'short' });
-                const labelIdx = window.salesChart.data.labels.findIndex(l => l.includes(currentMonthLabel));
-                
+                const [yrStr, moStr] = monthSel.split('-');
+                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const currentMonthLabel = monthNames[parseInt(moStr, 10) - 1] || '';
+                const labelIdx = currentMonthLabel ? window.salesChart.data.labels.findIndex(l => l.startsWith(currentMonthLabel)) : -1;
+
                 if (labelIdx !== -1) {
                     ds.data[labelIdx] = totalCollected;
-                } else {
-                    ds.data[ds.data.length - 1] = totalCollected;
+                    window.salesChart.update();
                 }
-                window.salesChart.update();
             }
         }
 
         // Update Collection Efficiency card
-        const cerPct = totalBilled > 0 ? Math.round((totalCollected / totalBilled) * 100) : 0;
-        const circumference = 2 * Math.PI * 52;
-        const cerStroke = (cerPct / 100) * circumference;
+        const cerPct = totalBilled > 0 ? Math.min(100, Math.max(0, Math.round((totalCollected / totalBilled) * 100))) : 0;
         const cerFill = document.getElementById('cerGaugeFill');
-        if (cerFill) cerFill.setAttribute('stroke-dasharray', `${cerStroke.toFixed(2)} ${circumference.toFixed(2)}`);
+        if (cerFill) {
+            cerFill.setAttribute('stroke-dasharray', `${cerPct} ${100 - cerPct}`);
+            cerFill.style.strokeOpacity = cerPct <= 0 ? '0' : '1';
+        }
         const cerPctEl = document.getElementById('cerGaugePct');
         if (cerPctEl) cerPctEl.textContent = `${cerPct}%`;
         const cerBilledEl = document.getElementById('cerTotalBilled');
@@ -2356,7 +2397,7 @@
                 scales: {
                     y: {
                         beginAtZero: true,
-                        suggestedMax: 10000,
+                        grace: '12%',
                         border: { display: false },
                         ticks: {
                             callback: function(value) {

@@ -146,15 +146,8 @@
 
         <!-- Monthly Trend Line Graph -->
         <div style="background: #f8fafc; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0;">
-            <div style="position: relative; height: 250px; width: 100%;">
+            <div style="position: relative; height: 260px; width: 100%;">
                 <canvas id="utilityChart"></canvas>
-            </div>
-        </div>
-
-        <div style="background: #f8fafc; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; margin-top: 16px;">
-            <h4 style="font-size: 14px; font-weight: 700; color: #475569; margin-bottom: 12px; margin-top: 0;">Billing Amount (₱)</h4>
-            <div style="position: relative; height: 250px; width: 100%;">
-                <canvas id="amountChart"></canvas>
             </div>
         </div>
 
@@ -194,6 +187,77 @@
         </div>
     </div>
 
+    <!-- Payment Due Calendar -->
+    <div class="analytic-card" style="padding: 24px; margin-bottom: 32px; border-radius: 24px; border: 1px solid var(--bill-border); background: #ffffff;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+            <div>
+                <h3 style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
+                    <svg width="22" height="22" fill="none" stroke="#059669" stroke-width="2.2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    Payment Due Calendar
+                </h3>
+                <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">See your upcoming electricity and water bill due dates at a glance. Click any bill to pay or view details.</p>
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; background: #fef3c7; color: #92400e; padding: 4px 10px; border-radius: 9999px;">
+                    <span style="width: 8px; height: 8px; border-radius: 50%; background: #f59e0b;"></span> Elec Due
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; background: #e0f2fe; color: #075985; padding: 4px 10px; border-radius: 9999px;">
+                    <span style="width: 8px; height: 8px; border-radius: 50%; background: #0284c7;"></span> Water Due
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; background: #fee2e2; color: #991b1b; padding: 4px 10px; border-radius: 9999px;">
+                    <span style="width: 8px; height: 8px; border-radius: 50%; background: #ef4444;"></span> Overdue
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; background: #dcfce7; color: #065f46; padding: 4px 10px; border-radius: 9999px;">
+                    <span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span> Paid
+                </span>
+            </div>
+        </div>
+        <style>
+            #residentPaymentCalendar .fc-event {
+                white-space: normal !important;
+                font-size: 11px !important;
+                font-weight: 700 !important;
+                padding: 3px 6px !important;
+                border-radius: 6px !important;
+                line-height: 1.3 !important;
+                cursor: pointer;
+            }
+            #residentPaymentCalendar .fc-toolbar-title {
+                font-size: 16px !important;
+                font-weight: 800 !important;
+                color: #0f172a;
+            }
+        </style>
+        <div id="residentPaymentCalendar"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const calEl = document.getElementById('residentPaymentCalendar');
+            if (calEl && typeof FullCalendar !== 'undefined') {
+                const resCal = new FullCalendar.Calendar(calEl, {
+                    initialView: 'dayGridMonth',
+                    height: 'auto',
+                    fixedWeekCount: false,
+                    headerToolbar: {
+                        left: '',
+                        center: 'title',
+                        right: 'dayGridMonth,listMonth'
+                    },
+                    events: @json($calendarEvents ?? []),
+                    eventClick: function(info) {
+                        if (info.event.url) {
+                            info.jsEvent.preventDefault();
+                            window.location.href = info.event.url;
+                        }
+                    }
+                });
+                resCal.render();
+            }
+        });
+    </script>
+
     <script>
         @php
             $months = [];
@@ -216,7 +280,6 @@
         let currentUtilityType = 'elec';
         let currentRange = 6;
         let utilityChart = null;
-        let amountChart = null;
 
         function updateChartRange(monthsCount) {
             currentRange = parseInt(monthsCount);
@@ -237,7 +300,6 @@
             }
 
             const ctx = document.getElementById('utilityChart').getContext('2d');
-            const ctxAmount = document.getElementById('amountChart').getContext('2d');
             const color = type === 'elec' ? '#10b981' : '#3b82f6';
             const bgColor = type === 'elec' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)';
             const unit = type === 'elec' ? 'kWh' : 'm³';
@@ -252,45 +314,80 @@
             if (utilityChart) {
                 utilityChart.destroy();
             }
-            if (amountChart) {
-                amountChart.destroy();
-            }
+
+            const barColor = type === 'elec' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(59, 130, 246, 0.25)';
+            const barBorderColor = type === 'elec' ? 'rgba(16, 185, 129, 0.6)' : 'rgba(59, 130, 246, 0.6)';
 
             utilityChart = new Chart(ctx, {
-                type: 'line',
+                type: 'bar',
                 data: {
                     labels: slicedLabels,
-                    datasets: [{
-                        label: label,
-                        data: slicedData,
-                        borderColor: color,
-                        backgroundColor: bgColor,
-                        borderWidth: 3,
-                        pointBackgroundColor: '#ffffff',
-                        pointBorderColor: color,
-                        pointBorderWidth: 3,
-                        pointRadius: 5,
-                        pointHoverRadius: 7,
-                        fill: true,
-                        tension: 0.3
-                    }]
+                    datasets: [
+                        {
+                            type: 'line',
+                            label: `${label} (${unit})`,
+                            data: slicedData,
+                            yAxisID: 'yUsage',
+                            borderColor: color,
+                            backgroundColor: bgColor,
+                            borderWidth: 3,
+                            pointBackgroundColor: '#ffffff',
+                            pointBorderColor: color,
+                            pointBorderWidth: 3,
+                            pointRadius: 5,
+                            pointHoverRadius: 7,
+                            fill: false,
+                            tension: 0.3,
+                            order: 1
+                        },
+                        {
+                            type: 'bar',
+                            label: 'Bill Amount (₱)',
+                            data: slicedAmountData,
+                            yAxisID: 'yAmount',
+                            backgroundColor: barColor,
+                            borderColor: barBorderColor,
+                            borderWidth: 1,
+                            borderRadius: 6,
+                            maxBarThickness: 36,
+                            order: 2
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false },
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            align: 'end',
+                            labels: {
+                                usePointStyle: true,
+                                boxWidth: 8,
+                                font: { size: 11, weight: '600' },
+                                color: '#475569'
+                            }
+                        },
                         tooltip: {
+                            backgroundColor: '#0f172a',
+                            padding: 10,
+                            cornerRadius: 8,
                             callbacks: {
                                 label: function(context) {
-                                    return context.parsed.y + ' ' + unit;
+                                    if (context.dataset.yAxisID === 'yAmount') {
+                                        return 'Bill Amount: ₱' + Number(context.parsed.y || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                    }
+                                    return `${label}: ${context.parsed.y} ${unit}`;
                                 }
                             }
                         }
                     },
                     scales: {
-                        y: {
-                            beginAtZero: false,
+                        yUsage: {
+                            type: 'linear',
+                            position: 'left',
+                            beginAtZero: true,
                             grid: {
                                 color: '#e2e8f0',
                                 drawBorder: false
@@ -303,52 +400,17 @@
                                 font: { size: 11 }
                             }
                         },
-                        x: {
-                            grid: { display: false },
-                            ticks: { color: '#64748b', font: { size: 11 } }
-                        }
-                    },
-                    interaction: {
-                        intersect: false,
-                        mode: 'index',
-                    }
-                }
-            });
-
-            amountChart = new Chart(ctxAmount, {
-                type: 'bar',
-                data: {
-                    labels: slicedLabels,
-                    datasets: [{
-                        label: 'Billing Amount',
-                        data: slicedAmountData,
-                        backgroundColor: color,
-                        borderRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return '₱ ' + context.parsed.y;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
+                        yAmount: {
+                            type: 'linear',
+                            position: 'right',
                             beginAtZero: true,
                             grid: {
-                                color: '#e2e8f0',
+                                drawOnChartArea: false,
                                 drawBorder: false
                             },
                             ticks: {
                                 callback: function(value) {
-                                    return '₱ ' + value;
+                                    return '₱' + Number(value).toLocaleString();
                                 },
                                 color: '#64748b',
                                 font: { size: 11 }

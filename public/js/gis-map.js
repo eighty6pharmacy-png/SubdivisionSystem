@@ -829,7 +829,7 @@ async function initGISMap(mapElementId, options = {}) {
             map.removeLayer(activeTileLayer);
             activeTileLayer = null;
         }
-        if (mode === 'osm') {
+        if (mode === 'osm' || mode === 'street') {
             activeTileLayer = osmStreetLayer.addTo(map);
         } else if (mode === 'voyager') {
             activeTileLayer = cartoVoyagerLayer.addTo(map);
@@ -837,12 +837,12 @@ async function initGISMap(mapElementId, options = {}) {
             activeTileLayer = googleHybridLayer.addTo(map);
         } else if (mode === 'esri') {
             activeTileLayer = esriSatelliteLayer.addTo(map);
-        } else if (mode === 'street' || mode === 'google' || mode === 'google_street') {
+        } else if (mode === 'google' || mode === 'google_street') {
             activeTileLayer = googleStreetLayer.addTo(map);
         } else if (mode === 'none') {
             activeTileLayer = null;
         } else {
-            activeTileLayer = googleStreetLayer.addTo(map);
+            activeTileLayer = osmStreetLayer.addTo(map);
         }
     }
 
