@@ -318,8 +318,8 @@
                 <!-- Electricity Stat Badges -->
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
                     <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 10px 12px;">
-                        <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Total Recorded</div>
-                        <div style="font-size: 15px; font-weight: 800; color: #d97706; margin-top: 2px;">{{ number_format($elecSummary['total_usage'] ?? 0, 1) }} <span style="font-size: 11px; font-weight: 600;">kWh</span></div>
+                        <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Total Paid</div>
+                        <div style="font-size: 15px; font-weight: 800; color: #d97706; margin-top: 2px;">₱ {{ number_format($elecSummary['total_paid'] ?? 0, 2) }}</div>
                     </div>
                     <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 10px 12px;">
                         <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Total Billed</div>
@@ -366,8 +366,8 @@
                 <!-- Water Stat Badges -->
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
                     <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 10px 12px;">
-                        <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Total Recorded</div>
-                        <div style="font-size: 15px; font-weight: 800; color: #0284c7; margin-top: 2px;">{{ number_format($waterSummary['total_usage'] ?? 0, 1) }} <span style="font-size: 11px; font-weight: 600;">m³</span></div>
+                        <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Total Paid</div>
+                        <div style="font-size: 15px; font-weight: 800; color: #0284c7; margin-top: 2px;">₱ {{ number_format($waterSummary['total_paid'] ?? 0, 2) }}</div>
                     </div>
                     <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px; padding: 10px 12px;">
                         <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Total Billed</div>

@@ -391,18 +391,18 @@
                                 class="view-readonly"></div>
                         <div><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Birth
-                                Date</label><input type="date" name="birth_date" id="inp_birth_date"
+                                Date *</label><input type="date" name="birth_date" id="inp_birth_date" required
                                 max="{{ now()->toDateString() }}" onchange="syncAgeFromBirthDate()"
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly"></div>
                         <div><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Age</label><input
-                                type="number" name="age" id="inp_age" min="0" max="150"
+                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Age *</label><input
+                                type="number" name="age" id="inp_age" min="0" max="150" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly" placeholder="Auto-computed or enter age"></div>
                         <div><label class="form-label"
-                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Sex</label>
-                            <select name="sex" id="inp_sex"
+                                style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Sex *</label>
+                            <select name="sex" id="inp_sex" required
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly">
                                 <option value="">-- Select Sex --</option>
@@ -441,8 +441,9 @@
                                 class="view-readonly"></div>
                         <div><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">TIN
-                                Number <span style="font-weight:400; color:#64748b;">(Optional)</span></label><input
-                                type="text" name="tin_number" id="inp_tin_number" maxlength="50"
+                                Number *</label><input
+                                type="text" name="tin_number" id="inp_tin_number" maxlength="50" required
+                                oninput="validateTinInput(this)"
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
                                 class="view-readonly" placeholder="e.g. 123-456-789-000"></div>
                         <div style="grid-column: span 3;">
@@ -505,9 +506,9 @@
                                 class="view-readonly"></div>
                         <div><label class="form-label"
                                 style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Pag-IBIG
-                                No. <span style="font-weight:400; color:#64748b;">(Optional)</span></label><input type="text" name="pagibig_number" id="inp_pagibig_number"
+                                No.</label><input type="text" name="pagibig_number" id="inp_pagibig_number"
                                 style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px;"
-                                class="view-readonly" placeholder="Optional"></div>
+                                class="view-readonly" placeholder="e.g. 1234-5678-9012"></div>
                     </div>
 
                     <div id="view_reserved_lots_section" style="display: none; margin-top: 16px; padding: 14px 18px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px;">
@@ -595,23 +596,33 @@
             </div>
 
             <div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; max-height: calc(85vh - 130px); overflow-y: auto;">
-                <!-- Province / Metro Manila with Live Search -->
-                <div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                        <label style="margin: 0; font-size: 12px; font-weight: 700; color: #334155;">Province / Metro Manila *</label>
-                        <span style="font-size: 11px; color: #64748b;">Type to filter or select</span>
-                    </div>
-                    <div style="position: relative; margin-bottom: 6px;">
-                        <input type="text" id="addrProvinceSearch" placeholder="Search province (e.g. Cavite, Laguna, Metro Manila)..." 
-                            style="width: 100%; padding: 8px 12px 8px 34px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #f8fafc;"
-                            oninput="filterProvinces(this.value)" autocomplete="off">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                            style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none;">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                <!-- Province / Metro Manila Searchable Select -->
+                <div id="addrProvinceWrapper" style="position: relative;">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px;">Province / Metro Manila *</label>
+                    <button type="button" id="addrProvinceTrigger" onclick="toggleProvinceDropdown()"
+                        style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #fff; color: #1e293b; text-align: left; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                        <span id="addrProvinceTriggerText" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Loading provinces...</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-left: 8px;">
+                            <polyline points="6 9 12 15 18 9"></polyline>
                         </svg>
+                    </button>
+
+                    <!-- Dropdown Panel (opens on click) -->
+                    <div id="addrProvinceDropdown" style="display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 50; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15); overflow: hidden;">
+                        <div style="padding: 8px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; position: relative;">
+                            <input type="text" id="addrProvinceSearch" placeholder="Search province (e.g. Cavite, Laguna, Metro Manila)..."
+                                style="width: 100%; padding: 7px 10px 7px 32px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #fff; box-sizing: border-box;"
+                                oninput="filterProvinces(this.value)" autocomplete="off">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                style="position: absolute; left: 18px; top: 50%; transform: translateY(-50%); pointer-events: none;">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                        </div>
+                        <div id="addrProvinceList" style="max-height: 220px; overflow-y: auto; padding: 4px 0;"></div>
                     </div>
-                    <select id="addrProvince" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #fff;" onchange="onProvinceChange()">
+
+                    <select id="addrProvince" style="display: none;" onchange="onProvinceChange()">
                         <option value="">Loading provinces...</option>
                     </select>
                 </div>
@@ -739,11 +750,11 @@
         }
 
         function apiErrorMessage(payload, fallback) {
-            if (payload?.message) return payload.message;
-            if (payload?.errors) {
-                const first = Object.values(payload.errors).flat()[0];
-                if (first) return first;
+            if (payload?.errors && typeof payload.errors === 'object') {
+                const all = Object.values(payload.errors).flat().filter(Boolean);
+                if (all.length > 0) return all.join('\n');
             }
+            if (payload?.message) return payload.message;
             return fallback;
         }
 
@@ -764,8 +775,56 @@
                 .replace(/'/g, '&#039;');
         }
 
+        function validateTinInput(input) {
+            if (!input) return;
+            const val = (input.value || '').trim();
+            if (!val) {
+                input.setCustomValidity('');
+                return;
+            }
+            if (/[^0-9\-\s]/.test(val)) {
+                input.setCustomValidity('TIN Number must contain only digits and dashes.');
+                return;
+            }
+            const digits = val.replace(/\D/g, '');
+            if (digits.length < 9) {
+                input.setCustomValidity('TIN Number must have at least 9 digits.');
+                return;
+            }
+            input.setCustomValidity('');
+        }
+
+        const PSGC_LS_PREFIX = 'psgc_cache_v2_';
+        const PSGC_LS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+        function getPsgcLocalCache(key) {
+            try {
+                const raw = localStorage.getItem(PSGC_LS_PREFIX + key);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                if (!parsed || !Array.isArray(parsed.data) || parsed.data.length === 0) return null;
+                if (Date.now() - (parsed.ts || 0) > PSGC_LS_TTL_MS) {
+                    localStorage.removeItem(PSGC_LS_PREFIX + key);
+                    return null;
+                }
+                return parsed.data;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function setPsgcLocalCache(key, data) {
+            if (!Array.isArray(data) || data.length === 0) return;
+            try {
+                localStorage.setItem(PSGC_LS_PREFIX + key, JSON.stringify({ ts: Date.now(), data }));
+            } catch (e) {
+                // Ignore storage quota errors
+            }
+        }
+
         let currentAddressTarget = 'present';
-        let psgcAllProvincesCache = null;
+        let psgcAllProvincesCache = getPsgcLocalCache('provinces');
+        let psgcProvincesPromise = null;
         const psgcCitiesCache = {};
         const psgcBarangaysCache = {};
 
@@ -779,6 +838,7 @@
 
             const searchInp = document.getElementById('addrProvinceSearch');
             if (searchInp) searchInp.value = '';
+            closeProvinceDropdown();
 
             const streetInp = document.getElementById('addrStreet');
             if (streetInp) streetInp.value = '';
@@ -787,8 +847,46 @@
         }
 
         function closeAddressPicker() {
+            closeProvinceDropdown();
             document.getElementById('addressApiModal').style.display = 'none';
             document.body.style.overflow = 'auto';
+        }
+
+        function toggleProvinceDropdown() {
+            const dropdown = document.getElementById('addrProvinceDropdown');
+            const trigger = document.getElementById('addrProvinceTrigger');
+            if (!dropdown || (trigger && trigger.disabled)) return;
+
+            const isOpen = dropdown.style.display === 'block';
+            if (isOpen) {
+                closeProvinceDropdown();
+            } else {
+                dropdown.style.display = 'block';
+                const searchInput = document.getElementById('addrProvinceSearch');
+                if (searchInput) {
+                    searchInput.value = '';
+                    filterProvinces('');
+                    setTimeout(() => searchInput.focus(), 20);
+                }
+            }
+        }
+
+        function closeProvinceDropdown() {
+            const dropdown = document.getElementById('addrProvinceDropdown');
+            if (dropdown) dropdown.style.display = 'none';
+        }
+
+        function selectProvinceOption(code, name) {
+            const select = document.getElementById('addrProvince');
+            const triggerText = document.getElementById('addrProvinceTriggerText');
+            if (select) {
+                select.value = code;
+            }
+            if (triggerText) {
+                triggerText.textContent = name || '-- Select Province / Metro Manila --';
+            }
+            closeProvinceDropdown();
+            onProvinceChange();
         }
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -797,19 +895,46 @@
                 searchInput.addEventListener('keydown', function(e) {
                     if (e.key === 'Enter') {
                         e.preventDefault();
-                        const select = document.getElementById('addrProvince');
-                        if (select && select.options.length > 1) {
-                            select.selectedIndex = 1;
-                            onProvinceChange();
+                        const firstOption = document.querySelector('#addrProvinceList [data-province-code]');
+                        if (firstOption) {
+                            selectProvinceOption(
+                                firstOption.getAttribute('data-province-code'),
+                                firstOption.getAttribute('data-province-name')
+                            );
                         }
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        closeProvinceDropdown();
                     }
                 });
             }
+
+            document.addEventListener('click', function(e) {
+                const wrapper = document.getElementById('addrProvinceWrapper');
+                if (wrapper && !wrapper.contains(e.target)) {
+                    closeProvinceDropdown();
+                }
+            });
+
+            // Preload provinces in the background so opening the address picker is instant
+            if (!psgcAllProvincesCache) {
+                ensureProvincesLoaded().catch(() => {});
+            }
         });
+
+        async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                return await fetch(url, { ...options, signal: controller.signal });
+            } finally {
+                clearTimeout(timer);
+            }
+        }
 
         async function fetchWithFallback(url, fallbackUrl) {
             try {
-                const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                const resp = await fetchWithTimeout(url, { headers: { 'Accept': 'application/json' } }, 5000);
                 if (resp.ok) {
                     const data = await resp.json();
                     if (Array.isArray(data) && data.length > 0) return data;
@@ -818,7 +943,7 @@
                 console.warn('Backend address proxy failed, falling back to public endpoint...', err);
             }
             try {
-                const respFallback = await fetch(fallbackUrl);
+                const respFallback = await fetchWithTimeout(fallbackUrl, {}, 6000);
                 if (respFallback.ok) {
                     const fbData = await respFallback.json();
                     if (Array.isArray(fbData) && fbData.length > 0) return fbData;
@@ -829,62 +954,109 @@
             return [];
         }
 
+        async function ensureProvincesLoaded() {
+            if (psgcAllProvincesCache && psgcAllProvincesCache.length > 0) {
+                return psgcAllProvincesCache;
+            }
+            if (psgcProvincesPromise) {
+                return psgcProvincesPromise;
+            }
+
+            psgcProvincesPromise = (async () => {
+                let provinces = await fetchWithFallback('/api/address/provinces', 'https://psgc.gitlab.io/api/provinces.json');
+                if (Array.isArray(provinces) && provinces.length > 0) {
+                    if (!provinces.some(p => p.name === 'Metro Manila')) {
+                        provinces.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                        provinces.unshift({
+                            code: '130000000',
+                            name: 'Metro Manila',
+                            isNcr: true
+                        });
+                    }
+                    psgcAllProvincesCache = provinces;
+                    setPsgcLocalCache('provinces', provinces);
+                }
+                psgcProvincesPromise = null;
+                return provinces;
+            })();
+
+            return psgcProvincesPromise;
+        }
+
         async function loadAllProvinces() {
             const select = document.getElementById('addrProvince');
+            const trigger = document.getElementById('addrProvinceTrigger');
+            const triggerText = document.getElementById('addrProvinceTriggerText');
             if (psgcAllProvincesCache && psgcAllProvincesCache.length > 0) {
+                if (trigger) trigger.disabled = false;
+                select.disabled = false;
                 populateProvinceSelect(psgcAllProvincesCache);
                 return;
             }
 
             select.innerHTML = '<option value="">Loading provinces...</option>';
             select.disabled = true;
+            if (trigger) trigger.disabled = true;
+            if (triggerText) triggerText.textContent = 'Loading provinces...';
 
-            let provinces = await fetchWithFallback('/api/address/provinces', 'https://psgc.gitlab.io/api/provinces.json');
-            if (Array.isArray(provinces) && provinces.length > 0) {
-                if (!provinces.some(p => p.name === 'Metro Manila')) {
-                    provinces.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-                    provinces.unshift({
-                        code: '130000000',
-                        name: 'Metro Manila',
-                        isNcr: true
-                    });
-                }
+            const provinces = await ensureProvincesLoaded();
+            select.disabled = false;
+            if (trigger) trigger.disabled = false;
+            populateProvinceSelect(provinces);
+        }
+
+        function renderProvinceDropdownList(provinces, filterTerm = '') {
+            const listEl = document.getElementById('addrProvinceList');
+            const select = document.getElementById('addrProvince');
+            if (!listEl) return;
+
+            const currentVal = select ? select.value : '';
+            let list = provinces || [];
+            if (filterTerm) {
+                const term = filterTerm.toLowerCase();
+                list = list.filter(p => (p.name || '').toLowerCase().includes(term));
             }
 
-            psgcAllProvincesCache = provinces;
-            select.disabled = false;
-            populateProvinceSelect(provinces);
+            if (list.length === 0) {
+                listEl.innerHTML = '<div style="padding: 10px 14px; font-size: 13px; color: #94a3b8; text-align: center;">No matching provinces found</div>';
+                return;
+            }
+
+            listEl.innerHTML = list.map(p => {
+                const isSelected = p.code === currentVal;
+                const bg = isSelected ? '#e0f2fe' : 'transparent';
+                const color = isSelected ? '#0369a1' : '#1e293b';
+                const weight = isSelected ? '700' : '500';
+                return `<button type="button" data-province-code="${escapeHtml(p.code)}" data-province-name="${escapeHtml(p.name)}"
+                    onclick="selectProvinceOption('${escapeHtml(p.code)}', '${escapeHtml(p.name)}')"
+                    onmouseenter="this.style.background='#f1f5f9'"
+                    onmouseleave="this.style.background='${bg}'"
+                    style="width: 100%; text-align: left; padding: 8px 14px; border: none; background: ${bg}; color: ${color}; font-size: 13px; font-weight: ${weight}; cursor: pointer; display: block;">
+                    ${escapeHtml(p.name)}
+                </button>`;
+            }).join('');
         }
 
         function populateProvinceSelect(provinces, filterTerm = '') {
             const select = document.getElementById('addrProvince');
+            const triggerText = document.getElementById('addrProvinceTriggerText');
             if (!provinces || provinces.length === 0) {
                 select.innerHTML = '<option value="">Unable to load provinces. Please check connection.</option>';
-                return;
-            }
-
-            const currentVal = select.value;
-            let list = provinces;
-            if (filterTerm) {
-                const term = filterTerm.toLowerCase();
-                list = provinces.filter(p => p.name.toLowerCase().includes(term));
-            }
-
-            if (list.length === 0) {
-                select.innerHTML = '<option value="">No matching provinces found</option>';
-                resetCitySelect();
-                resetBarangaySelect();
-                updateAddressPreview();
+                if (triggerText) triggerText.textContent = 'Unable to load provinces';
+                renderProvinceDropdownList([]);
                 return;
             }
 
             let html = '<option value="">-- Select Province / Metro Manila --</option>';
-            list.forEach(p => {
+            provinces.forEach(p => {
                 const isNcr = p.isNcr || String(p.code).startsWith('13');
-                const isSelected = p.code === currentVal ? 'selected' : '';
-                html += `<option value="${p.code}" data-name="${escapeHtml(p.name)}" data-is-ncr="${isNcr ? '1' : '0'}" ${isSelected}>${escapeHtml(p.name)}</option>`;
+                html += `<option value="${p.code}" data-name="${escapeHtml(p.name)}" data-is-ncr="${isNcr ? '1' : '0'}">${escapeHtml(p.name)}</option>`;
             });
             select.innerHTML = html;
+            select.value = '';
+
+            if (triggerText) triggerText.textContent = '-- Select Province / Metro Manila --';
+            renderProvinceDropdownList(provinces, filterTerm);
 
             resetCitySelect();
             resetBarangaySelect();
@@ -893,13 +1065,7 @@
 
         function filterProvinces(val) {
             if (!psgcAllProvincesCache) return;
-            populateProvinceSelect(psgcAllProvincesCache, (val || '').trim());
-            const select = document.getElementById('addrProvince');
-            // If user filtered down to exactly 1 province result, automatically select it
-            if (select.options.length === 2) {
-                select.selectedIndex = 1;
-                onProvinceChange();
-            }
+            renderProvinceDropdownList(psgcAllProvincesCache, (val || '').trim());
         }
 
         function resetCitySelect() {
@@ -937,13 +1103,18 @@
             citySelect.disabled = true;
             citySelect.innerHTML = '<option value="">Loading cities and municipalities...</option>';
 
-            let cities = psgcCitiesCache[code];
+            let cities = psgcCitiesCache[code] || getPsgcLocalCache('cities_' + code);
             if (!cities) {
                 const fallbackUrl = isRegionDirect
                     ? `https://psgc.gitlab.io/api/regions/${code}/cities-municipalities.json`
                     : `https://psgc.gitlab.io/api/provinces/${code}/cities-municipalities.json`;
                 const localUrl = isRegionDirect ? `/api/address/cities/${code}?is_region=1` : `/api/address/cities/${code}`;
                 cities = await fetchWithFallback(localUrl, fallbackUrl);
+                if (Array.isArray(cities) && cities.length > 0) {
+                    setPsgcLocalCache('cities_' + code, cities);
+                }
+            }
+            if (Array.isArray(cities) && cities.length > 0) {
                 psgcCitiesCache[code] = cities;
             }
 
@@ -975,12 +1146,17 @@
             bSelect.disabled = true;
             bSelect.innerHTML = '<option value="">Loading barangays...</option>';
 
-            let barangays = psgcBarangaysCache[code];
+            let barangays = psgcBarangaysCache[code] || getPsgcLocalCache('barangays_' + code);
             if (!barangays) {
                 barangays = await fetchWithFallback(
                     `/api/address/barangays/${code}`,
                     `https://psgc.gitlab.io/api/cities-municipalities/${code}/barangays.json`
                 );
+                if (Array.isArray(barangays) && barangays.length > 0) {
+                    setPsgcLocalCache('barangays_' + code, barangays);
+                }
+            }
+            if (Array.isArray(barangays) && barangays.length > 0) {
                 psgcBarangaysCache[code] = barangays;
             }
 
@@ -1248,6 +1424,7 @@
                     method: method,
                     headers: {
                         'Content-Type': 'application/json',
+                        'Accept': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value
                     },
                     body: JSON.stringify(data)
@@ -1259,7 +1436,11 @@
                     Swal.fire(result.message);
                     window.location.reload();
                 } else {
-                    Swal.fire(apiErrorMessage(result, 'Validation error. Please check your inputs.'));
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Validation Error',
+                        text: apiErrorMessage(result, 'Validation error. Please check your inputs.')
+                    });
                     submitBtn.disabled = false;
                     submitBtn.textContent = originalBtnText;
                 }

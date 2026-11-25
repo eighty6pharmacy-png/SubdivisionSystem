@@ -238,11 +238,11 @@
                     </div>
                 </div>
                 <div
-                    style="background: #f8fafc; padding: 12px 14px; border-radius: 10px; border-left: 4px solid var(--bill-danger);">
-                    <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Late
+                    style="background: #f8fafc; padding: 12px 14px; border-radius: 10px; border-left: 4px solid #10b981;">
+                    <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">Fully Paid
                     </div>
                     <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 2px;">
-                        {{ collect($bills)->where('payment_behavior', 'Late')->count() }}
+                        {{ collect($bills)->where('status', 'Fully Paid')->count() }}
                     </div>
                 </div>
             </div>
@@ -372,13 +372,15 @@
                 <input type="text" id="billingSearch" class="filter-select" placeholder="Client or Lot..." style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;">
             </div>
             <div class="filter-group">
-                <span class="filter-label" style="display: block; font-size: 12px; color: #64748b; margin-bottom: 4px;">Payment Behavior</span>
-                <select id="behaviorFilter" class="filter-select" style="padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;">
-                    <option value="all">All Behaviors</option>
-                    <option value="Early">Early</option>
-                    <option value="On-Time">On-Time</option>
-                    <option value="Late">Late</option>
-                    <option value="Not available yet">N/A</option>
+                <span class="filter-label" style="display: block; font-size: 12px; color: #64748b; margin-bottom: 4px;">Term</span>
+                <select id="termFilter" class="filter-select" style="padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                    <option value="all">All Terms</option>
+                    @php
+                        $uniqueTerms = collect($bills)->pluck('total_months')->filter()->unique()->sort();
+                    @endphp
+                    @foreach($uniqueTerms as $t)
+                        <option value="{{ $t }}">{{ $t }} Months</option>
+                    @endforeach
                 </select>
             </div>
             <div class="filter-group">
@@ -408,7 +410,7 @@
                             <th data-sort="number">Progress</th>
                             <th data-sort="text">Monthly Payments</th>
                             <th data-sort="date">Next Due</th>
-                            <th data-sort="text">Payment Behavior</th>
+                            <th data-sort="number">Remaining Balance</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -416,11 +418,11 @@
                         @forelse($bills as $bill)
                             @php
                                 $progress = $bill['total_dp'] > 0 ? ($bill['paid_amount'] / $bill['total_dp']) * 100 : 0;
-                                $behavior = $bill['payment_behavior'] ?? 'Not available yet';
+                                $remainingBal = max(0, (float) ($bill['total_dp'] ?? 0) - (float) ($bill['paid_amount'] ?? 0));
                             @endphp
                             <tr class="bill-row" id="row-{{ $bill['id'] }}"
                                 data-resident="{{ strtolower($bill['buyer']) }}"
-                                data-behavior="{{ $behavior }}"
+                                data-term="{{ $bill['total_months'] }}"
                                 data-block="{{ $bill['block'] }}">
                                 <td>
                                     <div style="font-weight: 700;">{{ $bill['buyer'] }}</div>
@@ -463,15 +465,12 @@
                                     @endif
                                 </td>
                                 <td>
-                                    @if($behavior === 'Early')
-                                        <span class="trend-chip trend-early">Early</span>
-                                    @elseif($behavior === 'On-Time')
-                                        <span class="trend-chip trend-early" style="background: var(--bill-primary); color: #fff;">On-Time</span>
-                                    @elseif($behavior === 'Late')
-                                        <span class="trend-chip trend-late">Late</span>
-                                    @else
-                                        <span class="trend-chip" style="background: #e2e8f0; color: #475569;">N/A</span>
-                                    @endif
+                                    <div style="font-weight: 700; color: {{ $remainingBal <= 0 ? '#166534' : '#0f172a' }};">
+                                        ₱{{ number_format($remainingBal, 2) }}
+                                    </div>
+                                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
+                                        {{ $bill['total_months'] }} mos term
+                                    </div>
                                 </td>
                                 <td>
                                     <button class="btn btn-outline" style="padding: 6px 10px; font-size: 11px;"
@@ -1825,31 +1824,31 @@
             filterTable();
 
             document.getElementById('billingSearch')?.addEventListener('input', filterTable);
-            document.getElementById('behaviorFilter')?.addEventListener('change', filterTable);
+            document.getElementById('termFilter')?.addEventListener('change', filterTable);
             document.getElementById('blockFilter')?.addEventListener('change', filterTable);
         });
 
         function filterTable() {
             const search = document.getElementById('billingSearch').value.toLowerCase();
-            const behavior = document.getElementById('behaviorFilter').value;
+            const term = document.getElementById('termFilter').value;
             const block = document.getElementById('blockFilter').value;
 
             document.querySelectorAll('.bill-row').forEach(row => {
                 const text = row.innerText.toLowerCase();
                 const matchesSearch = text.includes(search);
-                const matchesBehavior = behavior === 'all' || row.dataset.behavior === behavior;
+                const matchesTerm = term === 'all' || row.dataset.term === term;
                 const matchesBlock = block === 'all' || row.dataset.block === block;
-                row.classList.toggle('pagination-match', matchesSearch && matchesBehavior && matchesBlock);
+                row.classList.toggle('pagination-match', matchesSearch && matchesTerm && matchesBlock);
             });
 
             window.downpaymentTablePagination?.resetPage();
         }
 
         function openDownpaymentReportModal() {
-            const currentBehavior = document.getElementById('behaviorFilter')?.value || 'all';
+            const currentTerm = document.getElementById('termFilter')?.value || 'all';
             const currentBlock = document.getElementById('blockFilter')?.value || 'all';
-            if (document.getElementById('reportDpBehaviorFilter')) {
-                document.getElementById('reportDpBehaviorFilter').value = currentBehavior;
+            if (document.getElementById('reportDpTermFilter')) {
+                document.getElementById('reportDpTermFilter').value = currentTerm;
             }
             if (document.getElementById('reportDpBlockFilter')) {
                 document.getElementById('reportDpBlockFilter').value = currentBlock;
@@ -1863,11 +1862,11 @@
         }
 
         function reloadDownpaymentReportPdf() {
-            const behavior = document.getElementById('reportDpBehaviorFilter')?.value || 'all';
+            const term = document.getElementById('reportDpTermFilter')?.value || 'all';
             const block = document.getElementById('reportDpBlockFilter')?.value || 'all';
             const sort = document.getElementById('reportDpSortFilter')?.value || 'name_asc';
             const base = "{{ route('admin.downpayment-fee.report.pdf') }}";
-            const qs = `?behavior=${encodeURIComponent(behavior)}&block=${encodeURIComponent(block)}&sort=${encodeURIComponent(sort)}`;
+            const qs = `?term=${encodeURIComponent(term)}&block=${encodeURIComponent(block)}&sort=${encodeURIComponent(sort)}`;
 
             const frame = document.getElementById('downpaymentReportPdfFrame');
             if (frame) {
@@ -1896,13 +1895,12 @@
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #e2e8f0;">
                 <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                     <div>
-                        <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Behavior</span>
-                        <select id="reportDpBehaviorFilter" class="filter-select" onchange="reloadDownpaymentReportPdf()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
-                            <option value="all">All Behaviors</option>
-                            <option value="Early">Early</option>
-                            <option value="On-Time">On-Time</option>
-                            <option value="Late">Late</option>
-                            <option value="Not available yet">N/A</option>
+                        <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Term</span>
+                        <select id="reportDpTermFilter" class="filter-select" onchange="reloadDownpaymentReportPdf()" style="padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; cursor: pointer;">
+                            <option value="all">All Terms</option>
+                            @foreach($dpUniqueTerms ?? collect($bills)->pluck('total_months')->filter()->unique()->sort() as $t)
+                                <option value="{{ $t }}">{{ $t }} Months</option>
+                            @endforeach
                         </select>
                     </div>
                     <div>

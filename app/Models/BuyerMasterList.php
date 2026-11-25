@@ -32,8 +32,6 @@ class BuyerMasterList extends Model
         'TIN ID',
         'Senior Citizen ID',
         'Pag-IBIG Loyalty Card',
-        'Company ID',
-        'School ID',
         'Barangay ID',
     ];
 

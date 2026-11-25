@@ -47,9 +47,33 @@ if (!function_exists('getIncidents')) {
     }
 }
 
+if (!function_exists('archiveOldAnnouncements')) {
+    /**
+     * Automatically archive announcements that are at least 1 month old.
+     */
+    function archiveOldAnnouncements(): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('announcements')) {
+            return;
+        }
+
+        $tz = config('app.timezone', 'Asia/Manila');
+        $cutoffDate = now($tz)->subMonth()->toDateString();
+
+        \App\Models\Announcement::query()
+            ->where(function ($q) {
+                $q->where('status', '!=', 'Archived')
+                  ->orWhereNull('status');
+            })
+            ->whereDate('publish_date', '<=', $cutoffDate)
+            ->update(['status' => 'Archived']);
+    }
+}
+
 if (!function_exists('getAnnouncements')) {
     function getAnnouncements() {
         try {
+            archiveOldAnnouncements();
             if (\Illuminate\Support\Facades\Schema::hasTable('announcements') && \App\Models\Announcement::count() > 0) {
                 return \App\Models\Announcement::all()->map(function ($ann) {
                     return [
@@ -298,8 +322,11 @@ if (!function_exists('updateResidentBehavior')) {
     function updateResidentBehavior(\App\Models\User $user) {
         $bills = \App\Models\UtilityBill::where('resident_id', $user->id)->get();
         if ($bills->count() === 0) {
-            $user->payment_behavior = 'Not available yet';
-            $user->save();
+            \App\Models\ResidentAccount::updateOrCreate(
+                ['user_id' => $user->id],
+                ['payment_behavior' => 'Not available yet']
+            );
+            $user->unsetRelation('residentAccount');
             return;
         }
 
@@ -339,8 +366,11 @@ if (!function_exists('updateResidentBehavior')) {
             $behavior = 'Late';
         }
         
-        $user->payment_behavior = $behavior;
-        $user->save();
+        \App\Models\ResidentAccount::updateOrCreate(
+            ['user_id' => $user->id],
+            ['payment_behavior' => $behavior]
+        );
+        $user->unsetRelation('residentAccount');
     }
 }
 
@@ -376,7 +406,7 @@ if (!function_exists('getElectricalBills')) {
                     return [];
                 }
                 
-                $query = \App\Models\User::role('Resident')->with(['lots', 'utilityBills' => function($q) {
+                $query = \App\Models\User::role('Resident')->with(['residentAccount', 'lots', 'utilityBills' => function($q) {
                     $q->where('type', 'electricity')->orderByRaw('COALESCE(billing_period, created_at) DESC')->with('payments');
                 }]);
                 
@@ -522,7 +552,7 @@ if (!function_exists('getWaterBills')) {
                     return [];
                 }
 
-                $query = \App\Models\User::role('Resident')->with(['lots', 'utilityBills' => function($q) {
+                $query = \App\Models\User::role('Resident')->with(['residentAccount', 'lots', 'utilityBills' => function($q) {
                     $q->where('type', 'water')->orderByRaw('COALESCE(billing_period, created_at) DESC')->with('payments');
                 }]);
                 
@@ -709,12 +739,15 @@ if (!function_exists('calculateBillingStats')) {
                     }
                 }
 
-                $users = \App\Models\User::role('Resident')->select('id', 'payment_behavior')->get();
-                $total = $users->count();
+                $residents = \App\Models\ResidentAccount::query()
+                    ->whereHas('user', fn ($q) => $q->role('Resident'))
+                    ->select('user_id', 'payment_behavior')
+                    ->get();
+                $total = $residents->count();
                 if ($total > 0) {
-                    $early = $users->where('payment_behavior', 'Early Payer')->count();
-                    $onTime = $users->where('payment_behavior', 'On-Time')->count() + $users->where('payment_behavior', 'On-Time Payer')->count();
-                    $late = $users->whereIn('payment_behavior', ['Late Payer', 'At Risk', 'Late'])->count();
+                    $early = $residents->where('payment_behavior', 'Early Payer')->count();
+                    $onTime = $residents->where('payment_behavior', 'On-Time')->count() + $residents->where('payment_behavior', 'On-Time Payer')->count();
+                    $late = $residents->whereIn('payment_behavior', ['Late Payer', 'At Risk', 'Late'])->count();
                     
                     $totalBehavior = $early + $onTime + $late;
                     if ($totalBehavior > 0) {
@@ -739,6 +772,9 @@ if (!function_exists('getReservationFees')) {
                 return \App\Models\Reservation::with(['lot', 'buyerMasterList'])
                     ->withExists('downpayments')
                     ->where('amount', '>', 0)
+                    ->orderByDesc('reservation_date')
+                    ->orderByDesc('created_at')
+                    ->orderByDesc('id')
                     ->get()
                     ->map(function ($res) {
                     return [
@@ -769,7 +805,11 @@ if (!function_exists('getDownpaymentFees')) {
     function getDownpaymentFees() {
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('downpayments') && \App\Models\Downpayment::count() > 0) {
-                return \App\Models\Downpayment::with(['reservation.lot', 'reservation.buyerMasterList.financingRecord'])->get()->map(function (\App\Models\Downpayment $dp) {
+                return \App\Models\Downpayment::with(['reservation.lot', 'reservation.buyerMasterList.financingRecord'])
+                    ->orderByDesc('created_at')
+                    ->orderByDesc('id')
+                    ->get()
+                    ->map(function (\App\Models\Downpayment $dp) {
                     $res = $dp->reservation;
                     $bml = $res?->buyerMasterList;
                     $histories = \Illuminate\Support\Facades\DB::table('payments')->where('downpayment_id', $dp->id)->whereNull('deleted_at')->orderBy('created_at', 'asc')->get();

@@ -274,7 +274,7 @@
         <div>Tel. Nos: <span class="underline-val" style="min-width: 150px;">{{ $r['tel_nos'] ?: 'N/A' }}</span></div>
     </div>
 
-    <div class="doc-title">RESERVATION APPLICATION / OFFICIAL RESERVATION RECEIPT</div>
+    <div class="doc-title">RESERVATION APPLICATION</div>
 
     <table class="name-grid">
         <tr>
@@ -318,7 +318,7 @@
                 <td>{{ $r['block'] !== '' ? $r['block'] : '—' }}</td>
                 <td>{{ $r['lot_number'] !== '' ? $r['lot_number'] : '—' }}</td>
                 <td>{{ $r['lot_area'] !== null ? number_format((float) $r['lot_area'], 2) . ' sqm' : '—' }}</td>
-                <td>{{ $r['house_model'] ?: '2-STOREY' }}</td>
+                <td>{{ $r['house_model'] ?: '—' }}</td>
                 <td>₱ {{ $fmtMoney($r['total_contract_price']) }}</td>
             </tr>
         </tbody>
@@ -456,7 +456,9 @@
     <div class="model-box">
         <strong>Model:</strong>
         <span class="underline-val" style="min-width: 140px;">{{ $r['house_model'] ?: '—' }}</span>
-        <strong>( {{ $r['building_model_label'] ?: '2 STOREY RESIDENTIAL BLDG.' }} )</strong>
+        @if(!empty($r['building_model_label']))
+            <strong>( {{ $r['building_model_label'] }} )</strong>
+        @endif
     </div>
 
     <div class="prose" style="margin-top: 10px;">

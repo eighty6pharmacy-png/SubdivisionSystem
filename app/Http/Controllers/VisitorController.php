@@ -149,7 +149,7 @@ class VisitorController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthorized. Only administrators can approve visitor requests.'], 403);
         }
 
-        $visitor = Visitor::whereKey($id)->with('host')->firstOrFail();
+        $visitor = Visitor::whereKey($id)->with('host.lots')->firstOrFail();
         
         if ($visitor->status !== 'Pending') {
             return response()->json(['success' => false, 'message' => 'Already processed']);
@@ -175,14 +175,21 @@ class VisitorController extends Controller
             ));
         }
 
+        $destText = '';
+        if ($visitor->host && $visitor->host->lots->count() > 0) {
+            $lot = $visitor->host->lots->first();
+            $destText = "Block {$lot->block}, Lot {$lot->lot_number}";
+        }
+        $placeInfo = 'Althesa Subdivision (Zone 1, Tagbong, Pili, Camarines Sur)' . ($destText ? " - {$destText}" : '');
+
         // SMS Dispatch Logic: Send exactly ONE SMS to prevent duplicates and multiple prompts.
         // If the resident provided the visitor's mobile number, send directly to the visitor.
-        // Otherwise, send to the resident host so they have the PIN and pass link.
+        // Otherwise, send to the resident host so they have the PIN.
         $smsSent = false;
         if (!empty($visitor->contact_number)) {
             $visName = $visitor->visitor_name;
             $hostName = $visitor->host ? $visitor->host->name : ($visitor->host_name ?: 'Resident Host');
-            $visitorMessage = "Althesa Subd (Zone 1, Tagbong, Pili): Hello {$visName}, your visitor pass from {$hostName} is Approved! Gate PIN: {$pin}. View pass & map: {$passUrl}";
+            $visitorMessage = "{$placeInfo}: Hello {$visName}, your visitor pass from {$hostName} is Approved! Gate PIN: {$pin}.";
 
             try {
                 $smsSent = (bool) \App\Helpers\SmsHelper::sendSms($visitor->contact_number, $visitorMessage);
@@ -191,7 +198,7 @@ class VisitorController extends Controller
             }
         } elseif ($visitor->host && !empty($visitor->host->contact_number)) {
             $visName = $visitor->visitor_name;
-            $message = "Althesa Subd (Zone 1, Tagbong, Pili): Visitor request for {$visName} is Approved. Gate PIN: {$pin}. Share pass & map: {$passUrl}";
+            $message = "{$placeInfo}: Visitor request for {$visName} is Approved. Gate PIN: {$pin}.";
 
             try {
                 $smsSent = (bool) \App\Helpers\SmsHelper::sendSms($visitor->host->contact_number, $message);
@@ -209,12 +216,17 @@ class VisitorController extends Controller
         ]);
     }
 
+    private function isPassLinkExpired(Visitor $visitor): bool
+    {
+        return $visitor->created_at !== null && $visitor->created_at->copy()->addDays(3)->isPast();
+    }
+
     // Direct Access Route for Visitors (from SMS Link - no PIN input required)
     public function showDirectPass(string $token)
     {
         $visitor = Visitor::where('access_token', $token)->with('host.lots')->first();
 
-        if (!$visitor) {
+        if (!$visitor || $this->isPassLinkExpired($visitor)) {
             return response()->view('visitor.pass', [
                 'notFound' => true,
                 'visitor' => null,
@@ -222,7 +234,7 @@ class VisitorController extends Controller
                 'destination' => 'Unknown',
                 'endNode' => null,
                 'hostName' => 'Unknown',
-            ], 404);
+            ], $visitor ? 410 : 404);
         }
 
         $dest = 'Unknown';
@@ -248,8 +260,11 @@ class VisitorController extends Controller
     {
         $visitor = Visitor::where('access_token', $token)->with('host.lots')->first();
 
-        if (!$visitor) {
-            return response()->json(['success' => false, 'message' => 'Visitor pass not found.'], 404);
+        if (!$visitor || $this->isPassLinkExpired($visitor)) {
+            return response()->json([
+                'success' => false,
+                'message' => $visitor ? 'Visitor pass link has expired.' : 'Visitor pass not found.',
+            ], $visitor ? 410 : 404);
         }
 
         $dest = 'Unknown';
@@ -472,7 +487,7 @@ class VisitorController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthorized. Only administrators can reject visitor requests.'], 403);
         }
 
-        $visitor = Visitor::whereKey($id)->with('host')->firstOrFail();
+        $visitor = Visitor::whereKey($id)->with('host.lots')->firstOrFail();
         
         if (!in_array($visitor->status, ['Pending', 'Awaiting Admin Approval'], true)) {
             return response()->json(['success' => false, 'message' => 'Already processed']);

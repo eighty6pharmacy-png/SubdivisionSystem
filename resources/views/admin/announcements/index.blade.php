@@ -14,18 +14,6 @@
             <p>Broadcast important news, updates, and emergency alerts to residents.</p>
         </div>
         <div class="ann-header-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-            <!-- View Mode Switcher -->
-            <div style="display: inline-flex; background: #e2e8f0; padding: 3px; border-radius: 10px; gap: 3px;">
-                <button type="button" id="tabAnnTableBtn" onclick="switchAnnView('table')" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 7px; border: none; cursor: pointer; transition: all 0.15s; background: #fff; color: #0f172a; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-                    Data Table
-                </button>
-                <button type="button" id="tabAnnCardBtn" onclick="switchAnnView('cards')" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 7px; border: none; cursor: pointer; transition: all 0.15s; background: transparent; color: #64748b;">
-                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-                    Card View
-                </button>
-            </div>
-
             <button type="button" class="btn btn-outline" style="background: #fff; border-color: #0284c7; color: #0284c7; font-weight: 700; display: inline-flex; align-items: center; padding: 10px 16px;" onclick="openAnnouncementReportModal()">
                 <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 6px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                 Generate Report
@@ -59,7 +47,7 @@
             <div class="ann-stat-card active-stat" data-status="all" style="cursor: pointer; border-color: var(--ann-primary);">
                 <span class="ann-stat-label">Total Active</span>
                 <div class="ann-stat-value">
-                    <span id="stat-total">{{ count($announcements) }}</span>
+                    <span id="stat-total">{{ collect($announcements)->filter(function($a) { return strtolower($a['status'] ?? '') !== 'archived'; })->count() }}</span>
                 </div>
             </div>
             <div class="ann-stat-card" data-status="published" style="cursor: pointer;">
@@ -152,45 +140,6 @@
             @include('partials.admin-client-pagination', ['prefix' => 'annTable', 'defaultPerPage' => 15])
         </div>
     </div>
-
-    <!-- Card Grid View (Secondary) -->
-    <div id="annCardViewContainer" style="display: none;">
-    <div class="ann-grid" id="annGrid">
-        @foreach($announcements as $ann)
-        <div class="ann-card" data-id="{{ $ann['id'] }}" data-title="{{ strtolower($ann['title'] . ' ' . $ann['content'] . ' ' . ($ann['author'] ?? '')) }}" data-cat="{{ $ann['cat'] }}" data-status-val="{{ strtolower($ann['status']) }}" data-date="{{ date('Y-m-d', strtotime($ann['date'])) }}" data-archived="{{ strtolower($ann['status']) === 'archived' ? 'true' : 'false' }}">
-            <div class="ann-card-header">
-                <span class="ann-category cat-{{ strtolower($ann['cat']) }}">{{ $ann['cat'] }}</span>
-                <span class="ann-status status-{{ $ann['status'] }}" title="{{ ucfirst($ann['status']) }}"></span>
-            </div>
-            <h3>{{ $ann['title'] }}</h3>
-            <p>{{ $ann['content'] }}</p>
-            <div class="ann-footer">
-                <div class="ann-meta">
-                    <span class="ann-author">{{ $ann['author'] }}</span>
-                    <span class="ann-date">📅 {{ date('M d, Y', strtotime($ann['date'])) }}</span>
-                </div>
-                <div class="ann-actions">
-                    <button class="ann-btn-icon btn-restore" title="Restore" style="display: none; color: var(--ann-success);" onclick="restoreAnnouncementById('{{ $ann['id'] }}')">
-                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                    </button>
-                    <button class="ann-btn-icon btn-edit" title="Edit Announcement">
-                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                    </button>
-                    <button class="ann-btn-icon btn-archive" title="Archive" style="color: var(--ann-text-sub);" onclick="archiveAnnouncementById('{{ $ann['id'] }}')">
-                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
-                    </button>
-                </div>
-            </div>
-        </div>
-        @endforeach
-    </div>
-
-    <div id="annPagination" style="display:none; margin-top:32px; justify-content:center; align-items:center;">
-        <button id="annPrev" type="button" class="btn btn-outline" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-weight: 600;">Previous</button>
-        <span id="annPageIndicator" style="font-size: 14px; font-weight: 700; color: #475569; margin: 0 16px;">Page 1 of 1</span>
-        <button id="annNext" type="button" class="btn btn-outline" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-weight: 600;">Next</button>
-    </div>
-    </div>
 </div>
 
 <!-- Simple Create Modal Mockup -->
@@ -232,32 +181,6 @@
     }
     function closeModal() {
         document.getElementById('annModal').style.display = 'none';
-    }
-
-    function switchAnnView(mode) {
-        const tableCont = document.getElementById('annTableViewContainer');
-        const cardCont = document.getElementById('annCardViewContainer');
-        const tableBtn = document.getElementById('tabAnnTableBtn');
-        const cardBtn = document.getElementById('tabAnnCardBtn');
-        if (mode === 'table') {
-            tableCont.style.display = 'block';
-            cardCont.style.display = 'none';
-            tableBtn.style.background = '#fff';
-            tableBtn.style.color = '#0f172a';
-            tableBtn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-            cardBtn.style.background = 'transparent';
-            cardBtn.style.color = '#64748b';
-            cardBtn.style.boxShadow = 'none';
-        } else {
-            tableCont.style.display = 'none';
-            cardCont.style.display = 'block';
-            cardBtn.style.background = '#fff';
-            cardBtn.style.color = '#0f172a';
-            cardBtn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-            tableBtn.style.background = 'transparent';
-            tableBtn.style.color = '#64748b';
-            tableBtn.style.boxShadow = 'none';
-        }
     }
 
     function openAnnouncementReportModal() {
@@ -343,7 +266,6 @@
         window.archiveAnnouncementById = function(id) {
             if (!confirm('Are you sure you want to archive this announcement?')) return;
             const row = document.querySelector(`.ann-row[data-id="${id}"]`);
-            const card = document.querySelector(`.ann-card[data-id="${id}"]`);
             if (row) {
                 row.setAttribute('data-archived', 'true');
                 row.setAttribute('data-status-val', 'archived');
@@ -354,23 +276,12 @@
                 if (archBtn) archBtn.style.display = 'none';
                 if (restBtn) restBtn.style.display = 'flex';
             }
-            if (card) {
-                card.setAttribute('data-archived', 'true');
-                card.setAttribute('data-status-val', 'archived');
-                const archBtn = card.querySelector('.btn-archive');
-                const editBtn = card.querySelector('.btn-edit');
-                const restBtn = card.querySelector('.btn-restore');
-                if (archBtn) archBtn.style.display = 'none';
-                if (editBtn) editBtn.style.display = 'none';
-                if (restBtn) restBtn.style.display = 'flex';
-            }
             updateStats();
             filterCards();
         };
 
         window.restoreAnnouncementById = function(id) {
             const row = document.querySelector(`.ann-row[data-id="${id}"]`);
-            const card = document.querySelector(`.ann-card[data-id="${id}"]`);
             if (row) {
                 row.setAttribute('data-archived', 'false');
                 row.setAttribute('data-status-val', 'published');
@@ -381,22 +292,10 @@
                 if (archBtn) archBtn.style.display = 'flex';
                 if (restBtn) restBtn.style.display = 'none';
             }
-            if (card) {
-                card.setAttribute('data-archived', 'false');
-                card.setAttribute('data-status-val', 'published');
-                const archBtn = card.querySelector('.btn-archive');
-                const editBtn = card.querySelector('.btn-edit');
-                const restBtn = card.querySelector('.btn-restore');
-                if (archBtn) archBtn.style.display = 'flex';
-                if (editBtn) editBtn.style.display = 'flex';
-                if (restBtn) restBtn.style.display = 'none';
-            }
             updateStats();
             filterCards();
         };
 
-        const ANN_PER_PAGE = 9;
-        let annPage = 1;
         const dateSelect = document.getElementById('annDateFilter');
 
         function matchesDate(dateStr, filter) {
@@ -446,8 +345,7 @@
             return matchesSearch && matchesCat && matchesStatus && matchesDt;
         }
 
-        window.filterCards = function(resetPage = true) {
-            if (resetPage) annPage = 1;
+        window.filterCards = function() {
             const query = searchInput.value.toLowerCase();
             const dateFilter = dateSelect.value;
 
@@ -462,40 +360,11 @@
             if (annTablePagination) {
                 annTablePagination.render();
             }
-
-            // Filter Card Grid items
-            const cards = document.querySelectorAll('.ann-card');
-            const matched = [];
-            cards.forEach(card => {
-                if (itemMatchesFilters(card, query, dateFilter)) {
-                    matched.push(card);
-                } else {
-                    card.style.display = 'none';
-                }
-            });
-
-            const totalPages = Math.max(1, Math.ceil(matched.length / ANN_PER_PAGE));
-            if (annPage > totalPages) annPage = totalPages;
-            const startIdx = (annPage - 1) * ANN_PER_PAGE;
-            matched.forEach((card, i) => {
-                card.style.display = (i >= startIdx && i < startIdx + ANN_PER_PAGE) ? 'flex' : 'none';
-            });
-
-            const pag = document.getElementById('annPagination');
-            pag.style.display = totalPages > 1 ? 'flex' : 'none';
-            document.getElementById('annPageIndicator').textContent = `Page ${annPage} of ${totalPages}`;
-            const prev = document.getElementById('annPrev');
-            const next = document.getElementById('annNext');
-            prev.disabled = annPage === 1;
-            next.disabled = annPage === totalPages;
-            prev.style.opacity = annPage === 1 ? '0.5' : '1';
-            next.style.opacity = annPage === totalPages ? '0.5' : '1';
         }
 
         dateSelect.addEventListener('change', () => filterCards());
-        document.getElementById('annPrev').addEventListener('click', () => { annPage--; filterCards(false); });
-        document.getElementById('annNext').addEventListener('click', () => { annPage++; filterCards(false); });
         filterCards();
+        updateStats();
 
         window.updateStats = function() {
             const rows = document.querySelectorAll('.ann-row');

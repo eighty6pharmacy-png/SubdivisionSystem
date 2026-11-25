@@ -172,7 +172,7 @@
             <td style="width: 60%;">
                 <div class="report-title">Downpayment Fee &amp; Amortization Ledger Report</div>
                 <div class="scope-badge">
-                    Scope: {{ $behavior === 'all' ? 'All Behaviors' : $behavior }} &bull; Block: {{ $block ?: 'All Blocks' }} &bull; Sorted: {{ $sortLabel ?? 'Alphabetical (Name A-Z)' }}
+                    Scope: {{ ($term ?? 'all') === 'all' ? 'All Terms' : ($term . ' Months') }} &bull; Block: {{ $block ?: 'All Blocks' }} &bull; Sorted: {{ $sortLabel ?? 'Alphabetical (Name A-Z)' }}
                 </div>
             </td>
             <td style="width: 40%; text-align: right; color: #000000; font-size: 8.5px;">
@@ -203,8 +203,8 @@
                 <div class="summary-value">₱{{ number_format($stats['total_balance'], 2) }}</div>
             </td>
             <td>
-                <div class="summary-label">Late Accounts</div>
-                <div class="summary-value">{{ $stats['late'] }}</div>
+                <div class="summary-label">Fully Paid</div>
+                <div class="summary-value">{{ $stats['fully_paid'] }}</div>
             </td>
         </tr>
     </table>
@@ -221,7 +221,7 @@
                 <th style="width: 85px; text-align: right;">Paid Amount</th>
                 <th style="width: 85px; text-align: right;">Balance</th>
                 <th style="width: 80px; text-align: center;">Next Due</th>
-                <th style="width: 85px; text-align: center;">Payment Behavior</th>
+                <th style="width: 85px; text-align: center;">Term</th>
             </tr>
         </thead>
         <tbody>
@@ -242,8 +242,8 @@
                     <td style="text-align: right; font-family: monospace;">₱{{ number_format((float)(($b['total_dp'] ?? 0) - ($b['paid_amount'] ?? 0)), 2) }}</td>
                     <td style="text-align: center; color: #000000;">{{ $b['next_due'] ?? '—' }}</td>
                     <td style="text-align: center;">
-                        <span class="badge {{ $b['payment_behavior'] === 'Late' ? 'badge-archived' : 'badge-active' }}">
-                            {{ strtoupper($b['payment_behavior'] ?? 'N/A') }}
+                        <span class="badge badge-active">
+                            {{ (int) ($b['total_months'] ?? 0) }} MOS
                         </span>
                     </td>
                 </tr>

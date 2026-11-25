@@ -344,7 +344,7 @@ class ReservationReceiptController extends Controller
             ? (string) $saved['or_number']
             : ('OR-RES-' . str_pad((string) $res->id, 5, '0', STR_PAD_LEFT));
 
-        $houseModel = $lot?->description ?? '2-STOREY';
+        $houseModel = $lot?->description ?: '';
 
         return [
             'id' => $res->id,
@@ -380,7 +380,7 @@ class ReservationReceiptController extends Controller
             'lot_area' => $lot?->lot_area !== null ? (float) $lot->lot_area : null,
             'floor_area' => $lot?->floor_area !== null ? (float) $lot->floor_area : null,
             'house_model' => $houseModel,
-            'building_model_label' => $saved['building_model_label'] ?? '2 STOREY RESIDENTIAL BLDG.',
+            'building_model_label' => $saved['building_model_label'] ?? ($lot?->floor_area !== null ? 'Floor Area: ' . number_format((float) $lot->floor_area, 2) . ' sqm' : ''),
             'total_contract_price' => $tcp,
             'tct_no' => $lot?->tct_no ?? '',
             'pid' => $lot?->pid ?? '',

@@ -274,7 +274,7 @@
 
                     <div id="modalReservationActions"
                         style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; border-top: 1px solid var(--bill-border); padding-top: 24px;">
-                        <button type="button" class="btn btn-primary" onclick="convertReservation()">Convert to Downpayment</button>
+                        <button type="button" class="btn btn-primary" onclick="convertReservation()">Redirect to Downpayment</button>
                         <button type="button" class="btn btn-outline" style="border-color: #3b82f6; color: #2563eb; font-weight: 700;"
                             onclick="openEditReservation()">Edit Reservation</button>
                         <button type="button" class="btn btn-outline" style="color: var(--bill-danger); border-color: #fee2e2;"
@@ -315,9 +315,13 @@
                             </div>
                             <div>
                                 <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Number of Months *</label>
-                                <input type="number" id="editResMonths" class="filter-select" min="1" max="120" step="1"
+                                <select id="editResMonths" class="filter-select"
                                     style="width: 100%; font-size: 16px; padding: 12px; border-radius: 10px; box-sizing: border-box;"
-                                    oninput="updateEditReservationDeadlinePreview()">
+                                    onchange="updateEditReservationDeadlinePreview()">
+                                    <option value="1">1 Month</option>
+                                    <option value="2">2 Months</option>
+                                    <option value="3" selected>3 Months</option>
+                                </select>
                                 <div id="editResDeadlinePreview" style="font-size: 11px; color: #64748b; margin-top: 6px; font-weight: 600;"></div>
                             </div>
                         </div>
@@ -413,9 +417,13 @@
                     <label
                         style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Number
                         of Months *</label>
-                    <input type="number" id="resMonths" class="filter-select" min="1" max="120" step="1"
+                    <select id="resMonths" class="filter-select"
                         style="width: 100%; font-size: 16px; padding: 12px; border-radius: 10px; box-sizing: border-box;"
-                        value="1" oninput="updateReservationDeadlinePreview()">
+                        onchange="updateReservationDeadlinePreview()">
+                        <option value="1">1 Month</option>
+                        <option value="2">2 Months</option>
+                        <option value="3" selected>3 Months</option>
+                    </select>
                     <div id="resDeadlinePreview" style="font-size: 11px; color: #64748b; margin-top: 6px; font-weight: 600;"></div>
                 </div>
             </div>
@@ -569,7 +577,7 @@
             clearSelectedBuyer();
             const monthsInput = document.getElementById('resMonths');
             if (monthsInput) {
-                monthsInput.value = '1';
+                monthsInput.value = '3';
                 updateReservationDeadlinePreview();
             }
             if (typeof bindGisDropdowns === 'function') {
@@ -633,8 +641,8 @@
                 return;
             }
 
-            if (isNaN(months) || months < 1 || months > 120) {
-                Swal.fire({ icon: 'warning', title: 'Invalid Duration', text: 'Please enter a valid number of months (1 to 120).' });
+            if (isNaN(months) || months < 1 || months > 3) {
+                Swal.fire({ icon: 'warning', title: 'Invalid Duration', text: 'Please select a valid number of months (1 to 3).' });
                 resetBtn();
                 return;
             }
@@ -644,6 +652,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Accept': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                     },
                     body: JSON.stringify({
@@ -661,7 +670,9 @@
                 if (res.ok) {
                     window.location.reload();
                 } else {
-                    Swal.fire(data.message || 'Failed to save reservation to database');
+                    const errList = data?.errors ? Object.values(data.errors).flat().filter(Boolean) : [];
+                    const msg = errList.length > 0 ? errList.join('\n') : (data.message || 'Failed to save reservation to database.');
+                    Swal.fire({ icon: 'warning', title: 'Unable to Save Reservation', text: msg });
                     resetBtn();
                 }
             } catch (e) {
@@ -784,12 +795,12 @@
                 amountInput.value = Number(bill.amount || 0).toLocaleString();
             }
 
-            let initialMonths = 1;
+            let initialMonths = 3;
             if (bill.date && bill.deadline) {
                 const start = new Date(bill.date + 'T00:00:00');
                 const end = new Date(bill.deadline + 'T00:00:00');
                 const diffMonths = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
-                if (diffMonths >= 1) initialMonths = diffMonths;
+                if (diffMonths >= 1 && diffMonths <= 3) initialMonths = diffMonths;
             }
             document.getElementById('editResMonths').value = String(initialMonths);
             updateEditReservationDeadlinePreview();
@@ -832,8 +843,8 @@
                 Swal.fire({ icon: 'warning', title: 'Invalid Amount', text: 'Please enter a valid reservation fee amount.' });
                 return;
             }
-            if (isNaN(months) || months < 1 || months > 120) {
-                Swal.fire({ icon: 'warning', title: 'Invalid Duration', text: 'Please enter a valid number of months (1 to 120).' });
+            if (isNaN(months) || months < 1 || months > 3) {
+                Swal.fire({ icon: 'warning', title: 'Invalid Duration', text: 'Please select a valid number of months (1 to 3).' });
                 return;
             }
 
@@ -862,7 +873,9 @@
                 if (res.ok && data.success) {
                     window.location.reload();
                 } else {
-                    Swal.fire(data.message || 'Failed to update reservation.');
+                    const errList = data?.errors ? Object.values(data.errors).flat().filter(Boolean) : [];
+                    const msg = errList.length > 0 ? errList.join('\n') : (data.message || 'Failed to update reservation.');
+                    Swal.fire({ icon: 'warning', title: 'Unable to Update Reservation', text: msg });
                     resetBtn();
                 }
             } catch (e) {
@@ -877,7 +890,7 @@
             const bill = allBillsRaw.find(b => String(b.id) === String(currentModalId));
             if (!bill) return;
             if (!bill.buyer_id) {
-                Swal.fire('This reservation is not linked to a Master List buyer. Assign a buyer before converting.');
+                Swal.fire('This reservation is not linked to a Master List buyer. Assign a buyer before redirecting.');
                 return;
             }
             window.location.href = `/admin/downpayment-fee?create=1&buyer_id=${encodeURIComponent(bill.buyer_id)}&reservation_id=${encodeURIComponent(bill.id)}`;
@@ -1156,7 +1169,7 @@
         <div class="bill-modal-content" style="max-width: 1280px; width: 97%; max-height: 95vh; overflow: hidden; padding: 18px 22px; border-radius: 20px; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.4); display: flex; flex-direction: column;">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
                 <div>
-                    <h2 style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 0;">Reservation Application &amp; Official Receipt</h2>
+                    <h2 style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 0;">Reservation Application</h2>
                     <p id="receiptModalSubtitle" style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">Linked with GIS Property Specification, Buyer Information &amp; Reservation Details</p>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">

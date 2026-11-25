@@ -22,7 +22,7 @@
         OneSignal.Slidedown.promptPush();
 
         @if(auth()->check())
-            OneSignal.login("{{ auth()->user()->id }}");
+            await OneSignal.login("{{ auth()->user()->id }}");
         @endif
       });
     </script>

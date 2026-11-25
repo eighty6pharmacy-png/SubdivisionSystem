@@ -1404,7 +1404,7 @@
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 },
-                body: JSON.stringify({})
+                body: JSON.stringify({ block: block || null, lot: lot || null })
             });
             const data = await res.json().catch(() => null);
             if (!res.ok || !data?.success) {

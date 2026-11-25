@@ -49,3 +49,7 @@ Schedule::command('sms:reservation-expiry')->dailyAt('09:00');
 Schedule::call(function () {
     expirePastAppointments();
 })->everyFifteenMinutes();
+
+Schedule::call(function () {
+    archiveOldAnnouncements();
+})->daily();

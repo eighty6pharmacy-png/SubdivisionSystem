@@ -1043,8 +1043,10 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $waterUsageSeries = [];
         $waterAmountSeries = [];
 
-        $allUtilityBills = \Illuminate\Support\Facades\Schema::hasTable('utility_bills') 
-            ? \App\Models\UtilityBill::all() 
+        $allUtilityBills = \Illuminate\Support\Facades\Schema::hasTable('utility_bills')
+            ? (\Illuminate\Support\Facades\Schema::hasTable('payments')
+                ? \App\Models\UtilityBill::withSum('payments', 'amount_paid')->get()
+                : \App\Models\UtilityBill::all())
             : collect();
 
         for ($i = 11; $i >= 0; $i--) {
@@ -1083,10 +1085,21 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $elecRate = (float) (\App\Models\Setting::find('elec_rate')?->value ?? 13);
         $waterRate = (float) (\App\Models\Setting::find('water_rate')?->value ?? 15);
 
+        $sumUtilityPaid = function ($bills): float {
+            return (float) $bills->sum(function ($bill) {
+                $paid = (float) ($bill->payments_sum_amount_paid ?? 0);
+                if ($paid <= 0 && strtolower((string) $bill->status) === 'paid') {
+                    return (float) $bill->amount;
+                }
+                return $paid;
+            });
+        };
+
         $elecSummary = [
             'rate' => $elecRate,
             'total_usage' => (float) $elecBillsAll->sum('usage_value'),
             'total_billed' => (float) $elecBillsAll->sum('amount'),
+            'total_paid' => $sumUtilityPaid($elecBillsAll),
             'current_usage' => (float) $curElecBills->sum('usage_value'),
             'current_billed' => (float) $curElecBills->sum('amount'),
             'paid_count' => $elecBillsAll->where('status', 'paid')->count(),
@@ -1097,6 +1110,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'rate' => $waterRate,
             'total_usage' => (float) $waterBillsAll->sum('usage_value'),
             'total_billed' => (float) $waterBillsAll->sum('amount'),
+            'total_paid' => $sumUtilityPaid($waterBillsAll),
             'current_usage' => (float) $curWaterBills->sum('usage_value'),
             'current_billed' => (float) $curWaterBills->sum('amount'),
             'paid_count' => $waterBillsAll->where('status', 'paid')->count(),
@@ -1578,7 +1592,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         return response()->json(['success' => false], 404);
     });
     Route::post('/users/{id}/convert-to-resident', function (\Illuminate\Http\Request $request, $id) {
-        $user = \App\Models\User::with(['buyerMasterList.lot', 'lots', 'roles'])->find($id);
+        $user = \App\Models\User::with(['buyerMasterList.lot', 'lots'])->find($id);
         if (! $user) {
             return response()->json(['success' => false, 'message' => 'User not found.'], 404);
         }
@@ -1829,10 +1843,10 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $deadlineDate = null;
         if ($request->filled('months')) {
             $months = filter_var($request->input('months'), FILTER_VALIDATE_INT);
-            if ($months === false || $months < 1 || $months > 120) {
+            if ($months === false || $months < 1 || $months > 3) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Please enter a valid number of months (1 to 120).',
+                    'message' => 'Please select a valid number of months (1 to 3).',
                 ], 422);
             }
             $deadlineDate = now()->addMonthsNoOverflow($months);
@@ -1918,10 +1932,10 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $deadlineDate = $res->deadline_date;
         if ($request->filled('months')) {
             $months = filter_var($request->input('months'), FILTER_VALIDATE_INT);
-            if ($months === false || $months < 1 || $months > 120) {
+            if ($months === false || $months < 1 || $months > 3) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Please enter a valid number of months (1 to 120).',
+                    'message' => 'Please select a valid number of months (1 to 3).',
                 ], 422);
             }
             $baseDate = $res->reservation_date ? \Carbon\Carbon::parse($res->reservation_date) : now();
@@ -2369,16 +2383,16 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     });
 
     Route::get('/downpayment-fee/report/pdf', function (\Illuminate\Http\Request $request) {
-        $behavior = $request->input('behavior', 'all');
+        $term = $request->input('term', 'all');
         $block = $request->input('block');
         $sort = $request->input('sort', 'name_asc');
         $download = $request->boolean('download');
 
         $bills = collect(getDownpaymentFees());
 
-        if ($behavior !== 'all') {
-            $bills = $bills->filter(function ($b) use ($behavior) {
-                return ($b['payment_behavior'] ?? '') === $behavior;
+        if ($term !== 'all') {
+            $bills = $bills->filter(function ($b) use ($term) {
+                return (string) ($b['total_months'] ?? '') === (string) $term;
             });
         }
 
@@ -2407,7 +2421,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'total_dp' => collect($billsArr)->sum('total_dp'),
             'total_paid' => collect($billsArr)->sum('paid_amount'),
             'total_balance' => collect($billsArr)->sum(fn($b) => (float)(($b['total_dp'] ?? 0) - ($b['paid_amount'] ?? 0))),
-            'late' => collect($billsArr)->where('payment_behavior', 'Late')->count(),
+            'fully_paid' => collect($billsArr)->where('status', 'Fully Paid')->count(),
         ];
 
         $sortLabels = [
@@ -2428,7 +2442,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $pdf->loadView('admin.downpayment-fee.report_pdf', [
             'bills' => $billsArr,
             'stats' => $stats,
-            'behavior' => $behavior,
+            'term' => $term,
             'block' => $block,
             'sort' => $sort,
             'sortLabel' => $sortLabel,
@@ -2847,14 +2861,35 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         ]);
 
         $now = now();
-        $recipientRows = \App\Models\Resident::query()->pluck('user_id')->map(fn ($residentId) => [
+        $residentUserIds = \App\Models\Resident::query()->pluck('user_id')->filter()->values()->all();
+        $recipientRows = array_map(fn ($residentId) => [
             'announcement_id' => $ann->id,
             'resident_id' => $residentId,
             'created_at' => $now,
             'updated_at' => $now,
-        ])->all();
+        ], $residentUserIds);
         if ($recipientRows !== []) {
             \Illuminate\Support\Facades\DB::table('announcement_recipients')->insert($recipientRows);
+
+            $pushTitle = 'New Announcement: ' . $ann->title;
+            $pushBody = \Illuminate\Support\Str::limit(trim(strip_tags($ann->content)), 140);
+
+            $dbNotifPayload = json_encode([
+                'title' => $pushTitle,
+                'message' => $pushBody,
+                'category' => 'announcement',
+            ]);
+            $notifRows = array_map(fn ($residentId) => [
+                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'type' => \App\Notifications\WebAndPushNotification::class,
+                'notifiable_type' => \App\Models\User::class,
+                'notifiable_id' => $residentId,
+                'data' => $dbNotifPayload,
+                'read_at' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ], $residentUserIds);
+            \Illuminate\Support\Facades\DB::table('notifications')->insert($notifRows);
         }
 
         \App\Jobs\SendAnnouncementEmails::dispatch($ann);
@@ -2895,13 +2930,28 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         $validated = $request->validate([
             'block' => 'required|string|max:50',
             'lot' => 'required|string|max:50',
-            'contract_price' => 'nullable|numeric|min:0',
-            'lot_area' => 'nullable|numeric|min:0',
-            'floor_area' => 'nullable|numeric|min:0',
-            'description' => 'nullable|string|max:2000',
-            'tct_no' => 'nullable|string|max:255',
-            'pid' => 'nullable|string|max:255',
-            'tax_dec_no' => 'nullable|string|max:255',
+            'contract_price' => 'required|numeric|gt:0',
+            'lot_area' => 'required|numeric|gt:0',
+            'floor_area' => 'required|numeric|gt:0',
+            'description' => 'required|string|min:2|max:2000',
+            'tct_no' => ['required', 'string', 'max:255', 'regex:/^(?=.*[a-zA-Z0-9])[a-zA-Z0-9\-\/\.\s#]+$/'],
+            'pid' => ['required', 'string', 'max:255', 'regex:/^(?=.*[a-zA-Z0-9])[a-zA-Z0-9\-\/\.\s#]+$/'],
+            'tax_dec_no' => ['required', 'string', 'max:255', 'regex:/^(?=.*[a-zA-Z0-9])[a-zA-Z0-9\-\/\.\s#]+$/'],
+        ], [
+            'contract_price.required' => 'Total Contract Price (TCP) is required.',
+            'contract_price.gt' => 'Total Contract Price (TCP) must be greater than 0.',
+            'lot_area.required' => 'Lot Area is required.',
+            'lot_area.gt' => 'Lot Area must be greater than 0.',
+            'floor_area.required' => 'Floor Area is required.',
+            'floor_area.gt' => 'Floor Area must be greater than 0.',
+            'tct_no.required' => 'TCT No. is required.',
+            'tct_no.regex' => 'TCT No. contains invalid characters.',
+            'pid.required' => 'PID (Property ID) is required.',
+            'pid.regex' => 'PID contains invalid characters.',
+            'tax_dec_no.required' => 'Tax Declaration No. is required.',
+            'tax_dec_no.regex' => 'Tax Declaration No. contains invalid characters.',
+            'description.required' => 'Property Description is required.',
+            'description.min' => 'Property Description must be at least 2 characters.',
         ]);
 
         $lot = \App\Models\Lot::firstOrCreate(
@@ -2910,13 +2960,13 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         );
 
         $lot->update([
-            'contract_price' => $validated['contract_price'] ?? null,
-            'lot_area' => $validated['lot_area'] ?? null,
-            'floor_area' => $validated['floor_area'] ?? null,
-            'description' => $validated['description'] ?? null,
-            'tct_no' => $validated['tct_no'] ?? null,
-            'pid' => $validated['pid'] ?? null,
-            'tax_dec_no' => $validated['tax_dec_no'] ?? null,
+            'contract_price' => $validated['contract_price'],
+            'lot_area' => $validated['lot_area'],
+            'floor_area' => $validated['floor_area'],
+            'description' => trim($validated['description']),
+            'tct_no' => trim($validated['tct_no']),
+            'pid' => trim($validated['pid']),
+            'tax_dec_no' => trim($validated['tax_dec_no']),
         ]);
 
         return response()->json([
@@ -3040,7 +3090,10 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             ->where('status', '!=', 'resolved')
             ->count();
 
-        $announcements = \App\Models\Announcement::orderBy('created_at', 'desc')->take(10)->get();
+        archiveOldAnnouncements();
+        $announcements = \App\Models\Announcement::where(function ($q) {
+            $q->where('status', '!=', 'Archived')->orWhereNull('status');
+        })->orderBy('created_at', 'desc')->take(10)->get();
 
         $now = \Carbon\Carbon::now();
         $calendarBillsQuery = \App\Models\UtilityBill::where('resident_id', $user->id)
@@ -4349,11 +4402,20 @@ Route::post('/api/settings', function (\Illuminate\Http\Request $request) {
 
 Route::get('/api/appointments/availability', function () {
     expirePastAppointments();
-    $unavailableDates = json_decode(\App\Models\Setting::where('key', 'unavailable_dates')->value('value') ?? '[]', true);
+    $decoded = json_decode(\App\Models\Setting::where('key', 'unavailable_dates')->value('value') ?? '[]', true);
+    $unavailableDates = is_array($decoded) ? array_values($decoded) : [];
 
+    $tz = config('app.timezone', 'Asia/Manila');
     $appointments = \App\Models\Appointment::where('status', '!=', 'Cancelled')
-        ->where('date', '>=', now()->format('Y-m-d'))
-        ->get(['date', 'time']);
+        ->whereDate('date', '>=', now($tz)->toDateString())
+        ->get(['date', 'time'])
+        ->map(fn ($apt) => [
+            'date' => $apt->date instanceof \Carbon\CarbonInterface
+                ? $apt->date->format('Y-m-d')
+                : \Carbon\Carbon::parse($apt->date, $tz)->format('Y-m-d'),
+            'time' => $apt->time,
+        ])
+        ->values();
 
     return response()->json([
         'unavailable_dates' => $unavailableDates,

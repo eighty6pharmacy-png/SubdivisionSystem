@@ -46,8 +46,16 @@ class PushNotificationHelper
                 
             if (!$response->successful()) {
                 Log::error('OneSignal API Error: ' . $response->body());
+                return false;
             }
-            return $response->successful();
+
+            $errors = $response->json('errors');
+            if (!empty($errors)) {
+                Log::warning('OneSignal API returned errors: ' . json_encode($errors));
+                return false;
+            }
+
+            return true;
         } catch (\Exception $e) {
             Log::error('OneSignal exception: ' . $e->getMessage());
             return false;

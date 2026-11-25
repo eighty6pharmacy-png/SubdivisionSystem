@@ -311,50 +311,65 @@
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
                 <div>
-                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Lot Area (sqm)</label>
-                    <input type="number" step="0.01" min="0" id="lotEditLotArea" placeholder="e.g. 120.00"
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Lot Area (sqm) <span style="color: #dc2626;">*</span></label>
+                    <input type="number" step="0.01" min="0.01" id="lotEditLotArea" placeholder="e.g. 120.00" required
                         onkeydown="filterPositiveNumberKeydown(event)"
-                        oninput="sanitizePositiveNumber(this)"
+                        oninput="sanitizePositiveNumber(this); clearLotFieldError('lotEditLotArea')"
                         style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;">
+                    <div id="err_lotEditLotArea" style="display: none; font-size: 11px; color: #dc2626; font-weight: 600; margin-top: 4px;"></div>
                 </div>
                 <div>
-                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Floor Area (sqm)</label>
-                    <input type="number" step="0.01" min="0" id="lotEditFloorArea" placeholder="e.g. 60.00"
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Floor Area (sqm) <span style="color: #dc2626;">*</span></label>
+                    <input type="number" step="0.01" min="0.01" id="lotEditFloorArea" placeholder="e.g. 60.00" required
                         onkeydown="filterPositiveNumberKeydown(event)"
-                        oninput="sanitizePositiveNumber(this)"
+                        oninput="sanitizePositiveNumber(this); clearLotFieldError('lotEditFloorArea')"
                         style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;">
+                    <div id="err_lotEditFloorArea" style="display: none; font-size: 11px; color: #dc2626; font-weight: 600; margin-top: 4px;"></div>
                 </div>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
                 <div>
-                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">TCT No.</label>
-                    <input type="text" id="lotEditTctNo" placeholder="e.g. T-123456" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">TCT No. <span style="color: #dc2626;">*</span></label>
+                    <input type="text" id="lotEditTctNo" placeholder="e.g. T-123456" maxlength="255" required
+                        oninput="clearLotFieldError('lotEditTctNo')"
+                        style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;">
+                    <div id="err_lotEditTctNo" style="display: none; font-size: 11px; color: #dc2626; font-weight: 600; margin-top: 4px;"></div>
                 </div>
                 <div>
-                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">PID (Property ID)</label>
-                    <input type="text" id="lotEditPid" placeholder="e.g. PID-001" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">PID (Property ID) <span style="color: #dc2626;">*</span></label>
+                    <input type="text" id="lotEditPid" placeholder="e.g. PID-001" maxlength="255" required
+                        oninput="clearLotFieldError('lotEditPid')"
+                        style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;">
+                    <div id="err_lotEditPid" style="display: none; font-size: 11px; color: #dc2626; font-weight: 600; margin-top: 4px;"></div>
                 </div>
             </div>
 
             <div style="margin-bottom: 14px;">
-                <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Total Contract Price (TCP) ₱</label>
-                <input type="text" id="lotEditContractPrice" placeholder="e.g. 2,500,000"
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Total Contract Price (TCP) ₱ <span style="color: #dc2626;">*</span></label>
+                <input type="text" id="lotEditContractPrice" placeholder="e.g. 2,500,000" required
                     inputmode="numeric" autocomplete="off"
                     onkeydown="filterTcpKeydown(event)"
-                    oninput="handleLotEditContractPriceInput(this)"
+                    oninput="handleLotEditContractPriceInput(this); clearLotFieldError('lotEditContractPrice')"
                     style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 14px; font-weight: 700; color: #0f172a;">
+                <div id="err_lotEditContractPrice" style="display: none; font-size: 11px; color: #dc2626; font-weight: 600; margin-top: 4px;"></div>
                 <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Used as default TCP in Downpayment contracts and Sample Computations.</div>
             </div>
 
             <div style="margin-bottom: 14px;">
-                <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Tax Declaration No.</label>
-                <input type="text" id="lotEditTaxDecNo" placeholder="e.g. TD-2026-0001" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;">
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Tax Declaration No. <span style="color: #dc2626;">*</span></label>
+                <input type="text" id="lotEditTaxDecNo" placeholder="e.g. TD-2026-0001" maxlength="255" required
+                    oninput="clearLotFieldError('lotEditTaxDecNo')"
+                    style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;">
+                <div id="err_lotEditTaxDecNo" style="display: none; font-size: 11px; color: #dc2626; font-weight: 600; margin-top: 4px;"></div>
             </div>
 
             <div style="margin-bottom: 20px;">
-                <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Property Description</label>
-                <textarea id="lotEditDescription" rows="2" placeholder="e.g. Single Attached / Corner Lot" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px; resize: vertical;"></textarea>
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Property Description <span style="color: #dc2626;">*</span></label>
+                <textarea id="lotEditDescription" rows="2" placeholder="e.g. Single Attached / Corner Lot" maxlength="2000" required
+                    oninput="clearLotFieldError('lotEditDescription')"
+                    style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px; resize: vertical;"></textarea>
+                <div id="err_lotEditDescription" style="display: none; font-size: 11px; color: #dc2626; font-weight: 600; margin-top: 4px;"></div>
             </div>
 
             <div style="display: flex; gap: 12px;">
@@ -725,6 +740,7 @@
                 document.getElementById('lotEditPid').value = dbLot.pid ?? '';
                 document.getElementById('lotEditTaxDecNo').value = dbLot.tax_dec_no ?? '';
                 document.getElementById('lotEditDescription').value = dbLot.description ?? '';
+                clearAllLotEditErrors();
                 document.getElementById('lotDetailsUpdateModal').style.display = 'flex';
             };
 
@@ -826,36 +842,133 @@
             }
         }
 
+        const LOT_EDIT_FIELD_IDS = [
+            'lotEditLotArea',
+            'lotEditFloorArea',
+            'lotEditTctNo',
+            'lotEditPid',
+            'lotEditContractPrice',
+            'lotEditTaxDecNo',
+            'lotEditDescription'
+        ];
+
+        function setLotFieldError(fieldId, message) {
+            const input = document.getElementById(fieldId);
+            const errEl = document.getElementById(`err_${fieldId}`);
+            if (input) input.style.borderColor = '#dc2626';
+            if (errEl) {
+                errEl.innerText = message;
+                errEl.style.display = 'block';
+            }
+        }
+
+        function clearLotFieldError(fieldId) {
+            const input = document.getElementById(fieldId);
+            const errEl = document.getElementById(`err_${fieldId}`);
+            if (input) input.style.borderColor = '#cbd5e1';
+            if (errEl) {
+                errEl.innerText = '';
+                errEl.style.display = 'none';
+            }
+        }
+
+        function clearAllLotEditErrors() {
+            LOT_EDIT_FIELD_IDS.forEach(clearLotFieldError);
+        }
+
         async function updateLotDetails() {
+            clearAllLotEditErrors();
+
             const block = document.getElementById('lotEditBlock').value;
             const lot = document.getElementById('lotEditNumber').value;
-            const rawCp = document.getElementById('lotEditContractPrice').value.replace(/,/g, '').trim();
             const rawLa = document.getElementById('lotEditLotArea').value.trim();
             const rawFa = document.getElementById('lotEditFloorArea').value.trim();
+            const tctNo = document.getElementById('lotEditTctNo').value.trim();
+            const pid = document.getElementById('lotEditPid').value.trim();
+            const rawCp = document.getElementById('lotEditContractPrice').value.replace(/,/g, '').trim();
+            const taxDecNo = document.getElementById('lotEditTaxDecNo').value.trim();
+            const description = document.getElementById('lotEditDescription').value.trim();
 
-            if (rawCp && (isNaN(rawCp) || parseFloat(rawCp) < 0)) {
-                Swal.fire({ icon: 'warning', title: 'Invalid Price', text: 'Contract price cannot be negative.' });
-                return;
+            const errors = [];
+            const idFormatRegex = /^(?=.*[a-zA-Z0-9])[a-zA-Z0-9\-\/\.\s#]+$/;
+
+            if (!rawLa) {
+                setLotFieldError('lotEditLotArea', 'Lot Area is required.');
+                errors.push({ id: 'lotEditLotArea', msg: 'Lot Area is required.' });
+            } else if (isNaN(rawLa) || parseFloat(rawLa) <= 0) {
+                setLotFieldError('lotEditLotArea', 'Lot Area must be a valid number greater than 0.');
+                errors.push({ id: 'lotEditLotArea', msg: 'Lot Area must be greater than 0.' });
             }
-            if (rawLa && parseFloat(rawLa) < 0) {
-                Swal.fire({ icon: 'warning', title: 'Invalid Area', text: 'Lot area cannot be negative.' });
-                return;
+
+            if (!rawFa) {
+                setLotFieldError('lotEditFloorArea', 'Floor Area is required.');
+                errors.push({ id: 'lotEditFloorArea', msg: 'Floor Area is required.' });
+            } else if (isNaN(rawFa) || parseFloat(rawFa) <= 0) {
+                setLotFieldError('lotEditFloorArea', 'Floor Area must be a valid number greater than 0.');
+                errors.push({ id: 'lotEditFloorArea', msg: 'Floor Area must be greater than 0.' });
             }
-            if (rawFa && parseFloat(rawFa) < 0) {
-                Swal.fire({ icon: 'warning', title: 'Invalid Area', text: 'Floor area cannot be negative.' });
+
+            if (!tctNo) {
+                setLotFieldError('lotEditTctNo', 'TCT No. is required.');
+                errors.push({ id: 'lotEditTctNo', msg: 'TCT No. is required.' });
+            } else if (!idFormatRegex.test(tctNo)) {
+                setLotFieldError('lotEditTctNo', 'TCT No. contains invalid characters.');
+                errors.push({ id: 'lotEditTctNo', msg: 'TCT No. contains invalid characters.' });
+            }
+
+            if (!pid) {
+                setLotFieldError('lotEditPid', 'PID (Property ID) is required.');
+                errors.push({ id: 'lotEditPid', msg: 'PID (Property ID) is required.' });
+            } else if (!idFormatRegex.test(pid)) {
+                setLotFieldError('lotEditPid', 'PID contains invalid characters.');
+                errors.push({ id: 'lotEditPid', msg: 'PID contains invalid characters.' });
+            }
+
+            if (!rawCp) {
+                setLotFieldError('lotEditContractPrice', 'Total Contract Price (TCP) is required.');
+                errors.push({ id: 'lotEditContractPrice', msg: 'Total Contract Price (TCP) is required.' });
+            } else if (isNaN(rawCp) || parseFloat(rawCp) <= 0) {
+                setLotFieldError('lotEditContractPrice', 'Total Contract Price must be greater than 0.');
+                errors.push({ id: 'lotEditContractPrice', msg: 'Total Contract Price must be greater than 0.' });
+            }
+
+            if (!taxDecNo) {
+                setLotFieldError('lotEditTaxDecNo', 'Tax Declaration No. is required.');
+                errors.push({ id: 'lotEditTaxDecNo', msg: 'Tax Declaration No. is required.' });
+            } else if (!idFormatRegex.test(taxDecNo)) {
+                setLotFieldError('lotEditTaxDecNo', 'Tax Declaration No. contains invalid characters.');
+                errors.push({ id: 'lotEditTaxDecNo', msg: 'Tax Declaration No. contains invalid characters.' });
+            }
+
+            if (!description) {
+                setLotFieldError('lotEditDescription', 'Property Description is required.');
+                errors.push({ id: 'lotEditDescription', msg: 'Property Description is required.' });
+            } else if (description.length < 2) {
+                setLotFieldError('lotEditDescription', 'Property Description must be at least 2 characters.');
+                errors.push({ id: 'lotEditDescription', msg: 'Property Description must be at least 2 characters.' });
+            }
+
+            if (errors.length > 0) {
+                const firstEl = document.getElementById(errors[0].id);
+                if (firstEl) firstEl.focus();
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Please Check Your Inputs',
+                    text: errors[0].msg,
+                });
                 return;
             }
 
             const payload = {
                 block: block,
                 lot: lot,
-                contract_price: rawCp ? parseFloat(rawCp) : null,
-                lot_area: rawLa ? parseFloat(rawLa) : null,
-                floor_area: rawFa ? parseFloat(rawFa) : null,
-                tct_no: document.getElementById('lotEditTctNo').value.trim() || null,
-                pid: document.getElementById('lotEditPid').value.trim() || null,
-                tax_dec_no: document.getElementById('lotEditTaxDecNo').value.trim() || null,
-                description: document.getElementById('lotEditDescription').value.trim() || null,
+                contract_price: parseFloat(rawCp),
+                lot_area: parseFloat(rawLa),
+                floor_area: parseFloat(rawFa),
+                tct_no: tctNo,
+                pid: pid,
+                tax_dec_no: taxDecNo,
+                description: description,
             };
 
             const btnSave = document.getElementById('btnSaveLotDetails');
@@ -908,7 +1021,24 @@
                         showConfirmButton: false
                     });
                 } else {
-                    Swal.fire('Error', data.message || 'Failed to update lot property details.', 'error');
+                    if (data.errors && typeof data.errors === 'object') {
+                        const serverFieldMap = {
+                            lot_area: 'lotEditLotArea',
+                            floor_area: 'lotEditFloorArea',
+                            tct_no: 'lotEditTctNo',
+                            pid: 'lotEditPid',
+                            contract_price: 'lotEditContractPrice',
+                            tax_dec_no: 'lotEditTaxDecNo',
+                            description: 'lotEditDescription',
+                        };
+                        Object.entries(data.errors).forEach(([field, msgs]) => {
+                            const inputId = serverFieldMap[field];
+                            if (inputId && Array.isArray(msgs) && msgs.length > 0) {
+                                setLotFieldError(inputId, msgs[0]);
+                            }
+                        });
+                    }
+                    Swal.fire('Validation Error', data.message || 'Failed to update lot property details.', 'error');
                 }
             } catch (e) {
                 console.error(e);

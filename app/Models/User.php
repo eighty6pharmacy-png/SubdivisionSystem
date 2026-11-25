@@ -45,7 +45,6 @@ class User extends Authenticatable
         'password',
         'status',
         'role',
-        'payment_behavior',
         'joined_at',
     ];
 
@@ -74,6 +73,20 @@ class User extends Authenticatable
             'password' => 'hashed',
             'joined_at' => 'date',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::created(function (self $user): void {
+            if (($user->role ?: 'Resident') === 'Resident' || in_array($user->role, ['Security Guard', 'Buyer'], true)) {
+                $user->syncRoleProfile();
+            }
+        });
+    }
+
+    public function getPaymentBehaviorAttribute(): string
+    {
+        return $this->residentAccount?->payment_behavior ?? 'Not available yet';
     }
 
     public function getNameAttribute(): string
@@ -166,6 +179,7 @@ class User extends Authenticatable
         $roleName = $this->role;
 
         $map = [
+            'Resident' => ResidentAccount::class,
             'Security Guard' => GuardAccount::class,
             'Buyer' => BuyerMasterList::class,
         ];
@@ -187,6 +201,10 @@ class User extends Authenticatable
                 continue;
             }
 
+            if ($name === 'Resident' && $this->residentProfileHasDependents()) {
+                continue;
+            }
+
             $class::query()->where('user_id', $this->id)->delete();
         }
     }
@@ -199,6 +217,11 @@ class User extends Authenticatable
     public function utilityBills(): HasMany
     {
         return $this->hasMany(UtilityBill::class, 'resident_id');
+    }
+
+    public function residentAccount(): HasOne
+    {
+        return $this->hasOne(ResidentAccount::class, 'user_id');
     }
 
     public function guardAccount(): HasOne

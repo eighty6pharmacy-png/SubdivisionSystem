@@ -119,7 +119,10 @@ class BuyerMasterListController extends Controller
         $buyer = BuyerMasterList::findOrFail($id);
 
         $this->prepareBuyerContactEmail($request);
-        $validated = $request->validate($this->buyerFormRules(), $this->buyerFormMessages());
+        $validated = $request->validate(
+            $this->buyerFormRules($buyer->user_id ? (int) $buyer->user_id : null),
+            $this->buyerFormMessages()
+        );
         $validated = $this->resolveBuyerAge($validated);
 
         if (!empty($validated['block_no']) && !empty($validated['lot_no'])) {
@@ -133,7 +136,15 @@ class BuyerMasterListController extends Controller
             }
         }
 
-        $buyer->update($validated);
+        try {
+            $buyer->update($validated);
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This email address is already registered to another account.',
+                'errors' => ['email' => ['This email address is already registered to another account.']],
+            ], 422);
+        }
 
         return response()->json(['success' => true, 'message' => 'Buyer record updated securely.']);
     }
@@ -222,7 +233,7 @@ class BuyerMasterListController extends Controller
     {
         $request->merge([
             'contact_number' => preg_replace('/[\s\-().]/', '', (string) $request->input('contact_number')),
-            'email' => trim((string) $request->input('email')),
+            'email' => strtolower(trim((string) $request->input('email'))),
         ]);
     }
 
@@ -242,21 +253,27 @@ class BuyerMasterListController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function buyerFormRules(): array
+    private function buyerFormRules(?int $ignoreUserId = null): array
     {
         return [
             'first_name' => 'required|string|max:255',
             'middle_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
-            'birth_date' => 'nullable|date|before_or_equal:today',
-            'age' => 'nullable|integer|min:0|max:150',
-            'sex' => ['nullable', 'string', Rule::in(BuyerMasterList::SEX_OPTIONS)],
-            'email' => ['required', 'email:rfc,dns', 'max:255', function (string $attribute, mixed $value, \Closure $fail) {
-                $domain = substr(strrchr(strtolower((string) $value), '@') ?: '', 1);
-                if ($domain === '' || (! checkdnsrr($domain, 'MX') && ! checkdnsrr($domain, 'A'))) {
-                    $fail('That email domain does not appear to accept mail. Please use a real, active email address.');
-                }
-            }],
+            'birth_date' => 'required|date|before_or_equal:today',
+            'age' => 'required|integer|min:0|max:150',
+            'sex' => ['required', 'string', Rule::in(BuyerMasterList::SEX_OPTIONS)],
+            'email' => [
+                'required',
+                'email:rfc,dns',
+                'max:255',
+                Rule::unique('users', 'email')->whereNull('deleted_at')->ignore($ignoreUserId),
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    $domain = substr(strrchr(strtolower((string) $value), '@') ?: '', 1);
+                    if ($domain === '' || (! checkdnsrr($domain, 'MX') && ! checkdnsrr($domain, 'A'))) {
+                        $fail('That email domain does not appear to accept mail. Please use a real, active email address.');
+                    }
+                },
+            ],
             'civil_status' => 'required|string|max:50',
             'spouse_name' => 'required_if:civil_status,Married|nullable|string|max:255',
             'present_address' => 'required|string|max:1000',
@@ -265,7 +282,17 @@ class BuyerMasterListController extends Controller
             'id_type' => ['required', 'string', Rule::in(BuyerMasterList::ID_TYPES)],
             'proof_of_id' => 'required|string|max:255',
             'pagibig_number' => 'nullable|string|max:255',
-            'tin_number' => 'nullable|string|max:50',
+            'tin_number' => ['required', 'string', 'max:50', function (string $attribute, mixed $value, \Closure $fail) {
+                $str = trim((string) $value);
+                if (preg_match('/[^0-9\-\s]/', $str)) {
+                    $fail('TIN Number must contain only digits and dashes.');
+                    return;
+                }
+                $digits = preg_replace('/\D/', '', $str) ?? '';
+                if (strlen($digits) < 9) {
+                    $fail('TIN Number must have at least 9 digits.');
+                }
+            }],
 
             'block_no' => 'nullable|string|max:50',
             'lot_no' => 'nullable|string|max:50',
@@ -288,17 +315,22 @@ class BuyerMasterListController extends Controller
             'last_name.required' => 'The Last Name is mandatory for the master list.',
             'email.required' => 'Email Address is required.',
             'email.email' => 'Please enter a real email address on a domain that can receive mail (Gmail, Outlook, company mail, etc.).',
+            'email.unique' => 'This email address is already registered to another account.',
             'contact_number.required' => 'Contact / Mobile Number is required.',
             'contact_number.regex' => 'Use a Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX.',
             'id_type.required' => 'Select the type of ID.',
             'id_type.in' => 'Select a valid ID type.',
             'proof_of_id.required' => 'The ID number is required.',
+            'birth_date.required' => 'Birth Date is required.',
             'birth_date.date' => 'Please enter a valid birth date.',
             'birth_date.before_or_equal' => 'Birth date cannot be in the future.',
+            'age.required' => 'Age is required.',
             'age.integer' => 'Age must be a whole number.',
             'age.min' => 'Age cannot be negative.',
             'age.max' => 'Please enter a valid age.',
+            'sex.required' => 'Sex is required.',
             'sex.in' => 'Select a valid sex.',
+            'tin_number.required' => 'TIN Number is required.',
         ];
     }
 

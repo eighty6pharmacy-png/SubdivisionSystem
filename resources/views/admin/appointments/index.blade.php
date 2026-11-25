@@ -48,9 +48,19 @@
 
     <!-- Calendar View (Top of Inquiry Pipeline) -->
     <div class="analytic-card">
-        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
             <span>Appointments Calendar</span>
-            <span style="font-size: 11px; font-weight: normal; color: #64748b; background: #f1f5f9; padding: 4px 10px; border-radius: 12px;">Tip: Click any empty space on a day to block/unblock it.</span>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <select id="calendarStatusFilter" class="filter-select" onchange="initCalendar()" style="padding: 6px 12px; font-size: 12px; font-weight: 600; min-width: 150px;">
+                    <option value="all">All Appointments</option>
+                    <option value="active">Active Only</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Scheduled">Scheduled</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Cancelled">Cancelled</option>
+                </select>
+                <span style="font-size: 11px; font-weight: normal; color: #64748b; background: #f1f5f9; padding: 4px 10px; border-radius: 12px;">Tip: Click any empty space on a day to block/unblock it.</span>
+            </div>
         </div>
         <div id="calendar"></div>
     </div>
@@ -65,6 +75,7 @@
             <span class="filter-label">Status</span>
             <select id="statusFilter" class="filter-select" onchange="applyAptFilters()">
                 <option value="all">All Pipeline</option>
+                <option value="active">Active Only</option>
                 <option value="Pending">Pending</option>
                 <option value="Scheduled">Scheduled</option>
                 <option value="Completed">Completed</option>
@@ -385,7 +396,7 @@
     });
 
     function renderAppointmentsFromStore() {
-        allAppointments = {!! json_encode($appointments) !!};
+        allAppointments = @json($appointments);
         applyAptFilters();
         initCalendar();
     }
@@ -441,32 +452,76 @@
     }
 
     let globalBlackouts = [];
+
+    function normalizeBlackouts(raw) {
+        if (Array.isArray(raw)) return raw;
+        if (raw && typeof raw === 'object') return Object.values(raw);
+        return [];
+    }
+
+    function toFullCalendarStart(dateRaw, timeRaw) {
+        const datePart = String(dateRaw || '').split('T')[0].trim();
+        if (!datePart) return null;
+        const match = String(timeRaw || '').trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+        if (match) {
+            let h = parseInt(match[1], 10);
+            const min = match[2];
+            const mer = match[3].toUpperCase();
+            if (mer === 'PM' && h !== 12) h += 12;
+            if (mer === 'AM' && h === 12) h = 0;
+            return `${datePart}T${String(h).padStart(2, '0')}:${min}:00`;
+        }
+        return datePart;
+    }
+
+    function getAppointmentCalendarColor(status) {
+        const s = String(status || '').toLowerCase();
+        if (s === 'pending') return '#f59e0b';
+        if (s === 'scheduled' || s === 'approved' || s === 'checked_in') return '#4f46e5';
+        if (s === 'completed') return '#10b981';
+        if (s === 'cancelled' || s === 'rejected') return '#dc2626';
+        return '#64748b';
+    }
     
     document.addEventListener('DOMContentLoaded', function() {
         fetch('/api/appointments/availability')
             .then(res => res.json())
             .then(data => {
-                globalBlackouts = data.unavailable_dates || [];
+                globalBlackouts = normalizeBlackouts(data.unavailable_dates);
                 initCalendar();
-            });
+            })
+            .catch(err => console.error('Error loading appointment availability:', err));
     });
+
+    function matchesAppointmentStatusFilter(aptStatus, filterValue) {
+        if (!filterValue || filterValue === 'all') return true;
+        const s = String(aptStatus || '').toLowerCase();
+        const f = String(filterValue).toLowerCase();
+        if (f === 'active') return s !== 'cancelled' && s !== 'rejected';
+        return s === f;
+    }
 
     function initCalendar() {
         const calendarEl = document.getElementById('calendar');
-        if (!calendarEl) return;
+        if (!calendarEl || typeof FullCalendar === 'undefined') return;
         if (calendar) calendar.destroy();
         
-        const evts = allAppointments.filter(apt => apt.status !== 'Cancelled').map(apt => {
-            let d = new Date(apt.date + ' ' + (apt.time || ''));
-            if(isNaN(d.getTime())) { d = new Date(apt.date); }
-            return {
-                title: apt.client + ' (' + apt.status + ')',
-                start: d,
-                color: apt.status === 'Pending' ? '#f59e0b' : (apt.status === 'Scheduled' ? '#4f46e5' : '#10b981')
-            };
-        });
+        const calFilter = document.getElementById('calendarStatusFilter')?.value || 'all';
+        const evts = (Array.isArray(allAppointments) ? allAppointments : []).reduce((acc, apt) => {
+            if (!matchesAppointmentStatusFilter(apt.status, calFilter)) return acc;
+            const start = toFullCalendarStart(apt.date, apt.time);
+            if (!start) return acc;
+            const statusLabel = apt.status || 'Pending';
+            acc.push({
+                title: (apt.client || 'Client') + ' (' + statusLabel + ')',
+                start: start,
+                allDay: start.length === 10,
+                color: getAppointmentCalendarColor(statusLabel)
+            });
+            return acc;
+        }, []);
 
-        globalBlackouts.forEach(dateStr => {
+        normalizeBlackouts(globalBlackouts).forEach(dateStr => {
             evts.push({
                 title: 'Unavailable',
                 start: dateStr,
@@ -728,7 +783,7 @@
         
         filteredAppointments = allAppointments.filter(apt => {
             const clientMatch = (apt.client + ' ' + (apt.contact || '') + ' ' + (apt.email || '')).toLowerCase().includes(search);
-            const statusMatch = status === 'all' || apt.status === status;
+            const statusMatch = matchesAppointmentStatusFilter(apt.status, status);
             const aptDate = String(apt.date || '').split('T')[0];
             const dateMatch = !date || aptDate === date;
             return clientMatch && statusMatch && dateMatch;
