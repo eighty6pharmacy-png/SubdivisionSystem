@@ -27,8 +27,8 @@
 </div>
 
 <div class="utility-tabs">
-    <div class="utility-tab active" id="tab-elec" onclick="switchUtility('elec')">⚡ Electricity</div>
-    <div class="utility-tab" id="tab-water" onclick="switchUtility('water')">💧 Water</div>
+    <div class="utility-tab {{ ($initialUtility ?? 'elec') === 'elec' ? 'active' : '' }}" id="tab-elec" onclick="switchUtility('elec')">⚡ Electricity</div>
+    <div class="utility-tab {{ ($initialUtility ?? 'elec') === 'water' ? 'active' : '' }}" id="tab-water" onclick="switchUtility('water')">💧 Water</div>
 </div>
 
 <div class="card mb-4" style="padding: 16px; display: flex; flex-direction: column; gap: 16px;">
@@ -43,7 +43,7 @@
     
     <div class="filter-group" style="margin:0;">
         <div class="filter-label">Billing Cycle</div>
-        <select id="cycleFilter" onchange="fetchCycle(this.value)" style="padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; color: var(--text-dark); background: var(--surface);">
+        <select id="cycleFilter" onchange="fetchCycle(this.value)" {{ empty($validCycles) ? 'disabled' : '' }} style="padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; color: var(--text-dark); background: var(--surface);">
             @if(empty($validCycles))
                 <option value="" disabled selected>No Records</option>
             @else
@@ -69,7 +69,12 @@
     </div>
 </div>
 
-<div class="house-grid" id="houseGrid">
+<div id="noCycleBanner" class="card" style="display: {{ empty($validCycles) ? 'block' : 'none' }}; padding: 28px 20px; text-align: center; color: var(--text-mid); margin-bottom: 16px;">
+    <div style="font-size: 15px; font-weight: 600; color: var(--text-dark); margin-bottom: 6px;">No Billing Cycles Available</div>
+    <div id="noCycleBannerText" style="font-size: 13px;">No billing cycles have been generated for {{ ($initialUtility ?? 'elec') === 'water' ? 'Water' : 'Electricity' }} yet.</div>
+</div>
+
+<div class="house-grid" id="houseGrid" style="{{ empty($validCycles) ? 'display: none;' : '' }}">
     @foreach($houses as $house)
         <div class="house-card" 
              data-house="{{ json_encode($house) }}"
@@ -196,66 +201,146 @@
         if(data.water_min_rate) WATER_MIN_RATE = parseFloat(data.water_min_rate);
     }).catch(e => console.error('Failed to load rates', e));
     
-    let activeUtility = 'elec'; // 'elec' or 'water'
+    const ELEC_CYCLES = @json($elecCycles ?? []);
+    const WATER_CYCLES = @json($waterCycles ?? []);
+
+    let activeUtility = @json($initialUtility ?? 'elec'); // 'elec' or 'water'
+    let currentCycle = @json($currentCycle ?? '');
     let filterStatus = 'all';
     let filterBlock = 'all';
     let currentHouseCard = null;
     let currentHouseData = null;
+    let cycleFetchController = null;
+    let cycleFetchSeq = 0;
+
+    function getCyclesForUtility(utility) {
+        return utility === 'water' ? WATER_CYCLES : ELEC_CYCLES;
+    }
+
+    function populateCycleDropdown(utility, selectedCycle) {
+        const cycleSelect = document.getElementById('cycleFilter');
+        const cycles = getCyclesForUtility(utility);
+        cycleSelect.innerHTML = '';
+
+        if (!cycles.length) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.disabled = true;
+            opt.selected = true;
+            opt.textContent = 'No Records';
+            cycleSelect.appendChild(opt);
+            cycleSelect.disabled = true;
+            return '';
+        }
+
+        cycleSelect.disabled = false;
+        const hasSelected = selectedCycle && cycles.some(c => c.cycle === selectedCycle);
+        const targetCycle = hasSelected ? selectedCycle : cycles[0].cycle;
+
+        cycles.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.cycle;
+            opt.textContent = c.label;
+            if (c.cycle === targetCycle) {
+                opt.selected = true;
+            }
+            cycleSelect.appendChild(opt);
+        });
+
+        return targetCycle;
+    }
 
     // Initialize UI on load
     document.addEventListener('DOMContentLoaded', () => {
-        applyFiltersAndSort();
-        updateSummaryCounters();
+        currentCycle = populateCycleDropdown(activeUtility, currentCycle);
+        renderUtilityCards();
     });
 
     function fetchCycle(cycle) {
-        document.getElementById('houseGrid').style.opacity = '0.5';
+        if (!cycle) return;
+
+        const cycles = getCyclesForUtility(activeUtility);
+        if (!cycles.some(c => c.cycle === cycle)) return;
+
+        closeReadingPanel();
+
+        if (cycleFetchController) {
+            cycleFetchController.abort();
+        }
+        cycleFetchController = new AbortController();
+        const seq = ++cycleFetchSeq;
+
+        const houseGrid = document.getElementById('houseGrid');
+        houseGrid.style.opacity = '0.5';
         const prevBlock = filterBlock;
-        fetch('?cycle=' + encodeURIComponent(cycle))
-            .then(res => res.text())
+        const query = `?cycle=${encodeURIComponent(cycle)}&utility=${encodeURIComponent(activeUtility)}`;
+
+        fetch(query, { signal: cycleFetchController.signal })
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.text();
+            })
             .then(html => {
+                if (seq !== cycleFetchSeq) return;
+
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
-                
-                // Update URL silently
-                window.history.pushState({}, '', '?cycle=' + encodeURIComponent(cycle));
-                
-                // Replace grid
+
+                currentCycle = cycle;
+                window.history.pushState({}, '', query);
+
                 const newGrid = doc.getElementById('houseGrid');
                 if (newGrid) {
-                    document.getElementById('houseGrid').innerHTML = newGrid.innerHTML;
+                    houseGrid.innerHTML = newGrid.innerHTML;
                 }
-                document.getElementById('houseGrid').style.opacity = '1';
-                
-                // Refresh block filter options based on new data if needed
+                houseGrid.style.opacity = '1';
+
                 const newBlockFilter = doc.getElementById('blockFilter');
                 if (newBlockFilter) {
-                    document.getElementById('blockFilter').innerHTML = newBlockFilter.innerHTML;
-                    const options = Array.from(document.getElementById('blockFilter').options).map(o => o.value);
+                    const blockFilterEl = document.getElementById('blockFilter');
+                    blockFilterEl.innerHTML = newBlockFilter.innerHTML;
+                    const options = Array.from(blockFilterEl.options).map(o => o.value);
                     if (options.includes(prevBlock)) {
-                        document.getElementById('blockFilter').value = prevBlock;
+                        blockFilterEl.value = prevBlock;
                         filterBlock = prevBlock;
                     } else {
-                        document.getElementById('blockFilter').value = 'all';
+                        blockFilterEl.value = 'all';
                         filterBlock = 'all';
                     }
                 }
-                
-                // Re-apply UI state
-                switchUtility(activeUtility);
+
+                renderUtilityCards();
             })
             .catch(err => {
+                if (err.name === 'AbortError') return;
                 console.error(err);
-                document.getElementById('houseGrid').style.opacity = '1';
+                houseGrid.style.opacity = '1';
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Failed to Load Cycle',
+                    text: 'Unable to load billing cycle data. Please try again.'
+                });
             });
     }
 
-    function switchUtility(utility) {
-        activeUtility = utility;
-        
-        // Update tabs
-        document.getElementById('tab-elec').classList.toggle('active', utility === 'elec');
-        document.getElementById('tab-water').classList.toggle('active', utility === 'water');
+    function renderUtilityCards() {
+        const cycles = getCyclesForUtility(activeUtility);
+        const noCycleBanner = document.getElementById('noCycleBanner');
+        const noCycleBannerText = document.getElementById('noCycleBannerText');
+        const houseGrid = document.getElementById('houseGrid');
+
+        if (!cycles.length || !currentCycle) {
+            noCycleBannerText.innerText = `No billing cycles have been generated for ${activeUtility === 'water' ? 'Water' : 'Electricity'} yet.`;
+            noCycleBanner.style.display = 'block';
+            houseGrid.style.display = 'none';
+            document.getElementById('counterTotal').innerText = '0';
+            document.getElementById('counterPending').innerText = '0';
+            document.getElementById('counterBilled').innerText = '0';
+            return;
+        }
+
+        noCycleBanner.style.display = 'none';
+        houseGrid.style.display = '';
 
         // Update all cards visually
         const cards = document.querySelectorAll('.house-card');
@@ -263,22 +348,54 @@
             const data = JSON.parse(card.dataset.house);
             const badge = card.querySelector('.house-badge');
             const metric = card.querySelector('.house-prev-metric');
-            
-            if (utility === 'elec') {
-                const stat = data.elec_status.toLowerCase();
+
+            if (activeUtility === 'elec') {
+                const statusLabel = data.elec_status || 'Pending';
+                const stat = statusLabel.toLowerCase();
                 badge.className = `status-badge status-${stat} house-badge`;
-                badge.innerText = data.elec_status;
+                badge.innerText = statusLabel;
                 metric.innerHTML = `<span class="metric-label">Prev. Elec</span><span class="metric-value">${Number(data.prev_elec || 0).toFixed(2)} kWh</span>`;
             } else {
-                const stat = data.water_status.toLowerCase();
+                const statusLabel = data.water_status || 'Pending';
+                const stat = statusLabel.toLowerCase();
                 badge.className = `status-badge status-${stat} house-badge`;
-                badge.innerText = data.water_status;
+                badge.innerText = statusLabel;
                 metric.innerHTML = `<span class="metric-label">Prev. Water</span><span class="metric-value">${Number(data.prev_water || 0).toFixed(2)} m³</span>`;
             }
         });
 
         applyFiltersAndSort();
         updateSummaryCounters();
+    }
+
+    function switchUtility(utility) {
+        if (utility !== 'elec' && utility !== 'water') return;
+
+        closeReadingPanel();
+        activeUtility = utility;
+
+        // Update tabs
+        document.getElementById('tab-elec').classList.toggle('active', utility === 'elec');
+        document.getElementById('tab-water').classList.toggle('active', utility === 'water');
+
+        const cycles = getCyclesForUtility(utility);
+        const prevCycle = currentCycle;
+        const nextCycle = populateCycleDropdown(utility, prevCycle);
+
+        if (!cycles.length) {
+            currentCycle = '';
+            window.history.replaceState({}, '', `?utility=${encodeURIComponent(utility)}`);
+            renderUtilityCards();
+            return;
+        }
+
+        if (nextCycle !== prevCycle) {
+            fetchCycle(nextCycle);
+        } else {
+            currentCycle = nextCycle;
+            window.history.replaceState({}, '', `?cycle=${encodeURIComponent(currentCycle)}&utility=${encodeURIComponent(utility)}`);
+            renderUtilityCards();
+        }
     }
 
     function setFilter(type, value) {
@@ -377,13 +494,32 @@
     }
 
     function openReadingPanel(cardElement) {
+        if (!currentCycle) {
+            Swal.fire({
+                icon: 'info',
+                title: 'No Billing Cycle',
+                text: `No billing cycle has been generated for ${activeUtility === 'water' ? 'Water' : 'Electricity'} yet.`
+            });
+            return;
+        }
+
+        const houseData = JSON.parse(cardElement.dataset.house);
+        const isElec = activeUtility === 'elec';
+        const hasBill = isElec ? houseData.has_elec_bill : houseData.has_water_bill;
+        if (hasBill === false) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'No Billing Record',
+                text: `Admin has not generated a ${isElec ? 'Electricity' : 'Water'} bill for Block ${houseData.block}, Lot ${houseData.lot} in this cycle.`
+            });
+            return;
+        }
+
         currentHouseCard = cardElement;
-        currentHouseData = JSON.parse(cardElement.dataset.house);
+        currentHouseData = houseData;
         
         document.getElementById('panelHouseTitle').innerText = `Block ${currentHouseData.block}, Lot ${currentHouseData.lot}`;
         document.getElementById('panelResident').innerText = `👤 ${currentHouseData.resident}`;
-        
-        const isElec = activeUtility === 'elec';
         const title = document.getElementById('panelUtilityTitle');
         const lblPrev = document.getElementById('lblPrev');
         const lblCurr = document.getElementById('lblCurr');
@@ -536,6 +672,15 @@
         const type = isElec ? 'electricity' : 'water';
         const cycleVal = document.getElementById('cycleFilter').value;
 
+        if (!currentHouseData || !cycleVal) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'No Billing Cycle',
+                text: 'Please select a valid billing cycle before submitting a reading.'
+            });
+            return;
+        }
+
         const btn = document.getElementById('btnSubmitBill');
         const isUpdate = btn.innerText === 'Update Bill';
         const origText = btn.innerText;
@@ -557,7 +702,16 @@
                 current_reading: curr,
                 cycle: cycleVal
             })
-        }).then(response => response.json().then(data => ({ status: response.status, body: data })))
+        }).then(async response => {
+              const text = await response.text();
+              let data = {};
+              try {
+                  data = JSON.parse(text);
+              } catch (e) {
+                  data = { success: false, message: 'Server returned an unexpected response.' };
+              }
+              return { status: response.status, body: data };
+          })
           .then(({ status, body }) => {
               if (body.success) {
                   const utilityName = isElec ? 'Electricity' : 'Water';
@@ -591,7 +745,7 @@
                   currentHouseCard.dataset.house = JSON.stringify(currentHouseData);
                   
                   // Re-apply visually
-                  switchUtility(activeUtility);
+                  renderUtilityCards();
                   
                   if (window.pushSystemNotification) {
                       window.pushSystemNotification(

@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="{{ asset('css/admin-finance.css') }}?v={{ filemtime(public_path('css/admin-finance.css')) }}">
 
 @php
-    $latestBill = !empty($bills) ? collect($bills)->first() : null;
+    $latestBill = !empty($bills) ? (collect($bills)->first(fn($b) => !empty($b['db_id'])) ?? collect($bills)->first()) : null;
     $activePrevDate = $latestBill['prev_reading_date'] ?? 'N/A';
     $activePrevDateRaw = $latestBill['prev_reading_date_raw'] ?? '';
     $activeCurrDate = $latestBill['curr_reading_date'] ?? 'N/A';
@@ -1182,14 +1182,6 @@
                 statusCard.style.border = '1px solid #bfdbfe';
                 statusCard.style.color = '#1e40af';
                 statusCard.innerHTML = `<strong>ℹ️ ${next.label} is Already Active:</strong> All active lots have water ledger entries. Use "Adjust Current Cycle" if you need to update rates or due dates.`;
-            } else if (active && active.missing_lots_count > 0) {
-                statusCard.style.background = '#fef3c7';
-                statusCard.style.border = '1px solid #fde68a';
-                statusCard.style.color = '#92400e';
-                statusCard.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                    <div><strong>⚡ ${active.missing_lots_count} Unsynced Resident Lot(s) in ${active.label}:</strong> Newly assigned resident lots have no bill yet.</div>
-                    <button type="button" class="btn btn-primary" style="padding:4px 10px; font-size:11px;" onclick="syncMissingLotsForActiveCycle()">Sync ${active.label} Now</button>
-                </div>`;
             } else if (active && active.unrecorded_readings_count > 0) {
                 statusCard.style.background = '#fffbeb';
                 statusCard.style.border = '1px solid #fde68a';
@@ -1201,68 +1193,6 @@
                 statusCard.style.color = '#166534';
                 statusCard.innerHTML = `<strong>🟢 Automation Ready:</strong> Target <strong>${next ? next.label : 'Next'}</strong> cycle dates and arrears calculated automatically. 1-click generation.`;
             }
-        }
-    }
-
-    async function syncMissingLotsForActiveCycle() {
-        if (!latestCycleStatusData || !latestCycleStatusData.active_cycle) return;
-        const active = latestCycleStatusData.active_cycle;
-        const prev = active.prev_reading_date || '';
-        const curr = active.curr_reading_date || active.period;
-        const due = active.due_date || '';
-        const rate = document.getElementById('newCycleRate').value || currentRate;
-        const penalty = document.getElementById('newCyclePenalty').value || currentPenaltyRate;
-        const minM3 = document.getElementById('newCycleMinM3').value || currentMinM3;
-        const minRate = document.getElementById('newCycleMinRate').value || currentMinRate;
-
-        closeResetCycleModal();
-
-        Swal.fire({
-            title: `Syncing ${active.label}...`,
-            html: '<div style="margin-top:8px;color:#64748b;font-size:14px;">Generating water ledger entries for newly assigned lot(s)...</div>',
-            allowOutsideClick: false,
-            showConfirmButton: false,
-            didOpen: () => Swal.showLoading()
-        });
-
-        try {
-            const res = await fetch('/admin/api/billing/generate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                },
-                body: JSON.stringify({
-                    type: 'water',
-                    mode: 'sync_missing',
-                    rate: rate,
-                    penalty: penalty,
-                    water_min_m3: minM3,
-                    water_min_rate: minRate,
-                    prev_date: prev,
-                    curr_date: curr,
-                    due_date: due
-                })
-            });
-            const data = await res.json().catch(() => ({}));
-            if (data.success) {
-                await Swal.fire({
-                    icon: 'success',
-                    title: 'Sync Complete',
-                    text: data.message,
-                    confirmButtonColor: '#0284c7'
-                });
-                window.location.reload();
-            } else {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Sync Failed',
-                    text: data.message || 'Unable to sync lots.',
-                    confirmButtonColor: '#ef4444'
-                });
-            }
-        } catch (e) {
-            Swal.fire({ icon: 'error', title: 'Network Error', text: 'Failed to contact server.' });
         }
     }
 

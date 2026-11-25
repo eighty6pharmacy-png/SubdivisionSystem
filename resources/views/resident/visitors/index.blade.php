@@ -23,7 +23,7 @@
                 </div>
                 <div>
                     <label style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Visitor Mobile Number (Optional)</label>
-                    <input type="tel" id="visContact" class="filter-select" style="width: 100%; margin-top: 4px;" placeholder="e.g. 09123456789">
+                    <input type="tel" id="visContact" class="filter-select" style="width: 100%; margin-top: 4px;" placeholder="e.g. 09123456789" maxlength="13" pattern="^(09\d{9}|\+639\d{9}|639\d{9})$" title="Use a valid Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX">
                     <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">* If provided, the Gate PIN and address will be texted upon approval. You can also copy and send the interactive pass link from this page.</div>
                 </div>
                 <div>
@@ -202,7 +202,24 @@
         }
         
         const name = document.getElementById('visName').value.trim();
-        const contactNumber = document.getElementById('visContact')?.value?.trim() || null;
+        const rawContact = document.getElementById('visContact')?.value?.trim() || '';
+        const contactNumber = rawContact ? rawContact.replace(/[\s-]+/g, '') : null;
+
+        if (contactNumber && !/^(09\d{9}|\+639\d{9}|639\d{9})$/.test(contactNumber)) {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.style.opacity = '1';
+                submitBtn.style.cursor = 'pointer';
+                submitBtn.innerHTML = originalBtnHtml;
+            }
+            Swal.fire({
+                icon: 'warning',
+                title: 'Invalid Mobile Number',
+                text: 'Please enter a valid Philippine mobile number (09XXXXXXXXX or +639XXXXXXXXX).'
+            });
+            return;
+        }
+
         const purpose = document.getElementById('visPurpose').value.trim();
         const plate = document.getElementById('visPlate')?.value?.trim() || null;
         const visitDateStr = document.getElementById('visDate').value;
@@ -227,6 +244,7 @@
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Accept': 'application/json',
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
             },
             body: JSON.stringify(payload)

@@ -3457,18 +3457,31 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
     Route::get('/dashboard', function () {
         $elecCycles = getValidBillingCycles('electricity');
         $waterCycles = getValidBillingCycles('water');
-        $validCycles = collect(array_merge($elecCycles, $waterCycles))
-            ->unique('cycle')
-            ->sortByDesc('cycle')
-            ->values()
-            ->toArray();
 
-        $cycle = request('cycle');
-        if (!$cycle && !empty($validCycles)) {
-            $cycle = $validCycles[0]['cycle'];
+        $initialUtility = request('utility') === 'water' ? 'water' : 'elec';
+        $activeCycles = $initialUtility === 'water' ? $waterCycles : $elecCycles;
+
+        $requestedCycle = request('cycle');
+        $cycle = null;
+        if (is_string($requestedCycle) && preg_match('/^\d{4}-\d{2}$/', $requestedCycle)) {
+            $cycle = $requestedCycle;
         }
 
-        $dt = $cycle ? \Carbon\Carbon::createFromFormat('Y-m', $cycle)->startOfMonth() : now()->startOfMonth();
+        if (!empty($activeCycles)) {
+            $hasRequestedCycle = $cycle && collect($activeCycles)->contains('cycle', $cycle);
+            if (!$hasRequestedCycle) {
+                $cycle = $activeCycles[0]['cycle'];
+            }
+        } else {
+            $cycle = null;
+        }
+
+        try {
+            $dt = $cycle ? \Carbon\Carbon::createFromFormat('Y-m', $cycle)->startOfMonth() : now()->startOfMonth();
+        } catch (\Exception $e) {
+            $dt = now()->startOfMonth();
+            $cycle = !empty($activeCycles) ? $activeCycles[0]['cycle'] : null;
+        }
 
         $lots = \App\Models\Lot::has('users')->with([
             'users',
@@ -3556,6 +3569,8 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
                 'lot' => $lot->lot_number,
                 'elec_status' => $elec_status,
                 'water_status' => $water_status,
+                'has_elec_bill' => (bool)$elec_bill,
+                'has_water_bill' => (bool)$water_bill,
                 'prev_elec' => $prev_elec,
                 'curr_elec' => $curr_elec,
                 'is_baseline_elec' => $is_baseline_elec,
@@ -3577,8 +3592,11 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
 
         return view('finance.dashboard', [
             'houses' => $houses,
-            'validCycles' => $validCycles,
-            'currentCycle' => $cycle
+            'validCycles' => $activeCycles,
+            'elecCycles' => $elecCycles,
+            'waterCycles' => $waterCycles,
+            'currentCycle' => $cycle,
+            'initialUtility' => $initialUtility,
         ]);
     });
 
@@ -3601,10 +3619,14 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
         }
 
         $cycle = $request->input('cycle');
-        if (empty($cycle)) {
-            $cycle = date('Y-m');
+        if (empty($cycle) || !is_string($cycle) || !preg_match('/^\d{4}-\d{2}$/', $cycle)) {
+            return response()->json(['success' => false, 'message' => 'Invalid or missing billing cycle.'], 422);
         }
-        $dt = \Carbon\Carbon::createFromFormat('Y-m', $cycle)->startOfMonth();
+        try {
+            $dt = \Carbon\Carbon::createFromFormat('Y-m', $cycle)->startOfMonth();
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Invalid billing cycle format.'], 422);
+        }
 
         $bill = \App\Models\UtilityBill::where('lot_id', $lot->id)
             ->where('type', $type)
@@ -3618,7 +3640,21 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
             })->first();
 
         if (!$bill) {
-            return response()->json(['success' => false, 'message' => "Cannot input reading: Admin has not generated a billing cycle for {$dt->format('F Y')}."], 403);
+            $cycleExists = \App\Models\UtilityBill::where('type', $type)
+                ->where(function ($q) use ($dt) {
+                    $q->whereDate('billing_period', $dt->toDateString())
+                      ->orWhere(function ($sub) use ($dt) {
+                          $sub->whereNull('billing_period')
+                              ->whereYear('created_at', $dt->year)
+                              ->whereMonth('created_at', $dt->month);
+                      });
+                })->exists();
+
+            $message = $cycleExists
+                ? "Cannot input reading: Block {$blockStr}, Lot {$lotStr} does not have a {$type} bill in the {$dt->format('F Y')} cycle."
+                : "Cannot input reading: Admin has not generated a billing cycle for {$dt->format('F Y')}.";
+
+            return response()->json(['success' => false, 'message' => $message], 403);
         }
 
         if ($bill->status === \App\Enums\BillStatus::Paid->value) {
@@ -3771,8 +3807,6 @@ Route::get('/admin/api/billing/cycle-status', function (\Illuminate\Http\Request
         })->get();
 
     $billedLotIds = $activeBills->pluck('lot_id')->all();
-    $missingLotIds = array_diff($eligibleLotIds, $billedLotIds);
-    $missingLotsCount = count($missingLotIds);
 
     $unrecordedReadingsCount = $activeBills->where('status', '!=', 'paid')->filter(function ($b) {
         return $b->current_reading === null || $b->current_reading == 0;
@@ -3800,7 +3834,6 @@ Route::get('/admin/api/billing/cycle-status', function (\Illuminate\Http\Request
             'period' => $activePeriod->toDateString(),
             'total_lots' => $totalEligibleLots,
             'billed_lots' => count($billedLotIds),
-            'missing_lots_count' => $missingLotsCount,
             'unrecorded_readings_count' => $unrecordedReadingsCount,
             'prev_reading_date' => $latestBill->previous_reading_date ? \Carbon\Carbon::parse($latestBill->previous_reading_date)->format('Y-m-d') : null,
             'curr_reading_date' => $latestBill->current_reading_date ? \Carbon\Carbon::parse($latestBill->current_reading_date)->format('Y-m-d') : null,
@@ -3829,7 +3862,6 @@ Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $r
     $prevDate = $request->input('prev_date');
     $currDate = $request->input('curr_date');
     $dueDate = $request->input('due_date');
-    $mode = $request->input('mode', 'new_cycle'); // 'new_cycle' or 'sync_missing'
 
     $waterMinM3 = $request->input('water_min_m3');
     $waterMinRate = $request->input('water_min_rate');
@@ -3865,7 +3897,7 @@ Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $r
         $latestPeriodRaw = $latestBillForType->billing_period ?: $latestBillForType->created_at;
         $activePeriod = \Carbon\Carbon::parse($latestPeriodRaw, $tz)->startOfMonth();
 
-        if ($mode !== 'sync_missing' && $curr->lt($activePeriod)) {
+        if ($curr->lt($activePeriod)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Current reading date cannot be in a past billing month. Earliest allowed: ' . $activePeriod->format('M j, Y') . '.',
@@ -3996,10 +4028,7 @@ Route::post('/admin/api/billing/generate', function (\Illuminate\Http\Request $r
             return response()->json(['success' => false, 'message' => 'No eligible residents are currently assigned to lots for this utility.']);
         }
 
-        $isSync = $alreadyExistingCount > 0;
-        $successMsg = $isSync
-            ? "Successfully synced {$generatedCount} newly assigned lot(s) for {$cycleLabel}."
-            : "Successfully generated {$generatedCount} bills for the new {$cycleLabel} cycle.";
+        $successMsg = "Successfully generated {$generatedCount} bills for the new {$cycleLabel} cycle.";
 
         return response()->json([
             'success' => true,
@@ -4069,23 +4098,32 @@ Route::post('/admin/api/billing/adjust-cycle', function (\Illuminate\Http\Reques
     $billsQuery = \App\Models\UtilityBill::where('type', $type);
     if ($cycle) {
         try {
-            $dt = \Carbon\Carbon::createFromFormat('Y-m', $cycle);
+            $dt = \Carbon\Carbon::createFromFormat('Y-m', $cycle)->startOfMonth();
             $billsQuery->where(function ($q) use ($dt) {
-                $q->whereYear('created_at', $dt->year)->whereMonth('created_at', $dt->month)
+                $q->whereDate('billing_period', $dt->toDateString())
                   ->orWhere(function ($sub) use ($dt) {
-                      $sub->whereNotNull('billing_period')
-                          ->whereYear('billing_period', $dt->year)
-                          ->whereMonth('billing_period', $dt->month);
+                      $sub->whereNull('billing_period')
+                          ->whereYear('created_at', $dt->year)
+                          ->whereMonth('created_at', $dt->month);
                   });
             });
         } catch (\Exception $e) {
             // fallback
         }
     } else {
-        $latest = \App\Models\UtilityBill::where('type', $type)->orderByDesc('created_at')->first();
+        $latest = \App\Models\UtilityBill::where('type', $type)
+            ->orderByRaw('COALESCE(billing_period, created_at) DESC')
+            ->first();
         if ($latest) {
-            $billsQuery->whereYear('created_at', $latest->created_at->year)
-                       ->whereMonth('created_at', $latest->created_at->month);
+            $latestPeriod = \Carbon\Carbon::parse($latest->billing_period ?: $latest->created_at, $tz)->startOfMonth();
+            $billsQuery->where(function ($q) use ($latestPeriod) {
+                $q->whereDate('billing_period', $latestPeriod->toDateString())
+                  ->orWhere(function ($sub) use ($latestPeriod) {
+                      $sub->whereNull('billing_period')
+                          ->whereYear('created_at', $latestPeriod->year)
+                          ->whereMonth('created_at', $latestPeriod->month);
+                  });
+            });
         }
     }
 

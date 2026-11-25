@@ -92,13 +92,22 @@ class VisitorController extends Controller
     // For Resident requesting a code or Guard logging Walk-in
     public function store(Request $request)
     {
+        if ($request->filled('contact_number')) {
+            $cleanedContact = preg_replace('/[\s-]+/', '', trim((string) $request->input('contact_number')));
+            $request->merge(['contact_number' => $cleanedContact === '' ? null : $cleanedContact]);
+        } else {
+            $request->merge(['contact_number' => null]);
+        }
+
         $request->validate([
             'visitor_name' => 'required|string|max:255',
-            'contact_number' => 'nullable|string|max:30',
+            'contact_number' => ['nullable', 'string', 'regex:/^(09\d{9}|\+639\d{9}|639\d{9})$/'],
             'purpose' => 'required|string',
             'validity' => 'required|string',
             'type' => 'required|string',
             'visitor_address' => 'nullable|string',
+        ], [
+            'contact_number.regex' => 'Use a valid Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX.',
         ]);
 
         $isWalkIn = $request->type === 'Walk-in';
