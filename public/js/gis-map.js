@@ -527,6 +527,81 @@ async function initGISMap(mapElementId, options = {}) {
         adminView: false,
     }, options);
 
+    // Smooth loading screen overlay for map & live routing initialization
+    const mapHostEl = document.getElementById(mapElementId);
+    let gisLoadingOverlay = null;
+    let gisLoadingStatusEl = null;
+    let gisLoadingDismissed = false;
+    let gisLoadingFallbackTimer = null;
+
+    if (mapHostEl) {
+        const computedPos = window.getComputedStyle(mapHostEl).position;
+        if (computedPos === 'static') {
+            mapHostEl.style.position = 'relative';
+        }
+        gisLoadingOverlay = document.createElement('div');
+        gisLoadingOverlay.className = 'gis-map-loading-overlay';
+        gisLoadingOverlay.style.cssText = [
+            'position: absolute',
+            'inset: 0',
+            'z-index: 2500',
+            'display: flex',
+            'flex-direction: column',
+            'align-items: center',
+            'justify-content: center',
+            'gap: 14px',
+            'background: rgba(248, 250, 252, 0.92)',
+            'backdrop-filter: blur(8px)',
+            '-webkit-backdrop-filter: blur(8px)',
+            'opacity: 1',
+            'transition: opacity 0.42s ease',
+            'pointer-events: auto',
+            'border-radius: inherit'
+        ].join(';');
+        gisLoadingOverlay.innerHTML = `
+            <div style="width: 44px; height: 44px; border-radius: 50%; border: 3.5px solid #e2e8f0; border-top-color: #2563eb; animation: gisSpin 0.8s linear infinite;"></div>
+            <div style="text-align: center; padding: 0 20px;">
+                <div style="font-size: 15px; font-weight: 700; color: #0f172a; letter-spacing: -0.01em;">Althesa Village Map</div>
+                <div class="gis-loading-status" style="font-size: 13px; font-weight: 500; color: #64748b; margin-top: 4px;">
+                    ${config.liveNavigation ? 'Preparing route &amp; acquiring live location...' : 'Loading subdivision map...'}
+                </div>
+            </div>
+        `;
+        if (!document.getElementById('gisSpinKeyframes')) {
+            const st = document.createElement('style');
+            st.id = 'gisSpinKeyframes';
+            st.textContent = '@keyframes gisSpin { to { transform: rotate(360deg); } }';
+            document.head.appendChild(st);
+        }
+        gisLoadingStatusEl = gisLoadingOverlay.querySelector('.gis-loading-status');
+        mapHostEl.appendChild(gisLoadingOverlay);
+    }
+
+    function setGisLoadingText(text) {
+        if (gisLoadingStatusEl && !gisLoadingDismissed) {
+            gisLoadingStatusEl.textContent = text;
+        }
+    }
+
+    function dismissGisLoadingOverlay() {
+        if (gisLoadingDismissed) return;
+        gisLoadingDismissed = true;
+        if (gisLoadingFallbackTimer) {
+            clearTimeout(gisLoadingFallbackTimer);
+            gisLoadingFallbackTimer = null;
+        }
+        if (!gisLoadingOverlay) return;
+        requestAnimationFrame(() => {
+            gisLoadingOverlay.style.opacity = '0';
+            gisLoadingOverlay.style.pointerEvents = 'none';
+            setTimeout(() => {
+                if (gisLoadingOverlay && gisLoadingOverlay.parentNode) {
+                    gisLoadingOverlay.parentNode.removeChild(gisLoadingOverlay);
+                }
+            }, 440);
+        });
+    }
+
     // Load Raw GeoJSONs, Database Lots, and Saved Settings in parallel (revalidate cache on deploy)
     const [rawAmenities, rawBufferedRoads, rawHouses, rawNetwork, rawEntrance, rawHouseNodes, lotsData, appSettings] = await Promise.all([
         fetch('/gis-data/amenities.geojson', { cache: 'no-cache' }).then(r => r.json()).catch(() => ({ features: [] })),
@@ -3289,6 +3364,7 @@ async function initGISMap(mapElementId, options = {}) {
 
                 // If visitorToken is provided, stream live coordinates & arrival status to guard portal
                 streamVisitorLocation(curLat, curLng, forceGuardPing);
+                dismissGisLoadingOverlay();
             }
 
             function onRecenterClick(e) {
@@ -3329,6 +3405,7 @@ async function initGISMap(mapElementId, options = {}) {
                             if (simTipEl) {
                                 simTipEl.innerHTML = '⚠️ Waiting for GPS signal • Ensure location is allowed (HTTPS required on mobile)';
                             }
+                            dismissGisLoadingOverlay();
                         }
                     },
                     { enableHighAccuracy: true, timeout: 12000, maximumAge: 1000 }
@@ -3337,6 +3414,7 @@ async function initGISMap(mapElementId, options = {}) {
                 if (simTipEl) {
                     simTipEl.innerHTML = '⚠️ Geolocation not supported on this device/browser';
                 }
+                dismissGisLoadingOverlay();
             }
 
             liveNavTracker = {
@@ -3568,6 +3646,15 @@ async function initGISMap(mapElementId, options = {}) {
     }
 
     renderAllGISLayers();
+
+    if (config.liveNavigation && config.showRouting && config.endNode) {
+        setGisLoadingText('Acquiring live location...');
+        gisLoadingFallbackTimer = setTimeout(() => {
+            dismissGisLoadingOverlay();
+        }, 3500);
+    } else {
+        dismissGisLoadingOverlay();
+    }
 
     map.clearRouting = function () {
         if (houseLayer) houseLayer.resetStyle();

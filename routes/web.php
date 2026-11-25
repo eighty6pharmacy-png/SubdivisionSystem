@@ -2996,9 +2996,9 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'lot_area' => 'required|numeric|gt:0',
             'floor_area' => 'required|numeric|gt:0',
             'description' => 'required|string|min:2|max:2000',
-            'tct_no' => ['required', 'string', 'max:255', 'regex:/^(?=.*[a-zA-Z0-9])[a-zA-Z0-9\-\/\.\s#]+$/'],
-            'pid' => ['required', 'string', 'max:255', 'regex:/^(?=.*[a-zA-Z0-9])[a-zA-Z0-9\-\/\.\s#]+$/'],
-            'tax_dec_no' => ['required', 'string', 'max:255', 'regex:/^(?=.*[a-zA-Z0-9])[a-zA-Z0-9\-\/\.\s#]+$/'],
+            'tct_no' => ['nullable', 'string', 'max:255', 'regex:/^(?=.*[a-zA-Z0-9])[a-zA-Z0-9\-\/\.\s#]+$/'],
+            'pid' => ['nullable', 'string', 'max:255', 'regex:/^(?=.*[a-zA-Z0-9])[a-zA-Z0-9\-\/\.\s#]+$/'],
+            'tax_dec_no' => ['nullable', 'string', 'max:255', 'regex:/^(?=.*[a-zA-Z0-9])[a-zA-Z0-9\-\/\.\s#]+$/'],
         ], [
             'contract_price.required' => 'Total Contract Price (TCP) is required.',
             'contract_price.gt' => 'Total Contract Price (TCP) must be greater than 0.',
@@ -3006,11 +3006,8 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'lot_area.gt' => 'Lot Area must be greater than 0.',
             'floor_area.required' => 'Floor Area is required.',
             'floor_area.gt' => 'Floor Area must be greater than 0.',
-            'tct_no.required' => 'TCT No. is required.',
             'tct_no.regex' => 'TCT No. contains invalid characters.',
-            'pid.required' => 'PID (Property ID) is required.',
             'pid.regex' => 'PID contains invalid characters.',
-            'tax_dec_no.required' => 'Tax Declaration No. is required.',
             'tax_dec_no.regex' => 'Tax Declaration No. contains invalid characters.',
             'description.required' => 'Property Description is required.',
             'description.min' => 'Property Description must be at least 2 characters.',
@@ -3026,9 +3023,9 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             'lot_area' => $validated['lot_area'],
             'floor_area' => $validated['floor_area'],
             'description' => trim($validated['description']),
-            'tct_no' => trim($validated['tct_no']),
-            'pid' => trim($validated['pid']),
-            'tax_dec_no' => trim($validated['tax_dec_no']),
+            'tct_no' => isset($validated['tct_no']) && trim((string) $validated['tct_no']) !== '' ? trim((string) $validated['tct_no']) : null,
+            'pid' => isset($validated['pid']) && trim((string) $validated['pid']) !== '' ? trim((string) $validated['pid']) : null,
+            'tax_dec_no' => isset($validated['tax_dec_no']) && trim((string) $validated['tax_dec_no']) !== '' ? trim((string) $validated['tax_dec_no']) : null,
         ]);
 
         return response()->json([

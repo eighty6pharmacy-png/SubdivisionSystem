@@ -589,11 +589,12 @@
                                 const b = feature.properties.block_num;
                                 const l = feature.properties.lot_number;
                                 const key = `B${b} L${l}`;
-                                const dbLot = dbLots[key] || { owner: 'Unassigned', status: 'Vacant Lot', electricity_status: 'unpaid', water_status: 'unpaid', id: null, user_id: null, block: b, lot_number: l };
+                                const initialLot = dbLots[key] || { owner: 'Unassigned', status: 'Vacant Lot', electricity_status: 'unpaid', water_status: 'unpaid', id: null, user_id: null, block: b, lot_number: l };
 
-                                layer.bindTooltip(`Block ${b}, Lot ${l} - ${dbLot.owner}`);
+                                layer.bindTooltip(`Block ${b}, Lot ${l} - ${initialLot.owner}`);
                                 layer.on('click', () => {
-                                    selectLot(key, dbLot);
+                                    const currentLot = dbLots[key] || initialLot;
+                                    selectLot(key, currentLot);
                                 });
                             }
                         }
@@ -911,18 +912,12 @@
                 errors.push({ id: 'lotEditFloorArea', msg: 'Floor Area must be greater than 0.' });
             }
 
-            if (!tctNo) {
-                setLotFieldError('lotEditTctNo', 'TCT No. is required.');
-                errors.push({ id: 'lotEditTctNo', msg: 'TCT No. is required.' });
-            } else if (!idFormatRegex.test(tctNo)) {
+            if (tctNo && !idFormatRegex.test(tctNo)) {
                 setLotFieldError('lotEditTctNo', 'TCT No. contains invalid characters.');
                 errors.push({ id: 'lotEditTctNo', msg: 'TCT No. contains invalid characters.' });
             }
 
-            if (!pid) {
-                setLotFieldError('lotEditPid', 'PID (Property ID) is required.');
-                errors.push({ id: 'lotEditPid', msg: 'PID (Property ID) is required.' });
-            } else if (!idFormatRegex.test(pid)) {
+            if (pid && !idFormatRegex.test(pid)) {
                 setLotFieldError('lotEditPid', 'PID contains invalid characters.');
                 errors.push({ id: 'lotEditPid', msg: 'PID contains invalid characters.' });
             }
@@ -935,10 +930,7 @@
                 errors.push({ id: 'lotEditContractPrice', msg: 'Total Contract Price must be greater than 0.' });
             }
 
-            if (!taxDecNo) {
-                setLotFieldError('lotEditTaxDecNo', 'Tax Declaration No. is required.');
-                errors.push({ id: 'lotEditTaxDecNo', msg: 'Tax Declaration No. is required.' });
-            } else if (!idFormatRegex.test(taxDecNo)) {
+            if (taxDecNo && !idFormatRegex.test(taxDecNo)) {
                 setLotFieldError('lotEditTaxDecNo', 'Tax Declaration No. contains invalid characters.');
                 errors.push({ id: 'lotEditTaxDecNo', msg: 'Tax Declaration No. contains invalid characters.' });
             }
@@ -1003,6 +995,7 @@
                             isNotConnected: true
                         };
                     }
+                    dbLots[key].id = data.lot.id ?? dbLots[key].id;
                     dbLots[key].contract_price = data.lot.contract_price;
                     dbLots[key].lot_area = data.lot.lot_area;
                     dbLots[key].floor_area = data.lot.floor_area;
