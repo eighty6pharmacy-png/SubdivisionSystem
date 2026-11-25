@@ -2,16 +2,34 @@
 
 namespace Database\Seeders;
 
+use App\Enums\LotStatus;
 use App\Models\Lot;
 use Illuminate\Database\Seeder;
 
 class HouseSpecificationSeeder extends Seeder
 {
     /**
-     * Populate sample house specifications (3M - 4.5M tiers) for lots missing spec data.
+     * Ensure all GIS houses exist in the lots table and populate sample house
+     * specifications (3M - 4.5M tiers) for any lots missing spec data.
      */
     public function run(): void
     {
+        $geojsonPath = public_path('gis-data/houses.geojson');
+        if (is_file($geojsonPath)) {
+            $data = json_decode((string) file_get_contents($geojsonPath), true);
+            foreach ($data['features'] ?? [] as $feature) {
+                $props = $feature['properties'] ?? [];
+                $block = $props['block_num'] ?? null;
+                $lotNumber = $props['lot_number'] ?? null;
+                if ($block === null || $lotNumber === null) {
+                    continue;
+                }
+                Lot::firstOrCreate(
+                    ['block' => (string) $block, 'lot_number' => (string) $lotNumber],
+                    ['status' => LotStatus::VacantLot->value]
+                );
+            }
+        }
         $models = [
             [
                 'description' => 'Althea Classic (2-Storey Townhouse, 2BR)',
