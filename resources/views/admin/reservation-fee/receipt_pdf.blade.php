@@ -383,20 +383,26 @@
         </tr>
         <tr>
             <td class="label-col sub-indent"><strong>Pag-ibig</strong></td>
-            <td class="val-col">{{ $r['loanable_pagibig'] > 0 ? '₱ ' . $fmtMoney($r['loanable_pagibig']) : '—' }}</td>
+            <td class="val-col">{{ ($r['loanable_pagibig'] ?? 0) > 0 ? '₱ ' . $fmtMoney($r['loanable_pagibig']) : '—' }}</td>
         </tr>
         <tr>
             <td class="label-col sub-indent"><strong>DF</strong></td>
-            <td class="val-col">{{ $r['loanable_df'] > 0 ? '₱ ' . $fmtMoney($r['loanable_df']) : '—' }}</td>
+            <td class="val-col">{{ ($r['loanable_df'] ?? 0) > 0 ? '₱ ' . $fmtMoney($r['loanable_df']) : '—' }}</td>
         </tr>
         <tr>
             <td class="label-col"><strong>EQUITY</strong></td>
-            <td class="val-col">₱ {{ $fmtMoney($r['required_equity']) }}</td>
+            <td class="val-col">{{ $r['required_equity'] !== null ? '₱ ' . $fmtMoney($r['required_equity']) : '—' }}</td>
         </tr>
         <tr class="spacer"><td colspan="2"></td></tr>
         <tr>
-            <td class="label-col"><strong>Required Equity / Downpayment {{ number_format((float) $r['equity_percent'], 0) }}% -</strong></td>
-            <td class="val-col">₱ {{ $fmtMoney($r['required_equity']) }}</td>
+            @php
+                $eqPctVal = $r['equity_percent'];
+                $eqPctLabel = $eqPctVal !== null
+                    ? (fmod((float) $eqPctVal, 1.0) == 0.0 ? number_format((float) $eqPctVal, 0) : number_format((float) $eqPctVal, 2)) . '%'
+                    : '___%';
+            @endphp
+            <td class="label-col"><strong>Required Equity / Downpayment {{ $eqPctLabel }} -</strong></td>
+            <td class="val-col">{{ $r['required_equity'] !== null ? '₱ ' . $fmtMoney($r['required_equity']) : '—' }}</td>
         </tr>
         <tr>
             <td class="label-col"><strong>Reservation Fee (Paid Under OR # {{ $r['or_number'] }})</strong></td>
@@ -404,19 +410,19 @@
         </tr>
         <tr>
             <td class="label-col"><strong>NET EQUITY DOWNPAYMENT (Paid Under OR # {{ $r['net_equity_or_number'] ?: '________' }})</strong></td>
-            <td class="val-col">₱ {{ $fmtMoney($r['net_equity_downpayment']) }}</td>
+            <td class="val-col">{{ $r['net_equity_downpayment'] !== null ? '₱ ' . $fmtMoney($r['net_equity_downpayment']) : '—' }}</td>
         </tr>
         <tr class="spacer"><td colspan="2"></td></tr>
         <tr>
             <td class="label-col"><strong>Term of Equity</strong></td>
-            <td class="val-col">{{ $r['term_of_equity'] ?: ($r['equity_period_count'] . ' Months') }}</td>
+            <td class="val-col">{{ $r['term_of_equity'] ?: ($r['equity_period_count'] ? ($r['equity_period_count'] . ' Months') : '—') }}</td>
         </tr>
         <tr>
             <td class="label-col"><strong>Monthly Amortization of Equity</strong></td>
-            <td class="val-col">₱ {{ $fmtMoney($r['monthly_amortization_equity']) }}</td>
+            <td class="val-col">{{ $r['monthly_amortization_equity'] !== null ? '₱ ' . $fmtMoney($r['monthly_amortization_equity']) : '—' }}</td>
         </tr>
         <tr>
-            <td class="label-col"><strong>Period of Payment ( {{ $r['equity_period_count'] }} MONTHLY Installments )</strong></td>
+            <td class="label-col"><strong>Period of Payment ( {{ $r['equity_period_count'] ?? '___' }} MONTHLY Installments )</strong></td>
             <td></td>
         </tr>
         <tr>

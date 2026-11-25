@@ -346,6 +346,35 @@ class BuyerPortalController extends Controller
         return $pdf->stream('Receipt_DP_' . $hist->id . '.pdf');
     }
 
+    public function downloadFinancingReceipt(Request $request, $id)
+    {
+        $user = Auth::user();
+        $buyer = $user->buyerMasterList;
+
+        if (!$buyer) {
+            abort(403, 'No buyer record found for your account.');
+        }
+
+        $hist = \Illuminate\Support\Facades\DB::table('payments')
+            ->where('id', $id)
+            ->whereNotNull('financing_record_id')
+            ->whereNull('deleted_at')
+            ->first();
+        if (!$hist) {
+            abort(404, 'Payment history not found.');
+        }
+
+        $fin = FinancingRecord::with('lot')->find($hist->financing_record_id);
+        if (!$fin || (int) $fin->buyer_id !== (int) $buyer->id) {
+            abort(403, 'Unauthorized access to this receipt.');
+        }
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'portrait');
+        $pdf->loadView('buyer.receipt_pdf', compact('hist', 'buyer', 'fin'));
+        return $pdf->stream('Receipt_Financing_' . $hist->id . '.pdf');
+    }
+
     private function buildPaymentCalendarEvents($downpayments, $financing): array
     {
         $events = [];

@@ -232,8 +232,8 @@
                     <td style="font-weight: bold; color: #000000;">{{ $b['resident'] }}</td>
                     <td style="color: #000000;">{{ $b['lot'] }}</td>
                     <td style="text-align: right; font-family: monospace;">{{ number_format((float)($b['usage_kwh'] ?? 0), 1) }}</td>
-                    <td style="text-align: right; font-family: monospace;">₱{{ number_format((float)($b['amount'] ?? 0), 2) }}</td>
-                    <td style="text-align: right; font-family: monospace; font-weight: bold;">₱{{ number_format((float)($b['total_paid'] ?? 0), 2) }}</td>
+                    <td style="text-align: right;">₱{{ number_format((float)($b['amount'] ?? 0), 2) }}</td>
+                    <td style="text-align: right; font-weight: bold;">₱{{ number_format((float)($b['total_paid'] ?? 0), 2) }}</td>
                     <td style="text-align: center; color: #000000;">{{ $b['due'] ?? '—' }}</td>
                     <td style="text-align: center;">
                         <span class="badge {{ strtolower($b['status']) === 'paid' ? 'badge-active' : 'badge-archived' }}">

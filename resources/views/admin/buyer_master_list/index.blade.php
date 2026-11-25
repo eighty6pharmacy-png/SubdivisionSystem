@@ -110,11 +110,11 @@
                     <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                     Generate Report
                 </button>
-                <button class="btn btn-outline" style="border-color: var(--bill-primary); color: var(--bill-primary);" onclick="openModal('add')">
+                <button class="btn btn-primary" onclick="openModal('add')">
                     <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
                         style="margin-right: 8px;">
                         <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            d="M12 4v16m8-8H4" />
                     </svg>
                     Add New Buyer
                 </button>
@@ -328,11 +328,15 @@
     </div>
 
     <!-- Add/Edit Buyer Modal -->
-    <div id="buyerModal" class="modal-overlay"
-        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-        <div
-            style="background: white; padding: 30px; border-radius: 16px; width: 90%; max-width: 800px; max-height: 90vh; overflow-y: auto;">
-            <h2 id="modalTitle" style="margin-top: 0; margin-bottom: 24px; font-size: 20px;">Add New Buyer</h2>
+    <div id="buyerModal" class="bill-modal"
+        style="display: none; align-items: center; justify-content: center; z-index: 3000;">
+        <div class="bill-modal-content"
+            style="max-width: 820px; width: 95%; padding: 32px; border-radius: 24px; max-height: 90vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <h2 id="modalTitle" style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">Add New Buyer</h2>
+                <button type="button" onclick="closeModal()"
+                    style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">&times;</button>
+            </div>
             <form id="buyerForm" onsubmit="submitBuyerForm(event)">
                 @csrf
                 <input type="hidden" name="_method" id="formMethod" value="POST">
@@ -362,6 +366,23 @@
 
                     .tab-content.active {
                         display: block;
+                    }
+
+                    #buyerModal .form-label {
+                        display: block;
+                        font-size: 12px !important;
+                        font-weight: 700 !important;
+                        color: #64748b !important;
+                        margin-bottom: 8px !important;
+                    }
+
+                    #buyerModal .view-readonly {
+                        width: 100%;
+                        padding: 11px 14px !important;
+                        border: 1px solid #cbd5e1 !important;
+                        border-radius: 10px !important;
+                        font-size: 14px;
+                        box-sizing: border-box;
                     }
                 </style>
 
@@ -518,12 +539,9 @@
                 </div>
 
                 <div
-                    style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid #e2e8f0; padding-top: 16px;">
-                    <button type="button" onclick="closeModal()"
-                        style="padding: 10px 16px; border: none; background: #f1f5f9; color: #475569; border-radius: 8px; cursor: pointer; font-weight: 600;">Close</button>
-                    <button type="submit" id="saveButton"
-                        style="padding: 10px 16px; border: none; background: #3b82f6; color: white; border-radius: 8px; cursor: pointer; font-weight: 600;">Save
-                        Record</button>
+                    style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 8px;">
+                    <button type="button" class="btn btn-outline" onclick="closeModal()">Close</button>
+                    <button type="submit" id="saveButton" class="btn btn-primary">Save Record</button>
                 </div>
             </form>
         </div>

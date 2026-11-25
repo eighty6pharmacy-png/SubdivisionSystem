@@ -326,31 +326,46 @@
             </div>
 
             <!-- Financing History -->
-            @if($finHistories->isNotEmpty())
             <div class="analytic-card" style="margin-bottom: 24px; padding: 0;">
-                <div style="padding: 16px 24px; border-bottom: 1px solid #e2e8f0;">
-                    <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;">Shortfall Payment History</h4>
+                <div style="padding: 16px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                    <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;">Financing Payment History</h4>
+                    <span style="font-size: 12px; font-weight: 700; color: #64748b;">{{ $finHistories->count() }} {{ $finHistories->count() === 1 ? 'record' : 'records' }}</span>
                 </div>
+                @if($finHistories->isEmpty())
+                    <div style="padding: 28px 24px; text-align: center; color: #64748b; font-size: 14px;">
+                        No financing payments have been recorded yet.
+                    </div>
+                @else
                 <div style="overflow-x: auto;">
                     <table style="width: 100%; text-align: left; border-collapse: collapse; font-size: 14px;">
                         <thead>
                             <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
                                 <th style="padding: 12px 24px; font-weight: 600; color: #64748b;">Payment Date &amp; Time</th>
-                                <th style="padding: 12px 24px; font-weight: 600; color: #64748b;">Amount</th>
+                                <th style="padding: 12px 24px; font-weight: 600; color: #64748b;">Transaction Reference</th>
+                                <th style="padding: 12px 24px; font-weight: 600; color: #64748b;">Payment Method</th>
+                                <th style="padding: 12px 24px; font-weight: 600; color: #64748b;">Amount Paid</th>
+                                <th style="padding: 12px 24px; font-weight: 600; color: #64748b; text-align: right;">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach($finHistories as $hist)
                             <tr style="border-bottom: 1px solid #f1f5f9;">
                                 <td style="padding: 12px 24px; color: #0f172a;">{{ \Carbon\Carbon::parse($hist->payment_date ?? $hist->created_at)->timezone(config('app.timezone', 'Asia/Manila'))->format('M d, Y h:i A') }}</td>
-                                <td style="padding: 12px 24px; font-weight: 600; color: #10b981;">₱{{ number_format($hist->amount_paid, 2) }}</td>
+                                <td style="padding: 12px 24px; font-family: monospace; font-weight: 700; color: #0f172a;">{{ $hist->trn ?? 'Manual' }}</td>
+                                <td style="padding: 12px 24px; font-weight: 600; color: #334155;">{{ $hist->method ?? 'Office Payment' }}</td>
+                                <td style="padding: 12px 24px; font-weight: 700; color: #10b981;">₱{{ number_format($hist->amount_paid, 2) }}</td>
+                                <td style="padding: 12px 24px; text-align: right;">
+                                    <button type="button" onclick="openBuyerReceiptModal('{{ route('buyer.payments.financing.receipt', $hist->id) }}')" class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-color: #3b82f6; color: #3b82f6; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;">
+                                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 6px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Receipt
+                                    </button>
+                                </td>
                             </tr>
                             @endforeach
                         </tbody>
                     </table>
                 </div>
+                @endif
             </div>
-            @endif
         @endif
 
         @include('buyer.partials.payment-calendar')
@@ -415,5 +430,51 @@
             btn.innerHTML = 'Pay Shortfall Online';
         }
     }
+
+    function openBuyerReceiptModal(url) {
+        const frame = document.getElementById('buyerReceiptFrame');
+        if (frame) frame.src = url;
+        const modal = document.getElementById('buyerReceiptModal');
+        if (modal) modal.style.display = 'flex';
+    }
+
+    function closeBuyerReceiptModal() {
+        const modal = document.getElementById('buyerReceiptModal');
+        if (modal) modal.style.display = 'none';
+        const frame = document.getElementById('buyerReceiptFrame');
+        if (frame) frame.src = 'about:blank';
+    }
+
+    function printBuyerReceiptFrame() {
+        const frame = document.getElementById('buyerReceiptFrame');
+        if (frame && frame.contentWindow) {
+            frame.contentWindow.focus();
+            frame.contentWindow.print();
+        }
+    }
 </script>
+
+<!-- In-Page Receipt Preview Modal -->
+<div id="buyerReceiptModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 3200; background: rgba(15,23,42,0.7); backdrop-filter: blur(8px); padding: 20px;">
+    <div class="bill-modal-content" style="max-width: 960px; width: 95%; max-height: 94vh; overflow: hidden; padding: 20px 24px; border-radius: 20px; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); display: flex; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #e2e8f0;">
+            <div>
+                <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0;">Payment Receipt</h2>
+                <p style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">View-only official receipt preview</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <button type="button" class="btn btn-outline" onclick="printBuyerReceiptFrame()" style="background: #fff; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: #334155;">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                    Print
+                </button>
+                <button type="button" class="btn btn-outline" onclick="closeBuyerReceiptModal()" style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 600; border-radius: 8px; cursor: pointer;">
+                    ✕ Close
+                </button>
+            </div>
+        </div>
+        <div style="flex: 1; min-height: 0; width: 100%;">
+            <iframe id="buyerReceiptFrame" src="about:blank" style="width: 100%; height: 75vh; border: 1px solid #e2e8f0; border-radius: 10px; background: #525659;"></iframe>
+        </div>
+    </div>
+</div>
 @endsection

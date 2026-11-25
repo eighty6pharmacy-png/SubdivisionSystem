@@ -181,37 +181,74 @@
         $tz = config('app.timezone', 'Asia/Manila');
         $paymentDateShort = \Carbon\Carbon::parse($paymentDateRaw)->timezone($tz)->format('M d, Y');
         $paymentDateFull = \Carbon\Carbon::parse($paymentDateRaw)->timezone($tz)->format('F d, Y h:i A');
-        $monthly = (float) ($dp->monthly_amortization ?? 0);
+        $isFinancing = isset($fin) && $fin !== null;
         $paid = (float) $hist->amount_paid;
-        $principal = $paid > ($monthly + 0.009) ? round($monthly, 2) : round($paid, 2);
-        $penalty = round(max(0, $paid - $principal), 2);
-        $penaltyRate = (float) ($dp->penalty_percentage ?? 0);
-        $totalDp = (float) $dp->amount + (float) $dp->balance;
-        $all = \App\Models\Payment::where('downpayment_id', $dp->id)
-            ->orderBy('payment_date')
-            ->orderBy('created_at')
-            ->get();
-        $installmentNo = 0;
-        $applied = 0;
-        foreach ($all as $idx => $h) {
-            $p = ((float) $h->amount_paid > $monthly + 0.009) ? $monthly : (float) $h->amount_paid;
-            $applied += $p;
-            if ((string) $h->id === (string) $hist->id) {
-                $installmentNo = $idx + 1;
-                break;
+
+        if ($isFinancing) {
+            $principal = round($paid, 2);
+            $penalty = 0;
+            $penaltyRate = 0;
+            $totalDp = (float) ($fin->receivables ?? ($fin->amount_paid + $fin->balance));
+            $all = \App\Models\Payment::where('financing_record_id', $fin->id)
+                ->orderBy('payment_date')
+                ->orderBy('created_at')
+                ->get();
+            $installmentNo = 0;
+            $applied = 0;
+            foreach ($all as $idx => $h) {
+                $applied += (float) $h->amount_paid;
+                if ((string) $h->id === (string) $hist->id) {
+                    $installmentNo = $idx + 1;
+                    break;
+                }
             }
+            $remaining = max(0, $totalDp - $applied);
+            $term = $all->count();
+            $dueThis = !empty($fin->due_date) ? \Carbon\Carbon::parse($fin->due_date)->format('M d, Y') : 'N/A';
+            $tcp = (float) ($fin->contract_price ?? 0);
+            $blockNo = $fin->lot?->block ?? $buyer->block_no ?? 'N/A';
+            $lotNo = $fin->lot?->lot_number ?? $buyer->lot_no ?? 'N/A';
+            $itemUnit = 'pmt.';
+            $itemDescription = 'Financing Shortfall Payment #' . max(1, $installmentNo) . ($fin->financing_method ? ' (' . $fin->financing_method . ')' : '');
+            $summaryLabel = 'Total Receivables';
+        } else {
+            $monthly = (float) ($dp->monthly_amortization ?? 0);
+            $principal = $paid > ($monthly + 0.009) ? round($monthly, 2) : round($paid, 2);
+            $penalty = round(max(0, $paid - $principal), 2);
+            $penaltyRate = (float) ($dp->penalty_percentage ?? 0);
+            $totalDp = (float) $dp->amount + (float) $dp->balance;
+            $all = \App\Models\Payment::where('downpayment_id', $dp->id)
+                ->orderBy('payment_date')
+                ->orderBy('created_at')
+                ->get();
+            $installmentNo = 0;
+            $applied = 0;
+            foreach ($all as $idx => $h) {
+                $p = ((float) $h->amount_paid > $monthly + 0.009) ? $monthly : (float) $h->amount_paid;
+                $applied += $p;
+                if ((string) $h->id === (string) $hist->id) {
+                    $installmentNo = $idx + 1;
+                    break;
+                }
+            }
+            $remaining = max(0, $totalDp - $applied);
+            $term = (int) ($dp->months_to_pay ?? 0);
+            $dueThis = 'N/A';
+            if ($dp->due_date && $installmentNo > 0) {
+                $monthsBack = max(0, $all->count() - $installmentNo + 1);
+                $dueThis = \Carbon\Carbon::parse($dp->due_date)->subMonths($monthsBack)->format('M d, Y');
+            }
+            $tcp = (float) ($buyer->financingRecord?->contract_price ?? 0);
+            $blockNo = $buyer->block_no ?? 'N/A';
+            $lotNo = $buyer->lot_no ?? 'N/A';
+            $itemUnit = 'mo.';
+            $itemDescription = 'Downpayment — Installment ' . $installmentNo . ' of ' . $term;
+            $summaryLabel = 'Total Downpayment';
         }
-        $remaining = max(0, $totalDp - $applied);
-        $term = (int) ($dp->months_to_pay ?? 0);
-        $dueThis = 'N/A';
-        if ($dp->due_date && $installmentNo > 0) {
-            $monthsBack = max(0, $all->count() - $installmentNo + 1);
-            $dueThis = \Carbon\Carbon::parse($dp->due_date)->subMonths($monthsBack)->format('M d, Y');
-        }
-        $tcp = (float) ($buyer->financingRecord?->contract_price ?? 0);
+
         $buyerFullName = trim(($buyer->first_name ?? '') . ' ' . ($buyer->middle_name ? $buyer->middle_name . ' ' : '') . ($buyer->last_name ?? ''));
         $addressParts = array_filter([
-            ($buyer->block_no || $buyer->lot_no) ? ('Block ' . ($buyer->block_no ?? 'N/A') . ', Lot ' . ($buyer->lot_no ?? 'N/A')) : null,
+            ($blockNo !== 'N/A' || $lotNo !== 'N/A') ? ('Block ' . $blockNo . ', Lot ' . $lotNo) : null,
             $buyer->postal_address ?? null,
         ]);
         $buyerAddress = $addressParts ? implode(' — ', $addressParts) : 'N/A';
@@ -287,9 +324,9 @@
             <tbody>
                 <tr>
                     <td class="text-center">1</td>
-                    <td class="text-center">mo.</td>
+                    <td class="text-center">{{ $itemUnit }}</td>
                     <td>
-                        <strong>Downpayment — Installment {{ $installmentNo }} of {{ $term }}</strong>
+                        <strong>{{ $itemDescription }}</strong>
                     </td>
                     <td class="text-right">&#8369;{{ number_format($principal, 2) }}</td>
                     <td class="text-right">&#8369;{{ number_format($principal, 2) }}</td>
@@ -297,7 +334,7 @@
                 <tr>
                     <td>&nbsp;</td>
                     <td>&nbsp;</td>
-                    <td>Block {{ $buyer->block_no ?? 'N/A' }}, Lot {{ $buyer->lot_no ?? 'N/A' }} (TCP: &#8369;{{ number_format($tcp, 2) }})</td>
+                    <td>Block {{ $blockNo }}, Lot {{ $lotNo }} (TCP: &#8369;{{ number_format($tcp, 2) }})</td>
                     <td>&nbsp;</td>
                     <td>&nbsp;</td>
                 </tr>
@@ -305,7 +342,7 @@
                     <td>&nbsp;</td>
                     <td>&nbsp;</td>
                     <td>
-                        Total Downpayment: &#8369;{{ number_format($totalDp, 2) }} &bull;
+                        {{ $summaryLabel }}: &#8369;{{ number_format($totalDp, 2) }} &bull;
                         Applied: &#8369;{{ number_format($principal, 2) }} &bull;
                         Remaining Balance: &#8369;{{ number_format($remaining, 2) }}
                     </td>

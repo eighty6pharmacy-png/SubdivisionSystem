@@ -228,6 +228,121 @@
                     @endif
                 </div>
             </div>
+
+            <!-- Payment Record Button (below Receivables box, outside the box) -->
+            <button type="button" onclick="document.getElementById('paymentRecordsModal').style.display='flex';" class="btn-submit" style="width: 100%; background: #0f172a; margin-bottom: 24px;">
+                Payment Record ({{ $record->payments->count() }})
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Payment Records Modal -->
+<div id="paymentRecordsModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 3000;">
+    <div class="bill-modal-content" style="max-width: 880px; width: 95%; padding: 32px; border-radius: 24px; max-height: 90vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div>
+                <h2 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0;">Payment Records</h2>
+                <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">
+                    {{ $record->buyerMasterList->first_name ?? '' }} {{ $record->buyerMasterList->last_name ?? 'Buyer' }}
+                    • Block {{ $record->lot->block ?? 'N/A' }}, Lot {{ $record->lot->lot_number ?? 'N/A' }}
+                </p>
+            </div>
+            <button type="button" onclick="document.getElementById('paymentRecordsModal').style.display='none';" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">&times;</button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 20px;">
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px;">
+                <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b;">Total Receivables</div>
+                <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-top: 4px;">₱{{ number_format((float) $record->receivables, 2) }}</div>
+            </div>
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 14px 16px;">
+                <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #166534;">Total Amount Paid</div>
+                <div style="font-size: 20px; font-weight: 800; color: #059669; margin-top: 4px;">₱{{ number_format((float) $record->amount_paid, 2) }}</div>
+            </div>
+            <div style="background: {{ $record->balance > 0 ? '#fef2f2' : '#f0fdf4' }}; border: 1px solid {{ $record->balance > 0 ? '#fecaca' : '#bbf7d0' }}; border-radius: 12px; padding: 14px 16px;">
+                <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: {{ $record->balance > 0 ? '#991b1b' : '#166534' }};">Remaining Balance</div>
+                <div style="font-size: 20px; font-weight: 800; color: {{ $record->balance > 0 ? '#dc2626' : '#059669' }}; margin-top: 4px;">₱{{ number_format((float) $record->balance, 2) }}</div>
+            </div>
+        </div>
+
+        <div class="bill-table-container" style="overflow-x: auto;">
+            <table class="bill-table" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                        <th style="padding: 12px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b;">#</th>
+                        <th style="padding: 12px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b;">Reference / TRN</th>
+                        <th style="padding: 12px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b;">Payment Date</th>
+                        <th style="padding: 12px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b;">Method</th>
+                        <th style="padding: 12px 14px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b;">Status</th>
+                        <th style="padding: 12px 14px; text-align: right; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b;">Amount Paid</th>
+                        <th style="padding: 12px 14px; text-align: right; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($record->payments as $idx => $payment)
+                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                            <td style="padding: 12px 14px; font-size: 13px; color: #64748b; font-weight: 600;">{{ $idx + 1 }}</td>
+                            <td style="padding: 12px 14px; font-size: 13px; font-family: monospace; font-weight: 700; color: #0f172a;">
+                                {{ $payment->trn ?: ('PAY-' . str_pad($payment->id, 5, '0', STR_PAD_LEFT)) }}
+                            </td>
+                            <td style="padding: 12px 14px; font-size: 13px; color: #334155;">
+                                {{ ($payment->payment_date ?? $payment->created_at)?->format('M d, Y h:i A') ?? '—' }}
+                            </td>
+                            <td style="padding: 12px 14px; font-size: 13px; font-weight: 600; color: #334155;">
+                                {{ $payment->method ?? 'Office Payment' }}
+                            </td>
+                            <td style="padding: 12px 14px; text-align: center;">
+                                <span style="display: inline-block; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; background: #dcfce7; color: #166534;">
+                                    {{ ucfirst($payment->status ?? 'Paid') }}
+                                </span>
+                            </td>
+                            <td style="padding: 12px 14px; text-align: right; font-size: 14px; font-weight: 800; color: #059669;">
+                                ₱{{ number_format((float) $payment->amount_paid, 2) }}
+                            </td>
+                            <td style="padding: 12px 14px; text-align: right;">
+                                <button type="button" onclick="openFinancingReceiptModal('{{ route('financing.receipt', $payment->id) }}')" class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-color: #3b82f6; color: #3b82f6; display: inline-flex; align-items: center; cursor: pointer;">
+                                    Receipt
+                                </button>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="7" style="padding: 32px 16px; text-align: center; color: #64748b; font-size: 14px;">
+                                No payments have been recorded for this financing account yet.
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 16px;">
+            <button type="button" class="btn btn-outline" onclick="document.getElementById('paymentRecordsModal').style.display='none';">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- In-Page Receipt Preview Modal -->
+<div id="financingReceiptModal" class="bill-modal" style="display: none; align-items: center; justify-content: center; z-index: 3200; background: rgba(15,23,42,0.7); backdrop-filter: blur(8px); padding: 20px;">
+    <div class="bill-modal-content" style="max-width: 960px; width: 95%; max-height: 94vh; overflow: hidden; padding: 20px 24px; border-radius: 20px; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); display: flex; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #e2e8f0;">
+            <div>
+                <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0;">Payment Receipt</h2>
+                <p style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">View-only official receipt preview</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <button type="button" class="btn btn-outline" onclick="printFinancingReceiptFrame()" style="background: #fff; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: #334155;">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                    Print
+                </button>
+                <button type="button" class="btn btn-outline" onclick="closeFinancingReceiptModal()" style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px 14px; font-size: 12px; font-weight: 600; border-radius: 8px; cursor: pointer;">
+                    ✕ Close
+                </button>
+            </div>
+        </div>
+        <div style="flex: 1; min-height: 0; width: 100%;">
+            <iframe id="financingReceiptFrame" src="about:blank" style="width: 100%; height: 75vh; border: 1px solid #e2e8f0; border-radius: 10px; background: #525659;"></iframe>
         </div>
     </div>
 </div>
@@ -246,6 +361,10 @@
                 <div class="form-group">
                     <label>Payment Amount (₱)</label>
                     <input type="number" step="0.01" name="amount" class="form-control" required max="{{ $record->balance }}" value="{{ $record->balance }}">
+                </div>
+                <div class="form-group" style="margin-top: 12px;">
+                    <label>Payment Date</label>
+                    <input type="date" name="payment_date" class="form-control" value="{{ now()->toDateString() }}" max="{{ now()->toDateString() }}">
                 </div>
             </div>
             <div style="padding:16px 24px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; gap:12px; justify-content:flex-end;">
@@ -320,6 +439,28 @@
         const sel = document.getElementById('retentionOnHold');
         sel.value = sel.value === '1' ? '0' : '1';
         sel.form.requestSubmit();
+    }
+
+    function openFinancingReceiptModal(url) {
+        const frame = document.getElementById('financingReceiptFrame');
+        if (frame) frame.src = url;
+        const modal = document.getElementById('financingReceiptModal');
+        if (modal) modal.style.display = 'flex';
+    }
+
+    function closeFinancingReceiptModal() {
+        const modal = document.getElementById('financingReceiptModal');
+        if (modal) modal.style.display = 'none';
+        const frame = document.getElementById('financingReceiptFrame');
+        if (frame) frame.src = 'about:blank';
+    }
+
+    function printFinancingReceiptFrame() {
+        const frame = document.getElementById('financingReceiptFrame');
+        if (frame && frame.contentWindow) {
+            frame.contentWindow.focus();
+            frame.contentWindow.print();
+        }
     }
 </script>
 @endsection

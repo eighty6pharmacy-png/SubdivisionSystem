@@ -235,8 +235,8 @@
                         <div style="font-size: 7.5px; color: #333333;">{{ $b['email'] }}</div>
                     </td>
                     <td style="font-weight: bold; color: #000000;">{{ $b['lots'] }}</td>
-                    <td style="text-align: right; font-family: monospace;">₱{{ number_format($b['tcp'], 2) }}</td>
-                    <td style="text-align: right; font-family: monospace;">₱{{ number_format($b['equity'], 2) }}</td>
+                    <td style="text-align: right;">₱{{ number_format($b['tcp'], 2) }}</td>
+                    <td style="text-align: right;">₱{{ number_format($b['equity'], 2) }}</td>
                     <td style="text-align: center;">
                         @if($b['status'] === 'Active')
                             <span class="badge badge-active">ACTIVE</span>

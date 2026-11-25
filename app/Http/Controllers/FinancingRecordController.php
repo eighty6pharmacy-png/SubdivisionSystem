@@ -53,7 +53,15 @@ class FinancingRecordController extends Controller
         $totalPaid = (clone $linked)->sum('amount_paid');
         $totalBalances = (clone $linked)->sum('balance');
 
-        return view('admin.financing.index', compact('records', 'blocks', 'statusCounts', 'totalReceivables', 'totalPaid', 'totalBalances'));
+        $buyersWithFinancing = FinancingRecord::pluck('buyer_id')->toArray();
+        $eligibleBuyers = BuyerMasterList::whereNotIn('id', $buyersWithFinancing)
+            ->whereHas('reservations.downpayments')
+            ->with('reservations.lot')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get();
+
+        return view('admin.financing.index', compact('records', 'blocks', 'statusCounts', 'totalReceivables', 'totalPaid', 'totalBalances', 'eligibleBuyers'));
     }
 
     public function create()
@@ -97,7 +105,11 @@ class FinancingRecordController extends Controller
 
     public function show($id)
     {
-        $record = FinancingRecord::with(['buyerMasterList', 'lot'])->findOrFail($id);
+        $record = FinancingRecord::with([
+            'buyerMasterList',
+            'lot',
+            'payments' => fn ($q) => $q->orderByDesc('payment_date')->orderByDesc('id'),
+        ])->findOrFail($id);
         return view('admin.financing.show', compact('record'));
     }
 
@@ -231,5 +243,26 @@ class FinancingRecordController extends Controller
         $recorder->recordFinancingPayment($record, (float) $request->amount, 'Office Payment', null, null, $paidAt);
 
         return back()->with('success', 'Payment Recorded');
+    }
+
+    public function downloadReceipt($paymentId)
+    {
+        $hist = \Illuminate\Support\Facades\DB::table('payments')
+            ->where('id', $paymentId)
+            ->whereNotNull('financing_record_id')
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$hist) {
+            abort(404, 'Payment record not found.');
+        }
+
+        $fin = FinancingRecord::with(['buyerMasterList', 'lot'])->findOrFail($hist->financing_record_id);
+        $buyer = $fin->buyerMasterList;
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->setPaper('a4', 'portrait');
+        $pdf->loadView('buyer.receipt_pdf', compact('hist', 'buyer', 'fin'));
+        return $pdf->stream('Receipt_Financing_' . $hist->id . '.pdf');
     }
 }

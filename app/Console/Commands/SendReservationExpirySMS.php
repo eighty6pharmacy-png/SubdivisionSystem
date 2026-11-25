@@ -63,11 +63,16 @@ class SendReservationExpirySMS extends Command
             }
         }
 
-        // 2. Reservations that expired yesterday (1 day past deadline, not yet reminded)
-        $expiredYesterday = Reservation::whereIn('status', $activeStatuses)
+        // 2. Reservations that expired yesterday (1 day past deadline, not yet reminded).
+        // Include Cancelled so auto-cancellation earlier in the day does not suppress the 1-day-overdue SMS.
+        $expiredYesterday = Reservation::whereIn('status', [
+                ...$activeStatuses,
+                ReservationStatus::Cancelled->value,
+            ])
             ->whereNotNull('deadline_date')
             ->whereNull('expired_reminder_sent_at')
             ->whereDate('deadline_date', Carbon::now()->subDays(1)->toDateString())
+            ->whereDoesntHave('downpayments', fn ($q) => $q->where('amount', '>', 0))
             ->with(['lot', 'buyerMasterList', 'user'])
             ->get();
 

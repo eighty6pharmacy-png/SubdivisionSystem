@@ -283,15 +283,17 @@ class ReservationReceiptController extends Controller
         $billingAddress = $saved['billing_address'] ?? $buyer?->present_address ?? $postalAddress;
         $contactNumber = $saved['contact_number'] ?? $buyer?->contact_number ?? $user?->contact_number ?? '';
 
-        // GIS Property Specification (from Lot)
-        $tcp = (float) ($lot?->contract_price ?? $financing?->contract_price ?? 0);
+        // GIS Property Specification (from Lot, falling back to FinancingRecord when lot price is empty/zero)
+        $lotTcp = $lot?->contract_price !== null ? (float) $lot->contract_price : 0.0;
+        $finTcp = $financing?->contract_price !== null ? (float) $financing->contract_price : 0.0;
+        $tcp = $lotTcp > 0 ? $lotTcp : $finTcp;
         $discountPercent = (float) ($saved['discount_percent'] ?? 0);
         $discountAmount = array_key_exists('discount_amount', $saved) && $saved['discount_amount'] !== null
             ? (float) $saved['discount_amount']
             : round($tcp * ($discountPercent / 100), 2);
         $ntp = max(0, round($tcp - $discountAmount, 2));
 
-        // Financing / Equity defaults
+        // Financing / Equity — synced strictly from actual Downpayment / FinancingRecord when present
         $financingMethodRaw = strtoupper((string) ($financing?->financing_method ?? 'PAG-IBIG FUND'));
         $defaultFinancingType = match (true) {
             str_contains($financingMethodRaw, 'DIRECT') => 'DIRECT FINANCING',
@@ -300,41 +302,76 @@ class ReservationReceiptController extends Controller
         };
         $financingType = $saved['financing_type'] ?? $defaultFinancingType;
 
-        $equityPercent = array_key_exists('equity_percent', $saved) && $saved['equity_percent'] !== null
-            ? (float) $saved['equity_percent']
-            : 20.0;
-        $loanBalancePercent = array_key_exists('loan_balance_percent', $saved) && $saved['loan_balance_percent'] !== null
-            ? (float) $saved['loan_balance_percent']
-            : max(0, 100.0 - $equityPercent);
+        $hasManualDpOverride = (array_key_exists('required_equity', $saved) && $saved['required_equity'] !== null)
+            || (array_key_exists('net_equity_downpayment', $saved) && $saved['net_equity_downpayment'] !== null)
+            || (array_key_exists('equity_percent', $saved) && $saved['equity_percent'] !== null);
+        $hasDownpayment = $dp !== null || $hasManualDpOverride;
 
-        $requiredEquity = array_key_exists('required_equity', $saved) && $saved['required_equity'] !== null
-            ? (float) $saved['required_equity']
-            : ($dp ? (float) $dp->amount + $amount : round($ntp * ($equityPercent / 100), 2));
+        if ($dp !== null) {
+            // Downpayment record is the source of truth: amount (paid so far) + balance (remaining) = net equity DP
+            $dpTotalNet = round((float) $dp->amount + (float) $dp->balance, 2);
+            $dpGrossEquity = round($dpTotalNet + $amount, 2);
+            $computedEquityPct = ($ntp > 0 && $dpGrossEquity > 0)
+                ? round(($dpGrossEquity / $ntp) * 100, 2)
+                : null;
 
-        $netEquityDownpayment = array_key_exists('net_equity_downpayment', $saved) && $saved['net_equity_downpayment'] !== null
-            ? (float) $saved['net_equity_downpayment']
-            : ($dp ? (float) $dp->amount : max(0, round($requiredEquity - $amount, 2)));
-
-        $equityMonths = (int) ($saved['equity_period_count'] ?? $dp?->months_to_pay ?? 24);
-        $monthlyEquityAmort = array_key_exists('monthly_amortization_equity', $saved) && $saved['monthly_amortization_equity'] !== null
-            ? (float) $saved['monthly_amortization_equity']
-            : ($dp?->monthly_amortization !== null
+            $equityPercent = $computedEquityPct;
+            $requiredEquity = $dpGrossEquity;
+            $netEquityDownpayment = $dpTotalNet;
+            $equityMonths = $dp->months_to_pay ? (int) $dp->months_to_pay : null;
+            $monthlyEquityAmort = $dp->monthly_amortization !== null
                 ? (float) $dp->monthly_amortization
-                : ($equityMonths > 0 ? round($netEquityDownpayment / $equityMonths, 2) : 0));
+                : ($equityMonths && $equityMonths > 0 ? round($netEquityDownpayment / $equityMonths, 2) : null);
 
-        $loanBalanceAmount = array_key_exists('loan_balance_amount', $saved) && $saved['loan_balance_amount'] !== null
-            ? (float) $saved['loan_balance_amount']
-            : ($financing?->loan_base !== null
-                ? (float) $financing->loan_base
-                : round($ntp * ($loanBalancePercent / 100), 2));
+            $loanBalancePercent = $equityPercent !== null ? max(0, round(100.0 - $equityPercent, 2)) : null;
 
-        $loanablePagibig = array_key_exists('loanable_pagibig', $saved) && $saved['loanable_pagibig'] !== null
-            ? (float) $saved['loanable_pagibig']
-            : ($financingType === 'PAG-IBIG FUND' ? $loanBalanceAmount : 0);
+            $finLoanBase = $financing?->loan_base !== null ? (float) $financing->loan_base : 0.0;
+            $loanBalanceAmount = $finLoanBase > 0
+                ? $finLoanBase
+                : max(0, round($ntp - $requiredEquity, 2));
 
-        $loanableDf = array_key_exists('loanable_df', $saved) && $saved['loanable_df'] !== null
-            ? (float) $saved['loanable_df']
-            : ($financingType === 'DIRECT FINANCING' ? $loanBalanceAmount : 0);
+            $loanablePagibig = $financingType === 'PAG-IBIG FUND' ? $loanBalanceAmount : 0.0;
+            $loanableDf = $financingType === 'DIRECT FINANCING' ? $loanBalanceAmount : 0.0;
+        } elseif ($hasManualDpOverride) {
+            $equityPercent = array_key_exists('equity_percent', $saved) && $saved['equity_percent'] !== null
+                ? (float) $saved['equity_percent']
+                : null;
+            $loanBalancePercent = array_key_exists('loan_balance_percent', $saved) && $saved['loan_balance_percent'] !== null
+                ? (float) $saved['loan_balance_percent']
+                : ($equityPercent !== null ? max(0, round(100.0 - $equityPercent, 2)) : null);
+            $requiredEquity = array_key_exists('required_equity', $saved) && $saved['required_equity'] !== null
+                ? (float) $saved['required_equity']
+                : ($equityPercent !== null ? round($ntp * ($equityPercent / 100), 2) : null);
+            $netEquityDownpayment = array_key_exists('net_equity_downpayment', $saved) && $saved['net_equity_downpayment'] !== null
+                ? (float) $saved['net_equity_downpayment']
+                : ($requiredEquity !== null ? max(0, round($requiredEquity - $amount, 2)) : null);
+            $equityMonths = array_key_exists('equity_period_count', $saved) && $saved['equity_period_count'] !== null
+                ? (int) $saved['equity_period_count']
+                : null;
+            $monthlyEquityAmort = array_key_exists('monthly_amortization_equity', $saved) && $saved['monthly_amortization_equity'] !== null
+                ? (float) $saved['monthly_amortization_equity']
+                : ($netEquityDownpayment !== null && $equityMonths && $equityMonths > 0 ? round($netEquityDownpayment / $equityMonths, 2) : null);
+            $loanBalanceAmount = array_key_exists('loan_balance_amount', $saved) && $saved['loan_balance_amount'] !== null
+                ? (float) $saved['loan_balance_amount']
+                : ($requiredEquity !== null ? max(0, round($ntp - $requiredEquity, 2)) : null);
+            $loanablePagibig = array_key_exists('loanable_pagibig', $saved) && $saved['loanable_pagibig'] !== null
+                ? (float) $saved['loanable_pagibig']
+                : ($financingType === 'PAG-IBIG FUND' ? $loanBalanceAmount : 0.0);
+            $loanableDf = array_key_exists('loanable_df', $saved) && $saved['loanable_df'] !== null
+                ? (float) $saved['loanable_df']
+                : ($financingType === 'DIRECT FINANCING' ? $loanBalanceAmount : 0.0);
+        } else {
+            // No downpayment created yet: do not fabricate downpayment/equity figures on the receipt
+            $equityPercent = null;
+            $requiredEquity = null;
+            $netEquityDownpayment = null;
+            $equityMonths = null;
+            $monthlyEquityAmort = null;
+            $loanBalancePercent = null;
+            $loanBalanceAmount = null;
+            $loanablePagibig = null;
+            $loanableDf = null;
+        }
 
         $amountInWords = ! empty($saved['amount_in_words'])
             ? strtoupper((string) $saved['amount_in_words'])
@@ -387,6 +424,7 @@ class ReservationReceiptController extends Controller
             'tax_dec_no' => $lot?->tax_dec_no ?? '',
 
             // Financial / Installment Plan
+            'has_downpayment' => $hasDownpayment,
             'discount_percent' => $discountPercent,
             'discount_amount' => $discountAmount,
             'net_contract_price' => $ntp,
@@ -395,7 +433,7 @@ class ReservationReceiptController extends Controller
             'equity_percent' => $equityPercent,
             'required_equity' => $requiredEquity,
             'net_equity_downpayment' => $netEquityDownpayment,
-            'term_of_equity' => $saved['term_of_equity'] ?? ($equityMonths . ' Months'),
+            'term_of_equity' => $saved['term_of_equity'] ?? ($equityMonths ? ($equityMonths . ' Months') : ''),
             'monthly_amortization_equity' => $monthlyEquityAmort,
             'equity_period_count' => $equityMonths,
             'equity_start_date' => $saved['equity_start_date'] ?? ($dp?->due_date ? Carbon::parse($dp->due_date)->format('M d, Y') : ''),

@@ -24,6 +24,8 @@ class Downpayment extends Model
         'contract_date',
         'penalty_percentage',
         'paymongo_checkout_id',
+        'reminder_5d_sent_at',
+        'overdue_reminder_sent_at',
     ];
 
     protected function casts(): array

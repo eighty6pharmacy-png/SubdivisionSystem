@@ -1482,20 +1482,24 @@
             const tcp = parseFloat(document.getElementById('rcpt_total_contract_price')?.value || 0) || 0;
             const discPct = parseFloat(document.getElementById('rcpt_discount_percent')?.value || 0) || 0;
             const resFee = parseFloat(document.getElementById('rcpt_amount')?.value || 0) || 0;
-            const eqPct = parseFloat(document.getElementById('rcpt_equity_percent')?.value || 20) || 0;
-            const eqMonths = parseInt(document.getElementById('rcpt_equity_period_count')?.value || 24, 10) || 24;
+            const eqPctRaw = document.getElementById('rcpt_equity_percent')?.value;
+            const eqPct = eqPctRaw !== '' && eqPctRaw !== undefined ? (parseFloat(eqPctRaw) || 0) : null;
+            const eqMonthsRaw = document.getElementById('rcpt_equity_period_count')?.value;
+            const eqMonths = eqMonthsRaw !== '' && eqMonthsRaw !== undefined ? (parseInt(eqMonthsRaw, 10) || 0) : 0;
 
             const discAmt = Math.round(tcp * (discPct / 100) * 100) / 100;
             const ntp = Math.max(0, Math.round((tcp - discAmt) * 100) / 100);
+            document.getElementById('rcpt_discount_amount').value = discAmt.toFixed(2);
+
+            if (eqPct === null) return;
+
             const reqEq = Math.round(ntp * (eqPct / 100) * 100) / 100;
             const netEq = Math.max(0, Math.round((reqEq - resFee) * 100) / 100);
             const monthlyEq = eqMonths > 0 ? Math.round((netEq / eqMonths) * 100) / 100 : 0;
-            const loanBal = Math.max(0, Math.round((ntp - reqEq) * 100) / 100);
 
-            document.getElementById('rcpt_discount_amount').value = discAmt.toFixed(2);
             document.getElementById('rcpt_required_equity').value = reqEq.toFixed(2);
             document.getElementById('rcpt_net_equity_downpayment').value = netEq.toFixed(2);
-            document.getElementById('rcpt_monthly_amortization_equity').value = monthlyEq.toFixed(2);
+            document.getElementById('rcpt_monthly_amortization_equity').value = eqMonths > 0 ? monthlyEq.toFixed(2) : '';
         }
 
         async function saveReservationReceiptData() {
@@ -1506,8 +1510,13 @@
                 btn.textContent = 'Saving...';
             }
 
-            const getVal = (id) => document.getElementById(id)?.value ?? null;
-            const eqPct = parseFloat(getVal('rcpt_equity_percent') || 20) || 0;
+            const getVal = (id) => {
+                const v = document.getElementById(id)?.value;
+                return (v === undefined || v === null || String(v).trim() === '') ? null : v;
+            };
+            const eqPctRaw = getVal('rcpt_equity_percent');
+            const eqPct = eqPctRaw !== null ? (parseFloat(eqPctRaw) || 0) : null;
+            const eqMonthsRaw = getVal('rcpt_equity_period_count');
 
             const payload = {
                 reservation_date: getVal('rcpt_reservation_date'),
@@ -1539,12 +1548,12 @@
                 discount_percent: getVal('rcpt_discount_percent') || 0,
                 discount_amount: getVal('rcpt_discount_amount') || 0,
                 equity_percent: eqPct,
-                loan_balance_percent: Math.max(0, 100 - eqPct),
-                required_equity: getVal('rcpt_required_equity') || 0,
-                net_equity_downpayment: getVal('rcpt_net_equity_downpayment') || 0,
-                equity_period_count: getVal('rcpt_equity_period_count') || 24,
-                term_of_equity: (getVal('rcpt_equity_period_count') || 24) + ' Months',
-                monthly_amortization_equity: getVal('rcpt_monthly_amortization_equity') || 0,
+                loan_balance_percent: eqPct !== null ? Math.max(0, 100 - eqPct) : null,
+                required_equity: getVal('rcpt_required_equity'),
+                net_equity_downpayment: getVal('rcpt_net_equity_downpayment'),
+                equity_period_count: eqMonthsRaw,
+                term_of_equity: eqMonthsRaw !== null ? (eqMonthsRaw + ' Months') : null,
+                monthly_amortization_equity: getVal('rcpt_monthly_amortization_equity'),
                 equity_start_date: getVal('rcpt_equity_start_date'),
                 financing_type: getVal('rcpt_financing_type'),
                 loan_balance_amount: getVal('rcpt_loan_balance_amount') || 0,

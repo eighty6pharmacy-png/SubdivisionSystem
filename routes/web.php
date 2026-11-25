@@ -1703,7 +1703,35 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
     })->name('admin.billing.report.pdf');
 
-    Route::get('/billing', function () {
+    $dispatchPendingUtilityDueSms = static function () {
+        $hasPending = \App\Models\UtilityBill::query()
+            ->whereIn('status', ['unpaid', 'partially_paid'])
+            ->whereNotNull('due_date')
+            ->whereRaw('(COALESCE(amount, 0) + COALESCE(previous_balance, 0)) > 0')
+            ->where(function ($q) {
+                $q->where(function ($sub) {
+                    $sub->whereNull('reminder_5d_sent_at')
+                        ->whereDate('due_date', now()->addDays(5)->toDateString());
+                })->orWhere(function ($sub) {
+                    $sub->whereNull('overdue_reminder_sent_at')
+                        ->whereDate('due_date', now()->subDays(1)->toDateString());
+                });
+            })
+            ->exists();
+
+        if ($hasPending && \Illuminate\Support\Facades\Cache::add('utility_due_sms_dispatch_lock', true, now()->addMinutes(5))) {
+            dispatch(function () {
+                try {
+                    \Illuminate\Support\Facades\Artisan::call('sms:utility-due');
+                } finally {
+                    \Illuminate\Support\Facades\Cache::forget('utility_due_sms_dispatch_lock');
+                }
+            })->afterResponse();
+        }
+    };
+
+    Route::get('/billing', function () use ($dispatchPendingUtilityDueSms) {
+        $dispatchPendingUtilityDueSms();
         $bills = getElectricalBills(request('cycle'), false);
         $lots = getLotStatus();
         $validCycles = getValidBillingCycles('electricity');
@@ -1792,7 +1820,8 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         return $download ? $pdf->download($fileName) : $pdf->stream($fileName);
     })->name('admin.water.report.pdf');
 
-    Route::get('/water', function () {
+    Route::get('/water', function () use ($dispatchPendingUtilityDueSms) {
+        $dispatchPendingUtilityDueSms();
         $yearly_stats = calculateBillingStats('water');
         $validCycles = getValidBillingCycles('water');
         return view('admin.water.index', [
@@ -2312,22 +2341,28 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     Route::get('/reservation-fee', function () {
         \App\Models\Reservation::where('status', 'Converted')
             ->update(['status' => \App\Enums\ReservationStatus::Reserved->value]);
-        \App\Models\Reservation::cancelExpiredUnpaid();
 
-        // Trigger automated 5-day-before-expiry & 1-day-overdue SMS reminders after response
-        // if any active reservations are due today and haven't been reminded yet (works even without cron).
-        $hasPendingAutoSms = \App\Models\Reservation::whereIn('status', [
-                \App\Enums\ReservationStatus::Pending->value,
-                \App\Enums\ReservationStatus::Reserved->value,
-            ])
+        // Check for pending 5-day-before-expiry & 1-day-overdue SMS reminders BEFORE
+        // auto-cancelling expired reservations so 1-day-overdue notices still fire.
+        $hasPendingAutoSms = \App\Models\Reservation::query()
             ->whereNotNull('deadline_date')
             ->where(function ($q) {
                 $q->where(function ($sub) {
-                    $sub->whereNull('expiry_reminder_5d_sent_at')
+                    $sub->whereIn('status', [
+                            \App\Enums\ReservationStatus::Pending->value,
+                            \App\Enums\ReservationStatus::Reserved->value,
+                        ])
+                        ->whereNull('expiry_reminder_5d_sent_at')
                         ->whereDate('deadline_date', now()->addDays(5)->toDateString());
                 })->orWhere(function ($sub) {
-                    $sub->whereNull('expired_reminder_sent_at')
-                        ->whereDate('deadline_date', now()->subDays(1)->toDateString());
+                    $sub->whereIn('status', [
+                            \App\Enums\ReservationStatus::Pending->value,
+                            \App\Enums\ReservationStatus::Reserved->value,
+                            \App\Enums\ReservationStatus::Cancelled->value,
+                        ])
+                        ->whereNull('expired_reminder_sent_at')
+                        ->whereDate('deadline_date', now()->subDays(1)->toDateString())
+                        ->whereDoesntHave('downpayments', fn ($dp) => $dp->where('amount', '>', 0));
                 });
             })
             ->exists();
@@ -2335,11 +2370,14 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         if ($hasPendingAutoSms && \Illuminate\Support\Facades\Cache::add('reservation_expiry_sms_dispatch_lock', true, now()->addMinutes(5))) {
             dispatch(function () {
                 try {
+                    // SendReservationExpirySMS sends the SMS first and then calls Reservation::cancelExpiredUnpaid().
                     \Illuminate\Support\Facades\Artisan::call('sms:reservation-expiry');
                 } finally {
                     \Illuminate\Support\Facades\Cache::forget('reservation_expiry_sms_dispatch_lock');
                 }
             })->afterResponse();
+        } else {
+            \App\Models\Reservation::cancelExpiredUnpaid();
         }
 
         $yearly_stats = [
@@ -2477,6 +2515,30 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
             ->update(['status' => \App\Enums\ReservationStatus::Reserved->value]);
         \App\Models\Reservation::cancelExpiredUnpaid();
 
+        $hasPendingDownpaymentSms = \App\Models\Downpayment::query()
+            ->where('balance', '>', 0)
+            ->whereNotNull('due_date')
+            ->where(function ($q) {
+                $q->where(function ($sub) {
+                    $sub->whereNull('reminder_5d_sent_at')
+                        ->whereDate('due_date', now()->addDays(5)->toDateString());
+                })->orWhere(function ($sub) {
+                    $sub->whereNull('overdue_reminder_sent_at')
+                        ->whereDate('due_date', now()->subDays(1)->toDateString());
+                });
+            })
+            ->exists();
+
+        if ($hasPendingDownpaymentSms && \Illuminate\Support\Facades\Cache::add('buyer_due_sms_dispatch_lock', true, now()->addMinutes(5))) {
+            dispatch(function () {
+                try {
+                    \Illuminate\Support\Facades\Artisan::call('sms:buyer-due');
+                } finally {
+                    \Illuminate\Support\Facades\Cache::forget('buyer_due_sms_dispatch_lock');
+                }
+            })->afterResponse();
+        }
+
         // Fetch only buyers from the Master List who have an active reservation without a downpayment yet
         $readyReservationFilter = function ($q) {
             $q->whereDoesntHave('downpayments')
@@ -2495,8 +2557,9 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                     $q->with('lot')->orderByDesc('created_at');
                 }
             ])
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->get()
-            ->sortBy(fn ($buyer) => $buyer->last_name)
             ->values();
 
         return view('admin.downpayment-fee.index', [
@@ -2977,6 +3040,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
     // Financing System
     Route::resource('financing', \App\Http\Controllers\FinancingRecordController::class);
     Route::post('financing/{id}/pay', [\App\Http\Controllers\FinancingRecordController::class, 'recordPayment'])->name('financing.pay');
+    Route::get('financing/receipt/{paymentId}', [\App\Http\Controllers\FinancingRecordController::class, 'downloadReceipt'])->name('financing.receipt');
 });
 
 Route::post('/api/settings', function (\Illuminate\Http\Request $request) {
@@ -3001,6 +3065,7 @@ Route::prefix('buyer')->middleware(['auth', 'role:Buyer|Resident', 'sync_paymong
     Route::get('/payments', [\App\Http\Controllers\BuyerPortalController::class, 'payments'])->name('buyer.payments');
     Route::get('/payments/downpayment/history', [\App\Http\Controllers\BuyerPortalController::class, 'dpHistory'])->name('buyer.payments.dp.history');
     Route::get('/payments/downpayment/receipt/{id}', [\App\Http\Controllers\BuyerPortalController::class, 'downloadDpReceipt'])->name('buyer.payments.dp.receipt');
+    Route::get('/payments/financing/receipt/{id}', [\App\Http\Controllers\BuyerPortalController::class, 'downloadFinancingReceipt'])->name('buyer.payments.financing.receipt');
     Route::post('/api/downpayment/pay', [\App\Http\Controllers\BuyerPortalController::class, 'payDownpayment']);
     Route::post('/api/financing/pay', [\App\Http\Controllers\BuyerPortalController::class, 'payFinancing']);
 });

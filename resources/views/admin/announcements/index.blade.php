@@ -264,20 +264,39 @@
         });
 
         window.archiveAnnouncementById = function(id) {
-            if (!confirm('Are you sure you want to archive this announcement?')) return;
-            const row = document.querySelector(`.ann-row[data-id="${id}"]`);
-            if (row) {
-                row.setAttribute('data-archived', 'true');
-                row.setAttribute('data-status-val', 'archived');
-                const cell = row.querySelector('.ann-status-cell');
-                if (cell) cell.innerHTML = '<span class="badge" style="background: #fee2e2; color: #991b1b; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;">Archived</span>';
-                const archBtn = row.querySelector('.btn-row-archive');
-                const restBtn = row.querySelector('.btn-row-restore');
-                if (archBtn) archBtn.style.display = 'none';
-                if (restBtn) restBtn.style.display = 'flex';
-            }
-            updateStats();
-            filterCards();
+            Swal.fire({
+                title: 'Archive Announcement?',
+                text: 'Are you sure you want to archive this announcement?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc2626',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Yes, archive it',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                const row = document.querySelector(`.ann-row[data-id="${id}"]`);
+                if (row) {
+                    row.setAttribute('data-archived', 'true');
+                    row.setAttribute('data-status-val', 'archived');
+                    const cell = row.querySelector('.ann-status-cell');
+                    if (cell) cell.innerHTML = '<span class="badge" style="background: #fee2e2; color: #991b1b; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;">Archived</span>';
+                    const archBtn = row.querySelector('.btn-row-archive');
+                    const restBtn = row.querySelector('.btn-row-restore');
+                    if (archBtn) archBtn.style.display = 'none';
+                    if (restBtn) restBtn.style.display = 'flex';
+                }
+                updateStats();
+                filterCards();
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Archived!',
+                    text: 'The announcement has been archived.',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+            });
         };
 
         window.restoreAnnouncementById = function(id) {

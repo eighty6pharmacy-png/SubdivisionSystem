@@ -234,7 +234,7 @@
                         @endif
                     </td>
                     <td style="color: #000000;">{{ $b['contact'] }}</td>
-                    <td style="text-align: right; font-family: monospace; font-weight: bold;">₱{{ number_format((float)$b['amount'], 2) }}</td>
+                    <td style="text-align: right; font-weight: bold;">₱{{ number_format((float)$b['amount'], 2) }}</td>
                     <td style="text-align: center; color: #000000;">{{ $b['date'] }}</td>
                     <td style="text-align: center; color: #000000;">{{ $b['deadline'] ?? '—' }}</td>
                     <td style="text-align: center;">

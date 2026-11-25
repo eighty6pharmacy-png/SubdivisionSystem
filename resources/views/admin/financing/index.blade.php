@@ -46,16 +46,27 @@
             <p>Monitor loan releases, deductions, and buyer receivables.</p>
         </div>
         <div class="bill-actions">
-            <a href="{{ route('financing.create') }}" class="btn btn-outline" style="border-color: var(--bill-primary); color: var(--bill-primary); display: inline-flex; align-items: center; text-decoration: none;">
+            <button type="button" class="btn btn-primary" onclick="openNewFinancingModal()">
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
                     style="margin-right: 8px;">
                     <path stroke-linecap="round" stroke-linejoin="round"
-                        d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        d="M12 4v16m8-8H4" />
                 </svg>
                 New Record
-            </a>
+            </button>
         </div>
     </div>
+
+    @if(session('success'))
+        <div style="background: #d1fae5; color: #065f46; border-left: 4px solid #059669; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-weight: 600; font-size: 14px;">
+            {{ session('success') }}
+        </div>
+    @endif
+    @if(session('error'))
+        <div style="background: #fee2e2; color: #991b1b; border-left: 4px solid #dc2626; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-weight: 600; font-size: 14px;">
+            {{ session('error') }}
+        </div>
+    @endif
 
     <!-- Stats Summary Row -->
     <div class="responsive-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 24px;">
@@ -224,6 +235,187 @@
             }
         });
     });
+
+    const finBuyersList = @json($eligibleBuyers ?? []);
+
+    function filterFinBuyers(query) {
+        const resultsBox = document.getElementById('finBuyerSearchResults');
+        if (!resultsBox) return;
+
+        const q = (query || '').toLowerCase().trim();
+        const filtered = finBuyersList.filter(b => {
+            const fullName = `${b.first_name || ''} ${b.middle_name || ''} ${b.last_name || ''}`.toLowerCase();
+            const reverseName = `${b.last_name || ''} ${b.first_name || ''}`.toLowerCase();
+            const email = (b.email || '').toLowerCase();
+            const contact = (b.contact_number || '').toLowerCase();
+            const lotMatch = `block ${b.block_no || ''} lot ${b.lot_no || ''} blk ${b.block_no || ''}`.toLowerCase();
+            return !q || fullName.includes(q) || reverseName.includes(q) || email.includes(q) || contact.includes(q) || lotMatch.includes(q);
+        });
+
+        if (filtered.length === 0) {
+            resultsBox.innerHTML = '<div style="padding: 16px; text-align: center; color: #94a3b8; font-size: 13px;">No matching buyers found.</div>';
+            resultsBox.style.display = 'block';
+            return;
+        }
+
+        resultsBox.innerHTML = filtered.map((b, idx) => {
+            const fullName = `${b.last_name || ''}, ${b.first_name || ''}${b.middle_name ? ' ' + b.middle_name.charAt(0) + '.' : ''}`;
+            const contact = b.contact_number || 'No contact';
+            const email = b.email || '';
+            const recentTag = !q && idx < 3
+                ? `<span style="font-size: 10px; padding: 2px 6px; background: #fef3c7; color: #92400e; border-radius: 4px; font-weight: 700; margin-right: 4px;">Recent</span>`
+                : '';
+
+            const lots = (b.reservations || [])
+                .filter(r => r.status !== 'Cancelled' && r.lot)
+                .map(r => `Blk ${r.lot.block} Lot ${r.lot.lot_number}`);
+            const lotText = lots.length > 0 ? lots.join(', ') : `Blk ${b.block_no || 'N/A'} Lot ${b.lot_no || 'N/A'}`;
+            const lotBadge = `<span style="font-size: 11px; padding: 2px 6px; background: #e0f2fe; color: #0369a1; border-radius: 4px; font-weight: 700;">${lotText}</span>`;
+
+            return `
+                <div onclick="selectFinBuyer('${b.id}')"
+                    style="padding: 10px 14px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background 0.15s ease;"
+                    onmouseover="this.style.background='#f8fafc'"
+                    onmouseout="this.style.background='#ffffff'">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                        <span style="font-weight: 700; font-size: 14px; color: #0f172a;">${fullName}</span>
+                        <span>${recentTag}${lotBadge}</span>
+                    </div>
+                    <div style="font-size: 12px; color: #64748b; margin-top: 2px;">
+                        ${email ? email + ' • ' : ''}${contact}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        resultsBox.style.display = 'block';
+    }
+
+    function selectFinBuyer(id) {
+        const buyer = finBuyersList.find(b => String(b.id) === String(id));
+        if (!buyer) return;
+
+        document.getElementById('finBuyerId').value = buyer.id;
+        const fullName = `${buyer.last_name || ''}, ${buyer.first_name || ''}${buyer.middle_name ? ' ' + buyer.middle_name : ''}`;
+        document.getElementById('finSelectedBuyerName').textContent = fullName;
+        document.getElementById('finSelectedBuyerMeta').textContent = `${buyer.email ? buyer.email + ' • ' : ''}${buyer.contact_number || 'No contact'}`;
+
+        const lots = (buyer.reservations || [])
+            .filter(r => r.status !== 'Cancelled' && r.lot)
+            .map(r => `Blk ${r.lot.block} Lot ${r.lot.lot_number}`);
+        const lotList = lots.length > 0 ? lots : [`Blk ${buyer.block_no || 'N/A'} Lot ${buyer.lot_no || 'N/A'}`];
+        document.getElementById('finSelectedBuyerLots').innerHTML =
+            `<span style="font-size: 12px; font-weight: 600; color: #15803d;">Lot: </span>` +
+            lotList.map(l => `<span style="display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: 700; background: #dcfce7; color: #166534; border-radius: 6px; margin-right: 4px;">${l}</span>`).join('');
+
+        document.getElementById('finSelectedBuyerCard').style.display = 'flex';
+        document.getElementById('finBuyerSearchContainer').style.display = 'none';
+        document.getElementById('finBuyerSearchResults').style.display = 'none';
+    }
+
+    function clearFinSelectedBuyer(focusInput = true) {
+        document.getElementById('finBuyerId').value = '';
+        const input = document.getElementById('finBuyerSearchInput');
+        if (input) input.value = '';
+        const results = document.getElementById('finBuyerSearchResults');
+        if (results) results.style.display = 'none';
+        const card = document.getElementById('finSelectedBuyerCard');
+        if (card) card.style.display = 'none';
+        const container = document.getElementById('finBuyerSearchContainer');
+        if (container) container.style.display = 'block';
+        if (focusInput && input) input.focus();
+    }
+
+    document.addEventListener('click', function(e) {
+        const container = document.getElementById('finBuyerSearchContainer');
+        const results = document.getElementById('finBuyerSearchResults');
+        if (container && results && !container.contains(e.target)) {
+            results.style.display = 'none';
+        }
+    });
+
+    function validateFinCreateForm(e) {
+        if (!document.getElementById('finBuyerId').value) {
+            e.preventDefault();
+            Swal.fire({
+                icon: 'warning',
+                title: 'Select Buyer',
+                text: 'Please select a buyer from the Master List.'
+            });
+            return false;
+        }
+        return true;
+    }
+
+    function openNewFinancingModal() {
+        clearFinSelectedBuyer(false);
+        const modal = document.getElementById('newFinancingModal');
+        if (modal) modal.style.display = 'flex';
+    }
+
+    function closeNewFinancingModal() {
+        const modal = document.getElementById('newFinancingModal');
+        if (modal) modal.style.display = 'none';
+    }
 </script>
+
+<!-- Create Financing Record Modal (matching Reservation & Downpayment popup UI) -->
+<div id="newFinancingModal" class="bill-modal"
+    style="display: none; align-items: center; justify-content: center; z-index: 3000;">
+    <div class="bill-modal-content" style="max-width: 540px; width: 95%; padding: 32px; border-radius: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div>
+                <h2 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0;">Create Loan &amp; Additional Fees Record</h2>
+                <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Select a buyer to initiate their loan tracking process.</p>
+            </div>
+            <button type="button" onclick="closeNewFinancingModal()"
+                style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">&times;</button>
+        </div>
+
+        <form action="{{ route('financing.store') }}" method="POST" onsubmit="return validateFinCreateForm(event)">
+            @csrf
+            <input type="hidden" name="buyer_id" id="finBuyerId" value="">
+
+            <div id="finSelectedBuyerCard" style="display: none; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 14px; padding: 14px 18px; margin-bottom: 16px; justify-content: space-between; align-items: center;">
+                <div>
+                    <div id="finSelectedBuyerName" style="font-size: 15px; font-weight: 800; color: #166534;"></div>
+                    <div id="finSelectedBuyerMeta" style="font-size: 12px; color: #15803d; margin-top: 3px;"></div>
+                    <div id="finSelectedBuyerLots" style="margin-top: 6px;"></div>
+                </div>
+                <button type="button" onclick="clearFinSelectedBuyer(true)"
+                    style="background: #ffffff; border: 1px solid #86efac; color: #15803d; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
+                    Change Buyer
+                </button>
+            </div>
+
+            <div id="finBuyerSearchContainer" style="margin-bottom: 20px; position: relative;">
+                <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">
+                    Select Buyer from Master List *
+                </label>
+                <div style="position: relative;">
+                    <input type="text" id="finBuyerSearchInput" class="filter-select"
+                        style="width: 100%; padding: 12px 14px 12px 38px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 14px; box-sizing: border-box;"
+                        placeholder="Search recent buyers by name, email, contact, or lot..."
+                        oninput="filterFinBuyers(this.value)"
+                        onfocus="filterFinBuyers(this.value)"
+                        autocomplete="off">
+                    <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; display: flex; align-items: center;">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    </span>
+                </div>
+                <div id="finBuyerSearchResults" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #fff; border: 1.5px solid #cbd5e1; border-radius: 12px; max-height: 220px; overflow-y: auto; z-index: 3100; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);">
+                </div>
+                <p style="font-size: 12px; color: #64748b; margin-top: 8px; margin-bottom: 0;">
+                    Only buyers who already have a downpayment contract are listed.
+                </p>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid #e2e8f0; padding-top: 20px;">
+                <button type="button" class="btn btn-outline" onclick="closeNewFinancingModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Generate Record</button>
+            </div>
+        </form>
+    </div>
+</div>
 @endsection
 

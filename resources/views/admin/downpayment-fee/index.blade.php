@@ -604,10 +604,36 @@
                 </div>
             @endif
 
-            <div style="margin-bottom: 16px;">
+            <div id="dpSelectedBuyerCard" style="display: none; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 14px; padding: 14px 18px; margin-bottom: 16px; justify-content: space-between; align-items: center;">
+                <div>
+                    <div id="dpSelectedBuyerName" style="font-size: 15px; font-weight: 800; color: #166534;"></div>
+                    <div id="dpSelectedBuyerMeta" style="font-size: 12px; color: #15803d; margin-top: 3px;"></div>
+                    <div id="dpSelectedBuyerLots" style="margin-top: 6px;"></div>
+                </div>
+                <button type="button" onclick="clearDpSelectedBuyer(true)"
+                    style="background: #ffffff; border: 1px solid #86efac; color: #15803d; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
+                    Change Buyer
+                </button>
+            </div>
+
+            <div id="dpBuyerSearchContainer" style="margin-bottom: 16px; position: relative;">
                 <label style="display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px;">Select
-                    buyer from Master List</label>
-                <select id="dpBuyerMasterList" class="filter-select" style="width: 100%; padding: 12px;"
+                    buyer from Master List *</label>
+                <div style="position: relative;">
+                    <input type="text" id="dpBuyerSearchInput" class="filter-select"
+                        style="width: 100%; padding: 12px 14px 12px 38px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 14px; box-sizing: border-box;"
+                        placeholder="Search recent buyers by name, email, contact, or lot..."
+                        oninput="filterDpBuyers(this.value)"
+                        onfocus="filterDpBuyers(this.value)"
+                        autocomplete="off">
+                    <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; display: flex; align-items: center;">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    </span>
+                </div>
+                <div id="dpBuyerSearchResults" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #fff; border: 1.5px solid #cbd5e1; border-radius: 12px; max-height: 220px; overflow-y: auto; z-index: 3100; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);">
+                </div>
+
+                <select id="dpBuyerMasterList" class="filter-select" style="display: none;"
                     onchange="autoFillDownpaymentBuyer(this)">
                     <option value="">-- Choose Buyer --</option>
                     @foreach($masterListBuyers as $b)
@@ -620,7 +646,8 @@
                                     ? $lotPrice
                                     : ($b->financingRecord?->contract_price ?? '');
                             @endphp
-                            <option value="{{ $b->id }}" data-first="{{ $b->first_name }}" data-last="{{ $b->last_name }}"
+                            <option value="{{ $b->id }}" data-first="{{ $b->first_name }}" data-middle="{{ $b->middle_name ?? '' }}" data-last="{{ $b->last_name }}"
+                                data-email="{{ $b->email ?? '' }}" data-contact="{{ $b->contact_number ?? '' }}"
                                 data-block="{{ $dispBlock }}" data-lot="{{ $dispLot }}" data-tcp="{{ $effectiveTcp }}"
                                 data-lot-price="{{ $lotPrice ?? '' }}"
                                 data-reservation-id="{{ $readyReservation->id }}"
@@ -950,6 +977,126 @@
             return { valid: true, value: Number(rawDigits) };
         }
 
+        function getDpBuyerEntries() {
+            const select = document.getElementById('dpBuyerMasterList');
+            if (!select) return [];
+            return Array.from(select.options)
+                .map((opt, index) => ({
+                    index,
+                    id: opt.value,
+                    first: opt.getAttribute('data-first') || '',
+                    middle: opt.getAttribute('data-middle') || '',
+                    last: opt.getAttribute('data-last') || '',
+                    email: opt.getAttribute('data-email') || '',
+                    contact: opt.getAttribute('data-contact') || '',
+                    block: opt.getAttribute('data-block') || '',
+                    lot: opt.getAttribute('data-lot') || '',
+                    reservationId: opt.getAttribute('data-reservation-id') || ''
+                }))
+                .filter(entry => entry.id !== '');
+        }
+
+        function filterDpBuyers(query) {
+            const resultsBox = document.getElementById('dpBuyerSearchResults');
+            if (!resultsBox) return;
+
+            const q = (query || '').toLowerCase().trim();
+            const entries = getDpBuyerEntries();
+            const filtered = entries.filter(b => {
+                const fullName = `${b.first} ${b.middle} ${b.last}`.toLowerCase();
+                const reverseName = `${b.last} ${b.first}`.toLowerCase();
+                const email = b.email.toLowerCase();
+                const contact = b.contact.toLowerCase();
+                const lotLabel = `block ${b.block} lot ${b.lot} blk ${b.block}`.toLowerCase();
+                return !q || fullName.includes(q) || reverseName.includes(q) || email.includes(q) || contact.includes(q) || lotLabel.includes(q);
+            });
+
+            if (filtered.length === 0) {
+                resultsBox.innerHTML = '<div style="padding: 16px; text-align: center; color: #94a3b8; font-size: 13px;">No matching buyers found.</div>';
+                resultsBox.style.display = 'block';
+                return;
+            }
+
+            resultsBox.innerHTML = filtered.map((b, idx) => {
+                const fullName = `${b.last}, ${b.first}${b.middle ? ' ' + b.middle.charAt(0) + '.' : ''}`;
+                const contact = b.contact || 'No contact';
+                const email = b.email || '';
+                const recentTag = !q && idx < 3
+                    ? `<span style="font-size: 10px; padding: 2px 6px; background: #fef3c7; color: #92400e; border-radius: 4px; font-weight: 700; margin-right: 4px;">Recent</span>`
+                    : '';
+                const lotBadge = `<span style="font-size: 11px; padding: 2px 6px; background: #e0f2fe; color: #0369a1; border-radius: 4px; font-weight: 700;">Blk ${b.block} Lot ${b.lot}</span>`;
+
+                return `
+                    <div onclick="selectDpBuyer(${b.index})"
+                        style="padding: 10px 14px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background 0.15s ease;"
+                        onmouseover="this.style.background='#f8fafc'"
+                        onmouseout="this.style.background='#ffffff'">
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                            <span style="font-weight: 700; font-size: 14px; color: #0f172a;">${fullName}</span>
+                            <span>${recentTag}${lotBadge}</span>
+                        </div>
+                        <div style="font-size: 12px; color: #64748b; margin-top: 2px;">
+                            ${email ? email + ' • ' : ''}${contact}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            resultsBox.style.display = 'block';
+        }
+
+        function selectDpBuyer(optionIndex) {
+            const select = document.getElementById('dpBuyerMasterList');
+            if (!select || !select.options[optionIndex]) return;
+
+            select.selectedIndex = optionIndex;
+            const opt = select.options[optionIndex];
+            const first = opt.getAttribute('data-first') || '';
+            const middle = opt.getAttribute('data-middle') || '';
+            const last = opt.getAttribute('data-last') || '';
+            const email = opt.getAttribute('data-email') || '';
+            const contact = opt.getAttribute('data-contact') || '';
+            const block = opt.getAttribute('data-block') || 'N/A';
+            const lot = opt.getAttribute('data-lot') || 'N/A';
+
+            document.getElementById('dpSelectedBuyerName').textContent = `${last}, ${first}${middle ? ' ' + middle : ''}`;
+            document.getElementById('dpSelectedBuyerMeta').textContent = `${email ? email + ' • ' : ''}${contact || 'No contact'}`;
+            document.getElementById('dpSelectedBuyerLots').innerHTML =
+                `<span style="font-size: 12px; font-weight: 600; color: #15803d;">Reserved lot: </span>` +
+                `<span style="display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: 700; background: #dcfce7; color: #166534; border-radius: 6px;">Blk ${block} Lot ${lot}</span>`;
+
+            document.getElementById('dpSelectedBuyerCard').style.display = 'flex';
+            document.getElementById('dpBuyerSearchContainer').style.display = 'none';
+            document.getElementById('dpBuyerSearchResults').style.display = 'none';
+
+            autoFillDownpaymentBuyer(select);
+        }
+
+        function clearDpSelectedBuyer(focusInput = true) {
+            const select = document.getElementById('dpBuyerMasterList');
+            if (select) {
+                select.selectedIndex = 0;
+                autoFillDownpaymentBuyer(select);
+            }
+            const searchInput = document.getElementById('dpBuyerSearchInput');
+            if (searchInput) searchInput.value = '';
+            const resultsBox = document.getElementById('dpBuyerSearchResults');
+            if (resultsBox) resultsBox.style.display = 'none';
+            const card = document.getElementById('dpSelectedBuyerCard');
+            if (card) card.style.display = 'none';
+            const container = document.getElementById('dpBuyerSearchContainer');
+            if (container) container.style.display = 'block';
+            if (focusInput && searchInput) searchInput.focus();
+        }
+
+        document.addEventListener('click', function(e) {
+            const container = document.getElementById('dpBuyerSearchContainer');
+            const results = document.getElementById('dpBuyerSearchResults');
+            if (container && results && !container.contains(e.target)) {
+                results.style.display = 'none';
+            }
+        });
+
         function preselectDownpaymentBuyer(buyerId, reservationId = null) {
             const select = document.getElementById('dpBuyerMasterList');
             if (!select || !buyerId) return false;
@@ -966,11 +1113,7 @@
             }
             if (targetIndex === -1) return false;
 
-            select.selectedIndex = targetIndex;
-            if (window.jQuery && $.fn.select2) {
-                $('#dpBuyerMasterList').val(String(buyerId)).trigger('change.select2');
-            }
-            autoFillDownpaymentBuyer(select);
+            selectDpBuyer(targetIndex);
             return true;
         }
 
@@ -985,10 +1128,7 @@
                 tcpInput.style.borderColor = '#cbd5e1';
                 tcpInput.value = '';
             }
-            const buyerSelect = document.getElementById('dpBuyerMasterList');
-            if (buyerSelect) {
-                buyerSelect.selectedIndex = 0;
-            }
+            clearDpSelectedBuyer(false);
             selectedReservationId = '';
             currentReservationFee = 0;
             document.getElementById('calcDpPercent').value = 30;
@@ -1789,14 +1929,6 @@
         });
         window.addEventListener('DOMContentLoaded', () => {
             bindGisDropdowns('calcBlk', 'calcLot');
-
-            if (window.jQuery && $.fn.select2) {
-                $('#dpBuyerMasterList').select2({
-                    placeholder: "-- Choose Buyer --",
-                    allowClear: true,
-                    width: '100%'
-                });
-            }
 
             const params = new URLSearchParams(window.location.search);
             const shouldOpenCreate = params.get('create') === '1' || params.get('action') === 'add';

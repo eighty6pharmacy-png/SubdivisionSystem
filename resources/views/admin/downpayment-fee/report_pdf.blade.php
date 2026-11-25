@@ -237,9 +237,9 @@
                             Unassigned
                         @endif
                     </td>
-                    <td style="text-align: right; font-family: monospace;">₱{{ number_format((float)$b['total_dp'], 2) }}</td>
-                    <td style="text-align: right; font-family: monospace; font-weight: bold;">₱{{ number_format((float)$b['paid_amount'], 2) }}</td>
-                    <td style="text-align: right; font-family: monospace;">₱{{ number_format((float)(($b['total_dp'] ?? 0) - ($b['paid_amount'] ?? 0)), 2) }}</td>
+                    <td style="text-align: right;">₱{{ number_format((float)$b['total_dp'], 2) }}</td>
+                    <td style="text-align: right; font-weight: bold;">₱{{ number_format((float)$b['paid_amount'], 2) }}</td>
+                    <td style="text-align: right;">₱{{ number_format((float)(($b['total_dp'] ?? 0) - ($b['paid_amount'] ?? 0)), 2) }}</td>
                     <td style="text-align: center; color: #000000;">{{ $b['next_due'] ?? '—' }}</td>
                     <td style="text-align: center;">
                         <span class="badge badge-active">
