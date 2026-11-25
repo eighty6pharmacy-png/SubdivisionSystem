@@ -320,8 +320,11 @@ if (!function_exists('getLotMonthlyAmountChartData')) {
 
 if (!function_exists('updateResidentBehavior')) {
     function updateResidentBehavior(\App\Models\User $user) {
-        $bills = \App\Models\UtilityBill::where('resident_id', $user->id)->get();
-        if ($bills->count() === 0) {
+        $bills = \App\Models\UtilityBill::with(['payments' => function ($q) {
+            $q->whereNull('deleted_at')->orderByDesc('payment_date')->orderByDesc('id');
+        }])->where('resident_id', $user->id)->get();
+
+        if ($bills->isEmpty()) {
             \App\Models\ResidentAccount::updateOrCreate(
                 ['user_id' => $user->id],
                 ['payment_behavior' => 'Not available yet']
@@ -330,42 +333,44 @@ if (!function_exists('updateResidentBehavior')) {
             return;
         }
 
-        $totalScore = 0;
+        $scores = [];
         foreach ($bills as $bill) {
             if ($bill->status === 'paid') {
-                $payments = $bill->payments;
-                $paidDate = $payments->count() > 0 ? \Carbon\Carbon::parse($payments->first()->payment_date) : null;
-                $dueDate = \Carbon\Carbon::parse($bill->due_date);
-                
-                if ($paidDate && $paidDate->lt($dueDate)) {
-                    $totalScore += 3; // Early
-                } else if ($paidDate && $paidDate->isSameDay($dueDate)) {
-                    $totalScore += 2; // On-Time
-                } else {
-                    $totalScore += 1; // Late
+                $latestPayment = $bill->payments->first();
+                $paidRaw = $latestPayment?->payment_date ?? $latestPayment?->created_at;
+                if (!$paidRaw || !$bill->due_date) {
+                    continue;
                 }
-            } else {
-                if (\Carbon\Carbon::parse($bill->due_date)->isPast()) {
-                    $totalScore += 1; // Late
+                $paidDay = \Carbon\Carbon::parse($paidRaw)->startOfDay();
+                $dueDay = \Carbon\Carbon::parse($bill->due_date)->startOfDay();
+
+                if ($paidDay->lt($dueDay)) {
+                    $scores[] = 3; // Early
+                } elseif ($paidDay->equalTo($dueDay)) {
+                    $scores[] = 2; // On-Time
                 } else {
-                    $totalScore += 2; // On-Time / Pending
+                    $scores[] = 1; // Late
                 }
+            } elseif ($bill->due_date && \Carbon\Carbon::parse($bill->due_date)->endOfDay()->isPast()) {
+                // Only count unpaid bills as Late once their due date has actually passed;
+                // upcoming/pending unpaid bills must NOT be counted as "On-Time".
+                $scores[] = 1;
             }
         }
-        
-        if ($bills->count() === 0) {
-            return;
-        }
-        
-        $avg = $totalScore / $bills->count();
-        if ($avg > 2.5) {
-            $behavior = 'Early';
-        } else if ($avg >= 1.5) {
-            $behavior = 'On-Time';
+
+        if (count($scores) === 0) {
+            $behavior = 'Not available yet';
         } else {
-            $behavior = 'Late';
+            $avg = array_sum($scores) / count($scores);
+            if ($avg > 2.5) {
+                $behavior = 'Early';
+            } elseif ($avg >= 1.5) {
+                $behavior = 'On-Time';
+            } else {
+                $behavior = 'Late';
+            }
         }
-        
+
         \App\Models\ResidentAccount::updateOrCreate(
             ['user_id' => $user->id],
             ['payment_behavior' => $behavior]
@@ -745,8 +750,8 @@ if (!function_exists('calculateBillingStats')) {
                     ->get();
                 $total = $residents->count();
                 if ($total > 0) {
-                    $early = $residents->where('payment_behavior', 'Early Payer')->count();
-                    $onTime = $residents->where('payment_behavior', 'On-Time')->count() + $residents->where('payment_behavior', 'On-Time Payer')->count();
+                    $early = $residents->whereIn('payment_behavior', ['Early', 'Early Payer'])->count();
+                    $onTime = $residents->whereIn('payment_behavior', ['On-Time', 'On-Time Payer'])->count();
                     $late = $residents->whereIn('payment_behavior', ['Late Payer', 'At Risk', 'Late'])->count();
                     
                     $totalBehavior = $early + $onTime + $late;
@@ -918,8 +923,6 @@ if (!function_exists('getDownpaymentFees')) {
                             $bml->middle_name,
                             $bml->last_name,
                         ])));
-                    } elseif ($res && $res->first_name && $res->last_name) {
-                        $buyerName = trim($res->first_name . ' ' . $res->last_name);
                     } else {
                         $buyerName = $res?->notes ?? 'Guest';
                     }

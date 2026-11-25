@@ -114,7 +114,6 @@ class SendReservationExpirySMS extends Command
     {
         return trim((string) (
             $reservation->buyerMasterList->first_name
-            ?? $reservation->first_name
             ?? $reservation->user->first_name
             ?? 'Valued Buyer'
         ));

@@ -88,6 +88,10 @@ class PaymentRecorder
 
         $bill->refresh();
 
+        if ($bill->user && function_exists('updateResidentBehavior')) {
+            updateResidentBehavior($bill->user);
+        }
+
         return $payment;
     }
 

@@ -25,8 +25,6 @@ class Reservation extends Model
         'amount',
         'notes',
         'receipt_data',
-        'first_name',
-        'last_name',
     ];
 
     protected function casts(): array

@@ -274,9 +274,9 @@ class ReservationReceiptController extends Controller
         $amount = (float) ($res->amount ?? 20000);
 
         // Buyer details
-        $firstName = $saved['buyer_first_name'] ?? $buyer?->first_name ?? $user?->first_name ?? $res->first_name ?? '';
+        $firstName = $saved['buyer_first_name'] ?? $buyer?->first_name ?? $user?->first_name ?? '';
         $middleName = $saved['buyer_middle_name'] ?? $buyer?->middle_name ?? $user?->middle_name ?? '';
-        $lastName = $saved['buyer_last_name'] ?? $buyer?->last_name ?? $user?->last_name ?? $res->last_name ?? '';
+        $lastName = $saved['buyer_last_name'] ?? $buyer?->last_name ?? $user?->last_name ?? '';
         $civilStatus = $saved['civil_status'] ?? $buyer?->civil_status ?? 'Single';
         $spouseName = $saved['spouse_name'] ?? $buyer?->spouse_name ?? '';
         $postalAddress = $saved['postal_address'] ?? $buyer?->postal_address ?? $buyer?->present_address ?? '';

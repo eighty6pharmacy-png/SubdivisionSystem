@@ -929,8 +929,6 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
                     $bml = $res?->buyerMasterList;
                     if ($bml) {
                         $payer = trim(implode(' ', array_filter([$bml->first_name, $bml->middle_name, $bml->last_name])));
-                    } elseif ($res && ($res->first_name || $res->last_name)) {
-                        $payer = trim(($res->first_name ?? '') . ' ' . ($res->last_name ?? ''));
                     } elseif ($res?->notes) {
                         $payer = $res->notes;
                     }
@@ -2036,7 +2034,6 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
 
         $buyerName = trim((string) (
             $res->buyerMasterList->first_name
-            ?? $res->first_name
             ?? $res->user->first_name
             ?? 'Valued Buyer'
         ));
@@ -3109,7 +3106,7 @@ Route::prefix('resident')->middleware(['auth', 'role:Resident', 'sync_paymongo']
             'amount_history' => $emptyHistory,
             'at_risk' => false,
             'payment_history' => [],
-            'payment_behavior' => 'On-Time',
+            'payment_behavior' => 'Not available yet',
             'audit_log' => [],
             'rate' => 0,
             'prev' => 0,
