@@ -3808,8 +3808,6 @@ Route::prefix('finance')->middleware(['auth', 'role:Finance Officer'])->group(fu
    PHASE 4 ROUTES
    ========================================================================= */
 
-Route::get('/admin/api/billing/export-soa', [App\Http\Controllers\ExportController::class, 'exportSOA'])->name('admin.billing.export-soa');
-
 Route::get('/admin/api/billing/cycle-status', function (\Illuminate\Http\Request $request) {
     $type = $request->input('type', 'electricity');
     if (!in_array($type, ['electricity', 'water'])) {
