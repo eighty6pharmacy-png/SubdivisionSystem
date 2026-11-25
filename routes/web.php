@@ -2848,7 +2848,6 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         ]);
 
         $admin = \Illuminate\Support\Facades\Auth::user();
-        \App\Models\AdminAccount::firstOrCreate(['user_id' => $admin->id]);
 
         $ann = \App\Models\Announcement::create([
             'title' => $validated['title'],
@@ -2861,7 +2860,7 @@ Route::prefix('admin')->middleware(['auth', 'role:Admin'])->group(function () {
         ]);
 
         $now = now();
-        $residentUserIds = \App\Models\Resident::query()->pluck('user_id')->filter()->values()->all();
+        $residentUserIds = \App\Models\ResidentAccount::query()->pluck('user_id')->filter()->values()->all();
         $recipientRows = array_map(fn ($residentId) => [
             'announcement_id' => $ann->id,
             'resident_id' => $residentId,

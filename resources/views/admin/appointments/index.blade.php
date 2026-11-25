@@ -516,7 +516,11 @@
                 title: (apt.client || 'Client') + ' (' + statusLabel + ')',
                 start: start,
                 allDay: start.length === 10,
-                color: getAppointmentCalendarColor(statusLabel)
+                color: getAppointmentCalendarColor(statusLabel),
+                extendedProps: {
+                    aptId: apt.id,
+                    isBlackout: false
+                }
             });
             return acc;
         }, []);
@@ -527,7 +531,10 @@
                 start: dateStr,
                 allDay: true,
                 color: '#fee2e2',
-                textColor: '#b91c1c'
+                textColor: '#b91c1c',
+                extendedProps: {
+                    isBlackout: true
+                }
             });
         });
 
@@ -545,6 +552,24 @@
                 meridiem: 'short'
             },
             events: evts,
+            eventDidMount: function(info) {
+                if (!info.event.extendedProps?.isBlackout) {
+                    info.el.style.cursor = 'pointer';
+                    info.el.title = info.event.title + ' — Click to view details';
+                }
+            },
+            eventClick: function(info) {
+                if (info.event.extendedProps?.isBlackout) return;
+                const aptId = info.event.extendedProps?.aptId;
+                if (!aptId) return;
+                const row = document.querySelector(`tr[data-id="${aptId}"]`)
+                    || [...document.querySelectorAll('#aptTableBody tr')].find(r => r.cells[0] && r.cells[0].textContent.trim() === String(aptId));
+                if (row) {
+                    viewAptDetail(row);
+                } else {
+                    window.location.href = `/admin/appointments?apt=${encodeURIComponent(aptId)}`;
+                }
+            },
             dateClick: function(info) {
                 const dateRaw = info.dateStr;
                 

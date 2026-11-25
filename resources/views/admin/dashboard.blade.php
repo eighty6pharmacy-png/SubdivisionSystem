@@ -1418,7 +1418,8 @@
                     const safeStatus = (item.status || 'Pending').toUpperCase();
 
                     chipsHtml += `
-                        <div class="dash-event-chip" style="background: ${meta.bg}; color: ${meta.color}; border-color: ${meta.border};"
+                        <div class="dash-event-chip" style="cursor: pointer; background: ${meta.bg}; color: ${meta.color}; border-color: ${meta.border};"
+                             onclick="window.location.href='/admin/appointments?apt=${encodeURIComponent(item.id)}'"
                              onmouseenter="showDashTooltip(event, '${safeTitle}', '${safeSub}', 'Status: ${safeStatus}')"
                              onmouseleave="hideDashTooltip()">
                             <span>${meta.icon}</span>

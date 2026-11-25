@@ -421,6 +421,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Accept': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                     },
                     body: JSON.stringify({
@@ -430,12 +431,17 @@
                     })
                 });
 
-                const result = await response.json();
-                if (result.success) {
-                    Swal.fire('Announcement posted! An email has been sent to the residents.');
+                const result = await response.json().catch(() => ({}));
+                if (response.ok && result.success) {
+                    await Swal.fire({
+                        icon: 'success',
+                        title: 'Published!',
+                        text: 'Announcement posted! An email has been sent to the residents.',
+                        confirmButtonText: 'OK',
+                    });
                     window.location.reload();
                 } else {
-                    Swal.fire('Failed to post announcement.');
+                    Swal.fire(result.message || 'Failed to post announcement.');
                     isPublishing = false;
                     btnPublish.disabled = false; btnPublish.style.opacity = '1'; btnPublish.style.pointerEvents = 'auto';
                     btnPublish.textContent = 'Publish Now';
