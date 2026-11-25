@@ -545,9 +545,13 @@
 
                 housesGeoJson = houses;
 
-                // Amenities Layer
+                // Amenities Layer (exclude background polygon so the base map renders cleanly)
                 if (amenities) {
                     L.geoJSON(amenities, {
+                        filter: (feature) => {
+                            const name = (feature.properties['Building name'] || feature.properties.name || feature.properties.NAME || '').toLowerCase();
+                            return !name.includes('background') && !name.includes('bachground');
+                        },
                         style: (feature) => {
                             const name = feature.properties['Building name'] || feature.properties.name || feature.properties.NAME || 'Unknown';
                             let fillColor = '#e7e8eb';
@@ -555,16 +559,15 @@
                             else if (name.toLowerCase().includes('open')) fillColor = '#eae0d5';
                             else if (name.toLowerCase().includes('basketball')) fillColor = '#d97706';
                             else if (name.toLowerCase().includes('grass')) fillColor = '#a7f3d0';
-                            else if (name.toLowerCase().includes('background') || name.toLowerCase().includes('bachground')) fillColor = '#f6f5f5';
 
-                            const isBg = name.toLowerCase().includes('background') || name.toLowerCase().includes('bachground') || name.toLowerCase().includes('grass');
+                            const isGrass = name.toLowerCase().includes('grass');
                             const showBg = !calib || calib.showBgFill !== false;
 
                             return {
                                 color: '#cbd5e1',
-                                weight: isBg ? (showBg ? 0.5 : 0) : 1,
+                                weight: isGrass ? (showBg ? 0.5 : 0) : 1,
                                 fillColor: fillColor,
-                                fillOpacity: isBg ? (showBg ? 1 : 0) : 1
+                                fillOpacity: isGrass ? (showBg ? 1 : 0) : 1
                             };
                         }
                     }).addTo(map);

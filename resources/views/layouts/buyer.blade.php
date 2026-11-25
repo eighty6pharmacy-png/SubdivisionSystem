@@ -53,12 +53,15 @@
                 <span>Back to Resident Portal</span>
             </a>
             @endif
+            @php
+                $navLotQuery = request()->query('lot_id') ? '?lot_id=' . urlencode((string) request()->query('lot_id')) : '';
+            @endphp
             <div class="nav-section-label">My Property</div>
-            <a href="/buyer/dashboard" class="nav-item {{ request()->is('buyer/dashboard') ? 'active' : '' }}">
+            <a href="/buyer/dashboard{{ $navLotQuery }}" class="nav-item {{ request()->is('buyer/dashboard') ? 'active' : '' }}">
                 <span class="nav-icon">🏠</span>
                 <span>Acquisition Overview</span>
             </a>
-            <a href="/buyer/payments" class="nav-item {{ request()->is('buyer/payments') ? 'active' : '' }}">
+            <a href="/buyer/payments{{ $navLotQuery }}" class="nav-item {{ request()->is('buyer/payments') ? 'active' : '' }}">
                 <span class="nav-icon">💳</span>
                 <span>Monthly Payments</span>
             </a>
@@ -101,8 +104,8 @@
             </div>
             <div class="topbar-actions" style="display: flex; align-items: center; gap: 16px;">
                 @php
-                    $buyerUser = \Illuminate\Support\Facades\Auth::user()->buyerMasterList;
-                    $userLot = $buyerUser?->lot;
+                    $buyerUser = \Illuminate\Support\Facades\Auth::user()?->buyerMasterList;
+                    $userLot = $selectedLot ?? $buyerUser?->lot;
                 @endphp
                 <div id="resLotBadge" style="background: var(--res-primary-soft); color: var(--res-primary); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;">
                     @if($userLot)

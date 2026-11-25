@@ -364,7 +364,6 @@
 
         dateSelect.addEventListener('change', () => filterCards());
         filterCards();
-        updateStats();
 
         window.updateStats = function() {
             const rows = document.querySelectorAll('.ann-row');
@@ -392,7 +391,9 @@
             if (totalEl) totalEl.textContent = counts.totalActive;
             if (pubEl) pubEl.textContent = counts.published;
             if (archEl) archEl.textContent = counts.archived;
-        }
+        };
+
+        updateStats();
 
         let isPublishing = false;
         window.createPost = async function(status) {

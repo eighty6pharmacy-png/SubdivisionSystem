@@ -10,7 +10,7 @@ use App\Models\FinancingRecord;
 
 class BuyerPortalController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $user = Auth::user();
         $buyer = $user->buyerMasterList;
@@ -19,18 +19,57 @@ class BuyerPortalController extends Controller
             abort(403, 'No buyer record found for your account.');
         }
 
-        $downpayments = $this->downpaymentsForBuyer($buyer, 'dashboard');
+        ['lots' => $lots, 'selectedLot' => $selectedLot] = $this->resolveBuyerLots($buyer, $request);
 
-        $financing = $downpayments->isNotEmpty()
-            ? FinancingRecord::where('buyer_id', $buyer->id)->first()
-            : null;
+        $downpayments = $this->downpaymentsForBuyer($buyer, 'dashboard', $selectedLot?->id);
+        $financing = $this->financingForBuyer($buyer, $selectedLot?->id, $lots->count());
 
         $calendarEvents = $this->buildPaymentCalendarEvents($downpayments, $financing);
 
-        return view('buyer.dashboard', compact('buyer', 'downpayments', 'financing', 'calendarEvents'));
+        $dpPaid = (float) $downpayments->sum('amount');
+        $dpBalance = (float) $downpayments->sum('balance');
+        $dpTotal = $dpPaid + $dpBalance;
+
+        $nextDueDp = $downpayments
+            ->filter(fn ($dp) => (float) $dp->balance > 0 && $dp->status !== 'Fully Paid' && $dp->due_date)
+            ->sortBy('due_date')
+            ->first();
+        $nextDueDate = $nextDueDp?->due_date
+            ? \Carbon\Carbon::parse($nextDueDp->due_date)->format('M d, Y')
+            : ($dpTotal > 0 && $dpBalance <= 0 ? 'Fully Paid' : 'N/A');
+
+        $reservationQuery = $buyer->reservations()
+            ->whereIn('status', \App\Enums\ReservationStatus::activeValues());
+        if ($selectedLot) {
+            $reservationQuery->where('lot_id', $selectedLot->id);
+        }
+        $reservationPaid = (float) $reservationQuery->sum('amount');
+
+        $finPaid = $financing ? (float) ($financing->amount_paid ?? 0) : 0.0;
+        $finBalance = $financing ? (float) ($financing->balance ?? 0) : 0.0;
+        $totalPaidToDate = $reservationPaid + $dpPaid + $finPaid;
+        $tcp = (float) ($financing?->contract_price ?? $selectedLot?->contract_price ?? $buyer->lot?->contract_price ?? ($totalPaidToDate + $dpBalance + $finBalance));
+
+        return view('buyer.dashboard', compact(
+            'buyer',
+            'lots',
+            'selectedLot',
+            'downpayments',
+            'financing',
+            'calendarEvents',
+            'dpPaid',
+            'dpBalance',
+            'dpTotal',
+            'nextDueDate',
+            'reservationPaid',
+            'finPaid',
+            'finBalance',
+            'totalPaidToDate',
+            'tcp'
+        ));
     }
 
-    public function payments()
+    public function payments(Request $request)
     {
         $user = Auth::user();
         $buyer = $user->buyerMasterList;
@@ -39,11 +78,10 @@ class BuyerPortalController extends Controller
             abort(403, 'No buyer record found for your account.');
         }
 
-        $downpayments = $this->downpaymentsForBuyer($buyer, 'payments');
+        ['lots' => $lots, 'selectedLot' => $selectedLot] = $this->resolveBuyerLots($buyer, $request);
 
-        $financing = $downpayments->isNotEmpty()
-            ? FinancingRecord::where('buyer_id', $buyer->id)->first()
-            : null;
+        $downpayments = $this->downpaymentsForBuyer($buyer, 'payments', $selectedLot?->id);
+        $financing = $this->financingForBuyer($buyer, $selectedLot?->id, $lots->count());
 
         $finHistories = collect();
         if ($financing) {
@@ -56,10 +94,10 @@ class BuyerPortalController extends Controller
 
         $calendarEvents = $this->buildPaymentCalendarEvents($downpayments, $financing);
 
-        return view('buyer.payments', compact('buyer', 'downpayments', 'financing', 'finHistories', 'calendarEvents'));
+        return view('buyer.payments', compact('buyer', 'lots', 'selectedLot', 'downpayments', 'financing', 'finHistories', 'calendarEvents'));
     }
 
-    public function dpHistory()
+    public function dpHistory(Request $request)
     {
         $user = Auth::user();
         $buyer = $user->buyerMasterList;
@@ -68,7 +106,9 @@ class BuyerPortalController extends Controller
             abort(403, 'No buyer record found for your account.');
         }
 
-        $downpayments = $this->downpaymentsForBuyer($buyer, 'history');
+        ['lots' => $lots, 'selectedLot' => $selectedLot] = $this->resolveBuyerLots($buyer, $request);
+
+        $downpayments = $this->downpaymentsForBuyer($buyer, 'history', $selectedLot?->id);
 
         $dpHistories = \Illuminate\Support\Facades\DB::table('payments')
             ->whereIn('downpayment_id', $downpayments->pluck('id'))
@@ -96,7 +136,7 @@ class BuyerPortalController extends Controller
         // Sort back to descending for the view
         $dpHistories = $dpHistories->sortByDesc('payment_date')->values();
 
-        return view('buyer.dp_history', compact('buyer', 'dpHistories'));
+        return view('buyer.dp_history', compact('buyer', 'lots', 'selectedLot', 'dpHistories'));
     }
 
     public function payDownpayment(Request $request)
@@ -158,11 +198,62 @@ class BuyerPortalController extends Controller
     }
 
     /**
+     * Collect all distinct lots associated with the buyer's acquisitions and resolve the selected lot.
+     */
+    private function resolveBuyerLots(BuyerMasterList $buyer, Request $request): array
+    {
+        $reservationLots = $buyer->reservations()
+            ->where(function ($query) {
+                $query->whereIn('status', ['Reserved', 'Pending', 'Converted'])
+                    ->orWhereHas('downpayments');
+            })
+            ->with('lot')
+            ->get()
+            ->pluck('lot')
+            ->filter();
+
+        $financingLots = FinancingRecord::where('buyer_id', $buyer->id)
+            ->with('lot')
+            ->get()
+            ->pluck('lot')
+            ->filter();
+
+        $lots = $reservationLots
+            ->merge($financingLots)
+            ->when($buyer->lot, fn ($col) => $col->push($buyer->lot))
+            ->unique('id')
+            ->sortBy([
+                fn ($a, $b) => strnatcasecmp((string) $a->block, (string) $b->block),
+                fn ($a, $b) => strnatcasecmp((string) $a->lot_number, (string) $b->lot_number),
+            ])
+            ->values();
+
+        $requestedLotId = $request->query('lot_id');
+        $selectedLot = $requestedLotId
+            ? $lots->firstWhere('id', (int) $requestedLotId)
+            : null;
+
+        if (!$selectedLot && $buyer->lot_id) {
+            $selectedLot = $lots->firstWhere('id', $buyer->lot_id);
+        }
+
+        if (!$selectedLot) {
+            $selectedLot = $lots->first();
+        }
+
+        return [
+            'lots' => $lots,
+            'selectedLot' => $selectedLot,
+        ];
+    }
+
+    /**
      * A cancelled reservation still keeps its downpayment contract. The buyer account must show that schedule.
      */
-    private function downpaymentsForBuyer(BuyerMasterList $buyer, string $surface)
+    private function downpaymentsForBuyer(BuyerMasterList $buyer, string $surface, ?int $lotId = null)
     {
         $reservations = $buyer->reservations()
+            ->when($lotId !== null, fn ($q) => $q->where('lot_id', $lotId))
             ->where(function ($query) {
                 $query->whereIn('status', ['Reserved', 'Pending', 'Converted'])
                     ->orWhereHas('downpayments');
@@ -170,10 +261,25 @@ class BuyerPortalController extends Controller
             ->with('downpayments')
             ->get();
 
-        $downpayments = $reservations->flatMap->downpayments->values();
+        return $reservations->flatMap->downpayments->values();
+    }
 
+    private function financingForBuyer(BuyerMasterList $buyer, ?int $lotId, int $lotCount): ?FinancingRecord
+    {
+        $query = FinancingRecord::where('buyer_id', $buyer->id);
 
-        return $downpayments;
+        if ($lotId !== null) {
+            $matched = (clone $query)->where('lot_id', $lotId)->first();
+            if ($matched) {
+                return $matched;
+            }
+            if ($lotCount <= 1) {
+                return (clone $query)->whereNull('lot_id')->first();
+            }
+            return null;
+        }
+
+        return $query->first();
     }
 
     private function createCheckoutSession($lineItems, $reference, $description, $record = null)

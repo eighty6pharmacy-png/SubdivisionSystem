@@ -23,10 +23,27 @@
     <div style="margin-bottom: 32px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div>
             <h1 style="font-size: 28px; font-weight: 800; color: #0f172a; margin: 0;">Monthly Payments</h1>
-            <p style="color: #64748b; margin-top: 8px;">Monitor and settle your downpayment and financing obligations.</p>
+            <p style="color: #64748b; margin-top: 8px;">
+                @if(isset($selectedLot))
+                    Block {{ $selectedLot->block }}, Lot {{ $selectedLot->lot_number }} •
+                @endif
+                Monitor and settle your downpayment and financing obligations.
+            </p>
         </div>
-        <div>
-            <a href="{{ route('buyer.payments.dp.history') }}" class="btn btn-outline" style="border-radius: 12px; font-weight: 600; padding: 10px 20px; background: #fff;">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            @if(isset($lots) && $lots->isNotEmpty())
+            <div style="display: flex; align-items: center; gap: 10px; background: #fff; padding: 8px 14px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <label for="buyerPaymentsLotSelect" style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; margin: 0;">Property:</label>
+                <select id="buyerPaymentsLotSelect" onchange="window.location.href = '{{ url('/buyer/payments') }}?lot_id=' + encodeURIComponent(this.value)" style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 700; color: #0f172a; background: #f8fafc; cursor: pointer; outline: none;">
+                    @foreach($lots as $lotOption)
+                        <option value="{{ $lotOption->id }}" {{ ($selectedLot && $selectedLot->id === $lotOption->id) ? 'selected' : '' }}>
+                            Block {{ $lotOption->block }}, Lot {{ $lotOption->lot_number }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+            @endif
+            <a href="{{ route('buyer.payments.dp.history', $selectedLot ? ['lot_id' => $selectedLot->id] : []) }}" class="btn btn-outline" style="border-radius: 12px; font-weight: 600; padding: 10px 20px; background: #fff;">
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 8px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 View History
             </a>
