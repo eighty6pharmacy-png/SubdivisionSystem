@@ -1173,9 +1173,6 @@
                     <p id="receiptModalSubtitle" style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">Linked with GIS Property Specification, Buyer Information &amp; Reservation Details</p>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                    <button type="button" id="toggleReceiptEditorBtn" class="btn btn-outline" onclick="toggleReceiptEditorPanel()" style="background: #fffbeb; border: 1px solid #f59e0b; color: #b45309; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; cursor: pointer;">
-                        ✏️ Edit Receipt Details
-                    </button>
                     <a id="reservationReceiptDownloadBtn" href="#" class="btn btn-primary" style="background: #0284c7; border: none; padding: 8px 16px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: #fff;">
                         Download PDF
                     </a>
@@ -1189,180 +1186,6 @@
             </div>
 
             <div style="display: flex; gap: 16px; flex: 1; min-height: 0; overflow: hidden;">
-                <!-- Collapsible Editable Data Panel -->
-                <div id="receiptEditorPanel" style="display: none; width: 430px; min-width: 360px; max-width: 100%; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; background: #f8fafc;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <span style="font-size: 13px; font-weight: 800; color: #0f172a;">Editable Receipt Data</span>
-                        <button type="button" id="saveReceiptDataBtn" onclick="saveReservationReceiptData()" class="btn btn-primary" style="padding: 7px 14px; font-size: 12px; font-weight: 700; border-radius: 8px;">
-                            Save &amp; Refresh Receipt
-                        </button>
-                    </div>
-
-                    <!-- Section 1: Reservation Details -->
-                    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 12px;">
-                        <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #0284c7; margin-bottom: 8px;">1. Reservation Details</div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Application Date</label>
-                                <input type="date" id="rcpt_reservation_date" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">OR #</label>
-                                <input type="text" id="rcpt_or_number" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Reservation Fee (₱)</label>
-                                <input type="number" step="0.01" id="rcpt_amount" oninput="recalcReceiptFinancials()" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Net Equity OR #</label>
-                                <input type="text" id="rcpt_net_equity_or_number" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div style="grid-column: 1 / -1;">
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Amount in Words</label>
-                                <input type="text" id="rcpt_amount_in_words" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">90-Day Loan Req. Deadline</label>
-                                <input type="date" id="rcpt_loan_req_deadline" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">3-Month PDC Deadline</label>
-                                <input type="date" id="rcpt_pdc_deadline" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Tel. Nos.</label>
-                                <input type="text" id="rcpt_tel_nos" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Witness (Staff)</label>
-                                <input type="text" id="rcpt_witness_name" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Section 2: Buyer Information -->
-                    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 12px;">
-                        <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #0284c7; margin-bottom: 8px;">2. Buyer Information</div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Family Name</label>
-                                <input type="text" id="rcpt_buyer_last_name" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Given Name</label>
-                                <input type="text" id="rcpt_buyer_first_name" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Middle Name</label>
-                                <input type="text" id="rcpt_buyer_middle_name" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Civil Status</label>
-                                <select id="rcpt_civil_status" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                                    <option value="Single">Single</option>
-                                    <option value="Married">Married</option>
-                                </select>
-                            </div>
-                            <div style="grid-column: 1 / -1;">
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Spouse Marital Consent Name</label>
-                                <input type="text" id="rcpt_spouse_name" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div style="grid-column: 1 / -1;">
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Postal Address</label>
-                                <input type="text" id="rcpt_postal_address" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div style="grid-column: 1 / -1;">
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Billing Address (Par. 8)</label>
-                                <input type="text" id="rcpt_billing_address" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Section 3: GIS Lot Specification & Installment Plan -->
-                    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 8px;">
-                        <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #0284c7; margin-bottom: 8px;">3. GIS Lot Specification &amp; Installment Plan</div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Project</label>
-                                <input type="text" id="rcpt_project_name" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">House Model (GIS Desc)</label>
-                                <input type="text" id="rcpt_house_model" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Lot Area (sqm)</label>
-                                <input type="number" step="0.01" id="rcpt_lot_area" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Floor Area (sqm)</label>
-                                <input type="number" step="0.01" id="rcpt_floor_area" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">TCT No.</label>
-                                <input type="text" id="rcpt_tct_no" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">GIS PID</label>
-                                <input type="text" id="rcpt_pid" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Tax Dec No.</label>
-                                <input type="text" id="rcpt_tax_dec_no" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Total Contract Price (₱)</label>
-                                <input type="number" step="0.01" id="rcpt_total_contract_price" oninput="recalcReceiptFinancials()" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Discount (%)</label>
-                                <input type="number" step="0.01" id="rcpt_discount_percent" oninput="recalcReceiptFinancials()" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Discount Amount (₱)</label>
-                                <input type="number" step="0.01" id="rcpt_discount_amount" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Equity (%)</label>
-                                <input type="number" step="0.01" id="rcpt_equity_percent" oninput="recalcReceiptFinancials()" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Required Equity (₱)</label>
-                                <input type="number" step="0.01" id="rcpt_required_equity" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Net Equity Downpayment (₱)</label>
-                                <input type="number" step="0.01" id="rcpt_net_equity_downpayment" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Equity Months</label>
-                                <input type="number" id="rcpt_equity_period_count" oninput="recalcReceiptFinancials()" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Monthly Equity Amort. (₱)</label>
-                                <input type="number" step="0.01" id="rcpt_monthly_amortization_equity" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Equity Start Date</label>
-                                <input type="text" id="rcpt_equity_start_date" placeholder="e.g. Dec 01, 2026" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Financing Type</label>
-                                <select id="rcpt_financing_type" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                                    <option value="PAG-IBIG FUND">PAG-IBIG FUND</option>
-                                    <option value="DIRECT FINANCING">DIRECT FINANCING</option>
-                                    <option value="END BUYER'S BANK FINANCING">END BUYER'S BANK FINANCING</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label style="font-size: 11px; font-weight: 700; color: #475569;">Building Label</label>
-                                <input type="text" id="rcpt_building_model_label" class="filter-select" style="width: 100%; padding: 6px 8px; font-size: 12px; box-sizing: border-box;">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Embedded Real PDF Viewer (Viewable first, not download) -->
                 <div style="flex: 1; min-width: 0;">
                     <iframe id="reservationReceiptPdfFrame" src="about:blank" style="width: 100%; height: 76vh; border: 1px solid #e2e8f0; border-radius: 10px; background: #525659;"></iframe>
@@ -1374,33 +1197,19 @@
     <script>
         let currentReceiptReservationId = null;
 
-        async function openReservationReceiptModal(id) {
+        function openReservationReceiptModal(id) {
             if (!id) return;
             currentReceiptReservationId = id;
 
             const modal = document.getElementById('reservationReceiptModal');
             const frame = document.getElementById('reservationReceiptPdfFrame');
             const dlBtn = document.getElementById('reservationReceiptDownloadBtn');
-            const editor = document.getElementById('receiptEditorPanel');
 
-            if (editor) editor.style.display = 'none';
             if (frame) frame.src = `/admin/reservation-fee/${id}/receipt?t=${Date.now()}`;
             if (dlBtn) dlBtn.href = `/admin/reservation-fee/${id}/receipt?download=1`;
 
             modal.style.display = 'flex';
             document.body.style.overflow = 'hidden';
-
-            try {
-                const res = await fetch(`/admin/reservation-fee/${id}/receipt-data`, {
-                    headers: { 'Accept': 'application/json' }
-                });
-                const json = await res.json();
-                if (res.ok && json.data) {
-                    populateReceiptEditor(json.data);
-                }
-            } catch (err) {
-                console.error('Failed to load receipt data:', err);
-            }
         }
 
         function closeReservationReceiptModal() {
